@@ -92,7 +92,7 @@ int main(int argc, char *argv[]){
   
   printf("start coloring\n");
   TIMER_START(color)
-  Block_coloring c = block_coloring(enode,nedge);
+  Block_coloring c = block_coloring(enode,nedge,nnode);
   TIMER_STOP(color)
   printf("start coloring blocks\n");
   TIMER_START(color2)

@@ -200,11 +200,12 @@ Block_coloring block_coloring(int* enode, int nedge, int nnode, int blockSize=12
     //process 1 block
     int start = bIdx*bs, end= std::min((bIdx+1)*bs,nedge);
     vector<vector<int> > color2edge;
-    vector<int>node_used_count(nnode,0); 
+    vector<int>node_used; 
     //process edges in block #bIdx
     for(int edgeIdx=start;edgeIdx<end;++edgeIdx){
       int nodetowrite=enode[2*edgeIdx+1];
-      size_t col= node_used_count[nodetowrite]++;
+      size_t col= std::count(node_used.begin(), node_used.end(),nodetowrite);
+      node_used.push_back(nodetowrite);
 
       if(col<color2edge.size()){
         color2edge[col].push_back(edgeIdx);
