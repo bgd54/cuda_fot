@@ -30,7 +30,6 @@ int main(int argc, char *argv[]){
   //                            graph gen
   ///////////////////////////////////////////////////////////////////////
 
-
   int nnode,nedge;
   int* enode = generate_graph(dx,dy,nedge,nnode);
 
@@ -89,7 +88,7 @@ int main(int argc, char *argv[]){
     }
    
   }
-  //____________________end main loop________________________
+  //____________________________end main loop___________________________
   //    timer
   TIMER_STOP(total)
 
