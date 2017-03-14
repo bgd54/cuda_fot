@@ -6,10 +6,10 @@
 #include <omp.h>
 
 void rms_calc(const float* node_val, const float* node_old,
-    const int nnode, const int i, const bool parallel=true){
+    const int nnode, const int i){
 
     double rms=0;
-    #pragma omp parallel for reduction(+:rms) if(parallel)
+    #pragma omp parallel for reduction(+:rms)
     for(int nodeIdx=0;nodeIdx<nnode;nodeIdx++){
       rms+= (node_old[nodeIdx]-node_val[nodeIdx])*
         (node_old[nodeIdx]-node_val[nodeIdx]);

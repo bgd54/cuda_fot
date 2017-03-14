@@ -189,7 +189,7 @@ struct Block_coloring{
 
 };
 
-Block_coloring block_coloring(int* enode, int nedge, int nnode, int blockSize=128){
+Block_coloring block_coloring(int* enode, int nedge, int blockSize=128){
   int bs = blockSize;
   int numblock = (nedge-1)/bs+1;
   int* colornum = (int*) malloc(numblock*sizeof(int));

@@ -39,6 +39,7 @@ __global__ void iter_calc(const float* old, float* val,const float* eval,
 int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
+  bool bidir=false;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -46,6 +47,7 @@ int main(int argc, char *argv[]){
     if (!strcmp(argv[i],"-niter")) niter=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
+    else if (!strcmp(argv[i],"-bidir")) bidir=true;
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -57,7 +59,9 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
 
   int nnode,nedge;
-  int* enode = generate_graph(dx,dy,nedge,nnode);
+  int* enode = bidir ? 
+    generate_bidirected_graph(dx,dy,nedge,nnode) : 
+    generate_graph(dx,dy,nedge,nnode);
 
   float* node_val,*node_old, *edge_val;
   
