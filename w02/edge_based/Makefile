@@ -5,7 +5,8 @@ LIB	:= -L$(CUDA_HOME)/lib64 -lcudart
 NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
 CFLAGS := -std=c++11 -Xcompiler -Wall,-Wextra
 
-all: edge_cpu edge_coloring edge_omp edge_gpu
+all: edge_cpu edge_coloring edge_omp edge_gpu edge_gpu_2l\
+	edge_gpu_cw edge_gpu_ca
 
 edge_cpu: edge_cpu.cpp Makefile graph_helper.hpp\
    	rms.hpp timer.hpp
@@ -23,6 +24,19 @@ edge_gpu: edge_gpu.cu Makefile graph_helper.hpp coloring.hpp\
 	rms.hpp timer.hpp
 	nvcc edge_gpu.cu -o edge_gpu $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
 
+edge_gpu_2l: edge_gpu_2l.cu Makefile graph_helper.hpp coloring.hpp\
+	rms.hpp timer.hpp
+	nvcc edge_gpu_2l.cu -o edge_gpu_2l $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+
+edge_gpu_cw: edge_gpu_cw.cu Makefile graph_helper.hpp coloring.hpp\
+	rms.hpp timer.hpp
+	nvcc edge_gpu_cw.cu -o edge_gpu_cw $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+
+edge_gpu_ca: edge_gpu_ca.cu Makefile graph_helper.hpp coloring.hpp\
+	rms.hpp timer.hpp
+	nvcc edge_gpu_ca.cu -o edge_gpu_ca $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+
 clean:
 	rm -rf *.o
-	rm -f edge_cpu edge_coloring edge_omp edge_gpu
+	rm -f edge_cpu edge_coloring edge_omp 
+	rm -f edge_gpu edge_gpu_2l edge_gpu_cw edge_gpu_ca
