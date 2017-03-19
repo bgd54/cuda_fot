@@ -25,10 +25,10 @@ struct HierarchicalColourMemory {
     std::vector<std::size_t>
         edge_list; // same as before, just points to shared mem
                    // computed from the above
-    std::vector<std::uint8_t> edge_colours;  // the colour for each edge
-                                             // in the block
-    std::vector<std::uint8_t> num_edge_colours;  // the number of edge colours
-                                                 // in each block
+    std::vector<std::uint8_t> edge_colours;     // the colour for each edge
+                                                // in the block
+    std::vector<std::uint8_t> num_edge_colours; // the number of edge colours
+                                                // in each block
   };
   std::vector<MemoryOfOneColour> colours;
 
@@ -49,7 +49,7 @@ struct HierarchicalColourMemory {
      *   - done
      */
     const Graph &graph = problem.graph;
-    std::vector<colourset_t> point_colours(graph.N * graph.M, 0);
+    std::vector<colourset_t> point_colours(graph.numPoints(), 0);
     colourset_t used_colours;
     std::vector<unsigned long long> set_sizes;
     for (std::size_t block_from = 0; block_from < graph.numEdges();
@@ -152,7 +152,7 @@ private:
 
   void colourEdges(std::size_t from, std::size_t to, const Graph &graph,
                    MemoryOfOneColour &block) {
-    std::vector<std::uint8_t> point_colours(graph.N * graph.M, 0);
+    std::vector<std::uint8_t> point_colours(graph.numPoints(), 0);
     std::uint8_t num_edge_colours = 0;
     for (std::size_t i = from; i < to; ++i) {
       std::uint8_t colour = point_colours[graph.edge_list[2 * i + 1]]++;
