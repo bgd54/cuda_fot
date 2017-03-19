@@ -260,8 +260,9 @@ void Problem::loopGPUHierarchical(std::size_t num, std::size_t reset_every) {
           d_edge_colours[colour_ind], d_num_edge_colours[colour_ind],
           num_threads);
     }
-    checkCudaErrors(cudaMemcpy(d_point_weights,d_point_weights_out,
-          sizeof(float)*graph.N*graph.M,cudaMemcpyDeviceToDevice));
+    checkCudaErrors(cudaMemcpy(d_point_weights, d_point_weights_out,
+                               sizeof(float) * graph.N * graph.M,
+                               cudaMemcpyDeviceToDevice));
     if (reset_every && iteration % reset_every == reset_every - 1) {
       reset();
       checkCudaErrors(cudaMemcpy(d_point_weights, point_weights,
@@ -275,9 +276,9 @@ void Problem::loopGPUHierarchical(std::size_t num, std::size_t reset_every) {
   // ---------------
   // -  Finish up  -
   // ---------------
-  checkCudaErrors(cudaMemcpy(point_weights,d_point_weights_out,
-        sizeof(float)*graph.N*graph.M,
-        cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(point_weights, d_point_weights_out,
+                             sizeof(float) * graph.N * graph.M,
+                             cudaMemcpyDeviceToHost));
   for (std::size_t i = 0; i < memory.colours.size(); ++i) {
     checkCudaErrors(cudaFree(d_num_edge_colours[i]));
     checkCudaErrors(cudaFree(d_edge_colours[i]));
