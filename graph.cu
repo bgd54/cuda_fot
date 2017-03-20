@@ -61,7 +61,9 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads(); // TODO really syncthreads?
 
   // Computation
-  float result = point_cache_in[in_ind] * edge_weights[thread_ind];
+  if (thread_ind < num_threads) {
+    float result = point_cache_in[in_ind] * edge_weights[thread_ind];
+  }
 
   for (std::size_t i = 0; i < num_edge_colours[bid]; ++i) {
     if (our_colour == i) {
