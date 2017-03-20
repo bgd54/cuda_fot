@@ -4,6 +4,7 @@
 #define USE_TIMER_MACRO
 
 #ifdef USE_TIMER_MACRO
+
 #define TIMER_START(t) Timer t
 #define TIMER_PRINT(t, pre)                                                    \
   do {                                                                         \
@@ -12,10 +13,20 @@
     std::cout << std::endl;                                                    \
   } while (0)
 #define TIMER_TOGGLE(t) t.toggle()
-#else
+#define PRINT_BANDWIDTH(t, pre, data)                                          \
+  do {                                                                         \
+    std::cout << pre << " bandwidth: "                                         \
+              << static_cast<double>(data) / t.getTime() * 1000.0 << " B/s"    \
+              << std::endl;                                                    \
+  } while (0)
+
+#else // don't use timer
+
 #define TIMER_START(t)
-#define TIMER_PRINT(t)
+#define TIMER_PRINT(t, pre)
 #define TIMER_TOGGLE(t)
+#define PRINT_BANDWIDTH(t, pre, data)
+
 #endif
 
 #include <chrono>
@@ -38,17 +49,16 @@ public:
 
   void printTime() const { std::cout << getTime() << " ms"; }
 
-  void toggle () {
+  void toggle() {
     if (!paused) {
       paused_time = std::chrono::high_resolution_clock::now();
     } else {
       std::chrono::high_resolution_clock::time_point now =
           std::chrono::high_resolution_clock::now();
-      start += now-paused_time;
+      start += now - paused_time;
     }
     paused = !paused;
   }
-
 };
 
 #endif /* end of include guard: TIMER_HPP_UAYKBI6U */

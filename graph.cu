@@ -145,8 +145,8 @@ void Problem::loopGPUEdgeCentred(std::size_t num, std::size_t reset_every) {
     }
     TIMER_TOGGLE(t);
   }
-  // long long time = t.getTime();
-  TIMER_PRINT(t, "loopGPUEdgeCentred");
+  PRINT_BANDWIDTH(t, "loopGPUEdgeCentred",
+                  (2 * graph.numPoints() + graph.numEdges()) * num);
   checkCudaErrors(cudaMemcpy(point_weights, d_weights1,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyDeviceToHost));
@@ -157,7 +157,6 @@ void Problem::loopGPUEdgeCentred(std::size_t num, std::size_t reset_every) {
   for (std::size_t i = 0; i < num_of_colours; ++i) {
     checkCudaErrors(cudaFree(d_partition[i]));
   }
-  // return time;
 }
 /* 2}}} */
 

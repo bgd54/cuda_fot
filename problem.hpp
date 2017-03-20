@@ -51,7 +51,6 @@ struct Problem {
 
   void loopCPUEdgeCentred(std::size_t num, std::size_t reset_every = 0) {
     float *temp = (float *)malloc(sizeof(float) * graph.numPoints());
-    // Timer t;
     TIMER_START(t);
     for (std::size_t i = 0; i < num; ++i) {
       stepCPUEdgeCentred(temp);
@@ -59,10 +58,9 @@ struct Problem {
         reset();
       }
     }
-    // long long time = t.getTime();
-    TIMER_PRINT(t, "loopCPUEdgeCentred");
+    PRINT_BANDWIDTH(t, "loopCPUEdgeCentred",
+                    (2 * graph.numPoints() + graph.numEdges()) * num);
     free(temp);
-    // return time;
   }
 
   void stepCPUPointCentred(float *temp) {
@@ -88,7 +86,8 @@ struct Problem {
         reset();
       }
     }
-    TIMER_PRINT(t, "loopCPUPointCentred");
+    PRINT_BANDWIDTH(t, "loopCPUPointCentred",
+                    (2 * graph.numPoints() + graph.numEdges()) * num);
     free(temp);
   }
 };
