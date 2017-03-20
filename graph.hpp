@@ -8,6 +8,7 @@
 struct Graph {
 private:
   const std::size_t N, M; // num of rows/columns (of points)
+  std::size_t num_edges;
 
 public:
   std::size_t *edge_list;
@@ -15,12 +16,16 @@ public:
 
   /* Initialisation {{{1 */
   Graph(std::size_t N_, std::size_t M_) : N(N_), M(M_) {
+    // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
+    num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     edge_list = (std::size_t *)malloc(sizeof(std::size_t) * 2 * numEdges());
-    fillEdgeList();
+    fillEdgeList2();
 
-    offsets = (std::size_t *)malloc(sizeof(std::size_t) * (N * M + 1));
-    point_list = (std::size_t *)malloc(sizeof(std::size_t) * 2 * numEdges());
-    fillPointList();
+    // TODO
+    // offsets = (std::size_t *)malloc(sizeof(std::size_t) * (N * M + 1));
+    // point_list = (std::size_t *)malloc(sizeof(std::size_t) * 2 * numEdges());
+    // fillPointList();
+    offsets = point_list = nullptr;
   }
 
   ~Graph() {
@@ -45,6 +50,39 @@ public:
     for (std::size_t c = 0; c < M - 1; ++c) {
       edge_list[array_ind++] = upper_point_ind;
       edge_list[array_ind++] = ++upper_point_ind;
+    }
+  }
+
+  void fillEdgeList2() {
+    std::size_t array_ind = 0, upper_point_ind = 0, lower_point_ind = M;
+    for (std::size_t r = 0; r < N - 1; ++r) {
+      for (std::size_t c = 0; c < M - 1; ++c) {
+        // up-down
+        edge_list[array_ind++] = lower_point_ind;
+        edge_list[array_ind++] = upper_point_ind;
+        edge_list[array_ind++] = upper_point_ind;
+        edge_list[array_ind++] = lower_point_ind;
+        // right-left
+        edge_list[array_ind++] = upper_point_ind;
+        edge_list[array_ind++] = upper_point_ind + 1;
+        edge_list[array_ind++] = upper_point_ind + 1;
+        edge_list[array_ind++] = upper_point_ind;
+        ++lower_point_ind;
+        ++upper_point_ind;
+      }
+      // Last up-down
+      edge_list[array_ind++] = lower_point_ind;
+      edge_list[array_ind++] = upper_point_ind;
+      edge_list[array_ind++] = upper_point_ind++;
+      edge_list[array_ind++] = lower_point_ind++;
+    }
+    // Last horizontal
+    for (std::size_t c = 0; c < M - 1; ++c) {
+      edge_list[array_ind++] = upper_point_ind;
+      edge_list[array_ind++] = upper_point_ind + 1;
+      edge_list[array_ind++] = upper_point_ind + 1;
+      edge_list[array_ind++] = upper_point_ind;
+      ++upper_point_ind;
     }
   }
 
@@ -106,9 +144,7 @@ public:
     return edge_partitions;
   }
 
-  std::size_t numEdges() const {
-    return (N - 1) * M + N * (M - 1); // vertical + horizontal
-  }
+  std::size_t numEdges() const { return num_edges; }
 
   std::size_t numPoints() const { return N * M; }
 };
