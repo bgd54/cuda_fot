@@ -97,12 +97,11 @@ int main(int argc, char *argv[]){
       int start = col==0 ? 0 : bc.color_offsets[col-1];
       int len = bc.color_offsets[col] -start;
       TIMER_START(iter)
-      #pragma omp target teams\
+      #pragma omp target teams distribute parallel for\
         num_teams(len)  thread_limit(BLOCKSIZE)\
         map(to: node_old[:nnode], node_val[:nnode], enode[:2*nedge], \
             edge_val[:nedge], color_reord[:nedge], color_d[:nedge], \
             colornum_d[:c.numblock], block_reord_d[:c.numblock])
-#pragma omp distribute parallel for
       for(int j=0; j < len*BLOCKSIZE; ++j){//j: tid in color
         //problema: elm mukdik de a teamnum meg minden implementacio fuggo
         int tid  = omp_get_thread_num();
@@ -119,7 +118,7 @@ int main(int argc, char *argv[]){
             node_val[enode[2*color_reord[reordIdx]+1] ] += increment;
           }
           //eeees region cannot be closely nested in distribute parallel for
-          //#pragma omp barrier
+          #pragma omp barrier
         }
 
       }
