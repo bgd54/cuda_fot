@@ -19,10 +19,10 @@ struct HierarchicalColourMemory {
         edge_weights; // restructured so it can be indexed with tid
                       // it's a vector, because it's not necessarily block_size
                       // long; also I don't want mem. management just now
-    std::vector<std::vector<std::size_t>>
+    std::vector<std::vector<MY_SIZE>>
         points_to_be_cached; // every thread caches the one with index
                              // the multiple of its tid
-    std::vector<std::size_t>
+    std::vector<MY_SIZE>
         edge_list; // same as before, just points to shared mem
                    // computed from the above
     std::vector<std::uint8_t> edge_colours;     // the colour for each edge
@@ -32,7 +32,7 @@ struct HierarchicalColourMemory {
   };
   std::vector<MemoryOfOneColour> colours;
 
-  HierarchicalColourMemory(std::size_t block_size, const Problem &problem) {
+  HierarchicalColourMemory(MY_SIZE block_size, const Problem &problem) {
     /* Algorithm:
      *   - loop through `block_size` blocks
      *     - determine the points written to (not the same as points used)
@@ -52,13 +52,13 @@ struct HierarchicalColourMemory {
     std::vector<colourset_t> point_colours(graph.numPoints(), 0);
     colourset_t used_colours;
     std::vector<unsigned long long> set_sizes;
-    for (std::size_t block_from = 0; block_from < graph.numEdges();
+    for (MY_SIZE block_from = 0; block_from < graph.numEdges();
          block_from += block_size) {
-      std::size_t block_to =
+      MY_SIZE block_to =
           std::min(graph.numEdges(), block_from + block_size);
       auto tmp = getPointsWrittenTo(graph.edge_list, block_from, block_to,
                                     point_colours);
-      // std::vector<std::size_t> point_written_to = tmp.first;
+      // std::vector<MY_SIZE> point_written_to = tmp.first;
       colourset_t occupied_colours = tmp.second;
       colourset_t available_colours = ~occupied_colours & used_colours;
       if (available_colours.none()) {
@@ -70,7 +70,7 @@ struct HierarchicalColourMemory {
         assert(available_colours.any());
         colours.emplace_back();
       }
-      std::size_t colour = getAvailableColour(available_colours, set_sizes);
+      MY_SIZE colour = getAvailableColour(available_colours, set_sizes);
       // std::cerr<< "Allocated: " << block_from << "-" << block_to << ": " <<
       // colour
       //    <<std::endl;
@@ -81,26 +81,26 @@ struct HierarchicalColourMemory {
   }
 
 private:
-  static std::pair<std::vector<std::size_t>, colourset_t>
-  getPointsWrittenTo(const std::size_t *edge_list, std::size_t from,
-                     std::size_t to,
+  static std::pair<std::vector<MY_SIZE>, colourset_t>
+  getPointsWrittenTo(const MY_SIZE *edge_list, MY_SIZE from,
+                     MY_SIZE to,
                      const std::vector<colourset_t> &point_colours) {
     colourset_t result;
-    std::vector<std::size_t> points;
-    for (std::size_t i = from; i < to; ++i) {
-      std::size_t point = edge_list[2 * i + 1];
+    std::vector<MY_SIZE> points;
+    for (MY_SIZE i = from; i < to; ++i) {
+      MY_SIZE point = edge_list[2 * i + 1];
       result |= point_colours[point];
       points.push_back(point);
     }
     return std::make_pair(points, result);
   }
 
-  static std::size_t
+  static MY_SIZE
   getAvailableColour(colourset_t available_colours,
                      const std::vector<unsigned long long> &set_sizes) {
     assert(set_sizes.size() > 0);
-    std::size_t colour = set_sizes.size();
-    for (std::size_t i = 0; i < set_sizes.size(); ++i) {
+    MY_SIZE colour = set_sizes.size();
+    for (MY_SIZE i = 0; i < set_sizes.size(); ++i) {
       if (available_colours[i]) {
         if (colour >= set_sizes.size() || set_sizes[colour] > set_sizes[i]) {
           colour = i;
@@ -115,31 +115,31 @@ private:
    * Colours every point written by the edges in the block and also
    * collects all points accessed by the edges in the block.
    */
-  void colourBlock(std::size_t from, std::size_t to, std::size_t colour_ind,
+  void colourBlock(MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
                    std::vector<colourset_t> &point_colours,
                    const Problem &problem,
                    std::vector<MemoryOfOneColour> &colours) {
     const Graph &graph = problem.graph;
-    const std::size_t *edge_list = graph.edge_list;
+    const MY_SIZE *edge_list = graph.edge_list;
     colourset_t colourset(1ull << colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
-    std::map<std::size_t, std::vector<std::size_t>> points_to_edges;
-    for (std::size_t i = from; i < to; ++i) {
-      std::size_t point_to = edge_list[2 * i + 1];
-      std::size_t point_from = edge_list[2 * i];
+    std::map<MY_SIZE, std::vector<MY_SIZE>> points_to_edges;
+    for (MY_SIZE i = from; i < to; ++i) {
+      MY_SIZE point_to = edge_list[2 * i + 1];
+      MY_SIZE point_from = edge_list[2 * i];
       point_colours[point_to] |= colourset;
       colour.edge_weights.push_back(problem.edge_weights[i]);
       points_to_edges[point_to].push_back(i);
       points_to_edges[point_from].push_back(i);
     }
     // colour.edge_list.resize(2 * (to - from));
-    std::vector<std::size_t> c_edge_list(2 * (to - from));
-    std::vector<std::size_t> points_to_be_cached;
+    std::vector<MY_SIZE> c_edge_list(2 * (to - from));
+    std::vector<MY_SIZE> points_to_be_cached;
     for (const auto &t : points_to_edges) {
-      std::size_t point_ind = t.first;
-      const std::vector<std::size_t> &edge_inds = t.second;
-      for (std::size_t e : edge_inds) {
-        std::size_t offset = point_ind == edge_list[2 * e + 1] ? 1 : 0;
+      MY_SIZE point_ind = t.first;
+      const std::vector<MY_SIZE> &edge_inds = t.second;
+      for (MY_SIZE e : edge_inds) {
+        MY_SIZE offset = point_ind == edge_list[2 * e + 1] ? 1 : 0;
         c_edge_list[2 * (e - from) + offset] = points_to_be_cached.size();
       }
       points_to_be_cached.push_back(point_ind);
@@ -150,11 +150,11 @@ private:
     colourEdges(from, to, problem.graph, colour);
   }
 
-  void colourEdges(std::size_t from, std::size_t to, const Graph &graph,
+  void colourEdges(MY_SIZE from, MY_SIZE to, const Graph &graph,
                    MemoryOfOneColour &block) {
     std::vector<std::uint8_t> point_colours(graph.numPoints(), 0);
     std::uint8_t num_edge_colours = 0;
-    for (std::size_t i = from; i < to; ++i) {
+    for (MY_SIZE i = from; i < to; ++i) {
       std::uint8_t colour = point_colours[graph.edge_list[2 * i + 1]]++;
       num_edge_colours = std::max<std::uint8_t>(num_edge_colours, colour + 1);
       block.edge_colours.push_back(colour);
