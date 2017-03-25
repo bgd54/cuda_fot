@@ -19,12 +19,13 @@ struct HierarchicalColourMemory {
         edge_weights; // restructured so it can be indexed with tid
                       // it's a vector, because it's not necessarily block_size
                       // long; also I don't want mem. management just now
-    std::vector<std::vector<MY_SIZE>>
-        points_to_be_cached; // every thread caches the one with index
-                             // the multiple of its tid
-    std::vector<MY_SIZE>
-        edge_list; // same as before, just points to shared mem
-                   // computed from the above
+    // std::vector<std::vector<MY_SIZE>>
+    //    points_to_be_cached; // every thread caches the one with index
+    //                         // the multiple of its tid
+    std::vector<MY_SIZE> points_to_be_cached;
+    std::vector<MY_SIZE> points_to_be_cached_offsets = {0};
+    std::vector<MY_SIZE> edge_list; // same as before, just points to shared mem
+                                    // computed from the above
     std::vector<std::uint8_t> edge_colours;     // the colour for each edge
                                                 // in the block
     std::vector<std::uint8_t> num_edge_colours; // the number of edge colours
@@ -54,8 +55,7 @@ struct HierarchicalColourMemory {
     std::vector<unsigned long long> set_sizes;
     for (MY_SIZE block_from = 0; block_from < graph.numEdges();
          block_from += block_size) {
-      MY_SIZE block_to =
-          std::min(graph.numEdges(), block_from + block_size);
+      MY_SIZE block_to = std::min(graph.numEdges(), block_from + block_size);
       auto tmp = getPointsWrittenTo(graph.edge_list, block_from, block_to,
                                     point_colours);
       // std::vector<MY_SIZE> point_written_to = tmp.first;
@@ -82,8 +82,7 @@ struct HierarchicalColourMemory {
 
 private:
   static std::pair<std::vector<MY_SIZE>, colourset_t>
-  getPointsWrittenTo(const MY_SIZE *edge_list, MY_SIZE from,
-                     MY_SIZE to,
+  getPointsWrittenTo(const MY_SIZE *edge_list, MY_SIZE from, MY_SIZE to,
                      const std::vector<colourset_t> &point_colours) {
     colourset_t result;
     std::vector<MY_SIZE> points;
@@ -146,7 +145,12 @@ private:
     }
     colour.edge_list.insert(colour.edge_list.end(), c_edge_list.begin(),
                             c_edge_list.end());
-    colour.points_to_be_cached.push_back(points_to_be_cached);
+    // colour.points_to_be_cached.push_back(points_to_be_cached);
+    colour.points_to_be_cached.insert(colour.points_to_be_cached.end(),
+                                      points_to_be_cached.begin(),
+                                      points_to_be_cached.end());
+    colour.points_to_be_cached_offsets.push_back(
+        colour.points_to_be_cached.size());
     colourEdges(from, to, problem.graph, colour);
   }
 

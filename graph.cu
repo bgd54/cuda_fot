@@ -12,10 +12,11 @@ using MY_SIZE = std::uint32_t;
 #include "helper_cuda.h"
 #include "problem.hpp"
 
-constexpr MY_SIZE BLOCK_SIZE = 3;
+constexpr MY_SIZE BLOCK_SIZE = 128;
 
 /* Problem {{{1 */
 
+/* problem_stepGPU {{{2 */
 __global__ void problem_stepGPU(float *point_weights, float *edge_weights,
                                 MY_SIZE *edge_list, MY_SIZE *edge_inds,
                                 float *out, MY_SIZE edge_num) {
@@ -26,13 +27,13 @@ __global__ void problem_stepGPU(float *point_weights, float *edge_weights,
         edge_weights[edge_ind] * point_weights[edge_list[2 * edge_ind]];
   }
 }
+/* 2}}} */
 
 __global__ void problem_stepGPUHierarchical(
     MY_SIZE *edge_list, float *point_weights, float *point_weights_out,
-    float *edge_weights, MY_SIZE **points_to_be_cached,
-    MY_SIZE cache_size, MY_SIZE *num_cached_points,
-    std::uint8_t *edge_colours, std::uint8_t *num_edge_colours,
-    MY_SIZE num_threads) {
+    float *edge_weights, MY_SIZE *points_to_be_cached, MY_SIZE cache_size,
+    MY_SIZE *points_to_be_cached_offsets, std::uint8_t *edge_colours,
+    std::uint8_t *num_edge_colours, MY_SIZE num_threads) {
   MY_SIZE bid = blockIdx.x;
   MY_SIZE thread_ind = bid * blockDim.x + threadIdx.x;
   MY_SIZE tid = threadIdx.x;
@@ -41,29 +42,33 @@ __global__ void problem_stepGPUHierarchical(
   float *point_cache_in = shared;
   float *point_cache_out = shared + cache_size;
 
-  MY_SIZE in_ind = edge_list[2 * thread_ind];
-  MY_SIZE out_ind = edge_list[2 * thread_ind + 1];
+  MY_SIZE out_ind, in_ind;
 
-  std::uint8_t our_colour = edge_colours[thread_ind];
+  std::uint8_t our_colour;
   if (thread_ind >= num_threads) {
     our_colour = num_edge_colours[bid];
+  } else {
+    our_colour = edge_colours[thread_ind];
   }
 
-  MY_SIZE num_cached_point = num_cached_points[bid];
+  MY_SIZE points_offset = points_to_be_cached_offsets[bid];
+  MY_SIZE num_cached_point =
+      points_to_be_cached_offsets[bid + 1] - points_offset;
   if (num_cached_point > cache_size) {
-    printf("ERROR: Bid: %d Tid: %d, num_cached_point: %d cache_size: %d\n",
-        bid,tid,num_cached_point,cache_size);
+    printf("ERROR: Bid: %d Tid: %d, num_cached_point: %d cache_size: %d\n", bid,
+           tid, num_cached_point, cache_size);
   }
-  //printf("DEBUG: bid: %d tid: %d num_cached_point: %d cache_size: %d\n",bid,tid,num_cached_point,cache_size);
-  //printf("       thread_ind: %d, num_threads: %d\n",thread_ind,num_threads);
+  // printf("DEBUG: bid: %d tid: %d num_cached_point: %d cache_size:
+  // %d\n",bid,tid,num_cached_point,cache_size);
+  // printf("       thread_ind: %d, num_threads: %d\n",thread_ind,num_threads);
 
   // Cache in
   for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
     if (i + tid < num_cached_point) {
       point_cache_in[i + tid] =
-          point_weights[points_to_be_cached[bid][i + tid]];
+          point_weights[points_to_be_cached[points_offset + i + tid]];
       point_cache_out[i + tid] =
-          point_weights_out[points_to_be_cached[bid][i + tid]];
+          point_weights_out[points_to_be_cached[points_offset + i + tid]];
     }
   }
 
@@ -72,6 +77,8 @@ __global__ void problem_stepGPUHierarchical(
   // Computation
   float result = 0;
   if (thread_ind < num_threads) {
+    in_ind = edge_list[2 * thread_ind];
+    out_ind = edge_list[2 * thread_ind + 1];
     result = point_cache_in[in_ind] * edge_weights[thread_ind];
   }
 
@@ -85,7 +92,7 @@ __global__ void problem_stepGPUHierarchical(
   // Cache out
   for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
     if (i + tid < num_cached_point) {
-      point_weights_out[points_to_be_cached[bid][i + tid]] =
+      point_weights_out[points_to_be_cached[points_offset + i + tid]] =
           point_cache_out[i + tid];
     }
   }
@@ -95,12 +102,12 @@ __global__ void problem_stepGPUHierarchical(
 void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
   MY_SIZE num_of_colours = partition.size();
-  MY_SIZE max_thread_num =
-      std::max_element(
-          partition.begin(), partition.end(),
-          [](const std::vector<MY_SIZE> &a,
-             const std::vector<MY_SIZE> &b) { return a.size() < b.size(); })
-          ->size();
+  MY_SIZE max_thread_num = std::max_element(partition.begin(), partition.end(),
+                                            [](const std::vector<MY_SIZE> &a,
+                                               const std::vector<MY_SIZE> &b) {
+                                              return a.size() < b.size();
+                                            })
+                               ->size();
   MY_SIZE num_blocks = static_cast<MY_SIZE>(
       std::ceil(double(max_thread_num) / static_cast<double>(BLOCK_SIZE)));
   float *d_weights1, *d_weights2, *d_edge_weights;
@@ -173,13 +180,13 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
 void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   HierarchicalColourMemory memory(BLOCK_SIZE, *this);
   std::vector<float *> d_edge_weights;
-  std::vector<std::vector<MY_SIZE *>> d_points_to_be_cached;
+  std::vector<MY_SIZE *> d_points_to_be_cached;
   std::vector<MY_SIZE *> d_edge_list;
   std::vector<std::uint8_t *> d_edge_colours;
   std::vector<std::uint8_t *> d_num_edge_colours;
   std::vector<MY_SIZE> shared_sizes;
   float *d_point_weights, *d_point_weights_out;
-  std::vector<MY_SIZE *> d_num_cached_points;
+  std::vector<MY_SIZE *> d_points_to_be_cached_offsets;
   checkCudaErrors(
       cudaMalloc((void **)&d_point_weights, sizeof(float) * graph.numPoints()));
   checkCudaErrors(cudaMalloc((void **)&d_point_weights_out,
@@ -203,38 +210,36 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
         cudaMemcpy(d_fptr, memory_of_one_colour.edge_weights.data(),
                    sizeof(float) * memory_of_one_colour.edge_weights.size(),
                    cudaMemcpyHostToDevice));
-    d_points_to_be_cached.emplace_back();
     MY_SIZE shared_size = 0;
-    std::vector<MY_SIZE> num_cached_points;
-    std::cout << "Num cached points: ";
-    for (const std::vector<MY_SIZE> &block_points_to_be_cached :
-         memory_of_one_colour.points_to_be_cached) {
-      checkCudaErrors(
-          cudaMalloc((void **)&d_sptr,
-                     sizeof(MY_SIZE) * block_points_to_be_cached.size()));
-      d_points_to_be_cached.back().push_back(d_sptr);
-      checkCudaErrors(
-          cudaMemcpy(d_sptr, block_points_to_be_cached.data(),
-                     sizeof(MY_SIZE) * block_points_to_be_cached.size(),
-                     cudaMemcpyHostToDevice));
-      shared_size = std::max<MY_SIZE>(shared_size, block_points_to_be_cached.size());
-      num_cached_points.push_back(block_points_to_be_cached.size());
-      std::cout << num_cached_points.back() << " ";
+    checkCudaErrors(cudaMalloc(
+        (void **)&d_sptr,
+        sizeof(MY_SIZE) * memory_of_one_colour.points_to_be_cached.size()));
+    d_points_to_be_cached.push_back(d_sptr);
+    checkCudaErrors(cudaMemcpy(
+        d_sptr, memory_of_one_colour.points_to_be_cached.data(),
+        sizeof(MY_SIZE) * memory_of_one_colour.points_to_be_cached.size(),
+        cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMalloc(
+        (void **)&d_sptr,
+        sizeof(MY_SIZE) *
+            memory_of_one_colour.points_to_be_cached_offsets.size()));
+    d_points_to_be_cached_offsets.push_back(d_sptr);
+    checkCudaErrors(cudaMemcpy(
+        d_sptr, memory_of_one_colour.points_to_be_cached_offsets.data(),
+        sizeof(MY_SIZE) *
+            memory_of_one_colour.points_to_be_cached_offsets.size(),
+        cudaMemcpyHostToDevice));
+    for (MY_SIZE i = 1;
+         i < memory_of_one_colour.points_to_be_cached_offsets.size(); ++i) {
+      shared_size = std::max<MY_SIZE>(
+          shared_size,
+          memory_of_one_colour.points_to_be_cached_offsets[i] -
+              memory_of_one_colour.points_to_be_cached_offsets[i - 1]);
     }
-    std::cout << std::endl;
     shared_sizes.push_back(shared_size);
-    assert(memory_of_one_colour.num_edge_colours.size() ==
-           num_cached_points.size());
-    checkCudaErrors(cudaMalloc((void **)&d_sptr,
-                               sizeof(MY_SIZE) * num_cached_points.size()));
-    d_num_cached_points.push_back(d_sptr);
-    checkCudaErrors(cudaMemcpy(d_num_cached_points.back(),
-                               num_cached_points.data(),
-                               sizeof(MY_SIZE) * num_cached_points.size(),
-                               cudaMemcpyHostToDevice));
-    checkCudaErrors(cudaMalloc((void **)&d_sptr,
-                               sizeof(MY_SIZE) *
-                                   memory_of_one_colour.edge_list.size()));
+    checkCudaErrors(
+        cudaMalloc((void **)&d_sptr,
+                   sizeof(MY_SIZE) * memory_of_one_colour.edge_list.size()));
     d_edge_list.push_back(d_sptr);
     checkCudaErrors(
         cudaMemcpy(d_sptr, memory_of_one_colour.edge_list.data(),
@@ -263,18 +268,16 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
-      assert(memory.colours[colour_ind].edge_list.size()%2==0);
+      assert(memory.colours[colour_ind].edge_list.size() % 2 == 0);
       MY_SIZE num_threads = memory.colours[colour_ind].edge_list.size() / 2;
       MY_SIZE num_blocks = static_cast<MY_SIZE>(
           std::ceil(static_cast<double>(num_threads) / BLOCK_SIZE));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
       MY_SIZE cache_size = sizeof(float) * 2 * shared_sizes[colour_ind];
-      std::cout << "Starting new kernel: cache_size: "<<shared_sizes[colour_ind]<<std::endl;
       problem_stepGPUHierarchical<<<num_blocks, BLOCK_SIZE, cache_size>>>(
           d_edge_list[colour_ind], d_point_weights, d_point_weights_out,
-          d_edge_weights[colour_ind], d_points_to_be_cached[colour_ind].data(), 
-                                                    // FIXME: .data() is on the HOST!
-          shared_sizes[colour_ind], d_num_cached_points[colour_ind],
+          d_edge_weights[colour_ind], d_points_to_be_cached[colour_ind],
+          shared_sizes[colour_ind], d_points_to_be_cached_offsets[colour_ind],
           d_edge_colours[colour_ind], d_num_edge_colours[colour_ind],
           num_threads);
       checkCudaErrors(cudaDeviceSynchronize());
@@ -302,10 +305,8 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
     checkCudaErrors(cudaFree(d_num_edge_colours[i]));
     checkCudaErrors(cudaFree(d_edge_colours[i]));
     checkCudaErrors(cudaFree(d_edge_list[i]));
-    checkCudaErrors(cudaFree(d_num_cached_points[i]));
-    for (MY_SIZE j = 0; j < d_points_to_be_cached[i].size(); ++j) {
-      checkCudaErrors(cudaFree(d_points_to_be_cached[i][j]));
-    }
+    checkCudaErrors(cudaFree(d_points_to_be_cached_offsets[i]));
+    checkCudaErrors(cudaFree(d_points_to_be_cached[i]));
     checkCudaErrors(cudaFree(d_edge_weights[i]));
   }
   checkCudaErrors(cudaFree(d_point_weights_out));
@@ -440,11 +441,12 @@ void testHierarchicalColouring() {
         std::cout << w << " ";
       }
       std::cout << std::endl << "Points to be cached: ";
-      for (const auto &v : c.points_to_be_cached) {
-        std::cout << std::endl;
-        for (MY_SIZE p : v) {
-          std::cout << p << " ";
-        }
+      for (const auto &p : c.points_to_be_cached) {
+        std::cout << p << " ";
+      }
+      std::cout << std::endl << "Points to be cached (offsets): ";
+      for (const auto &p : c.points_to_be_cached_offsets) {
+        std::cout << p << " ";
       }
       std::cout << std::endl << "Edge list: ";
       for (MY_SIZE i = 0; i < c.edge_list.size(); i += 2) {
@@ -470,8 +472,8 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
 
   std::vector<float> result1;
   double rms = 0;
-  MY_SIZE N = 2;
-  MY_SIZE M = 4;
+  MY_SIZE N = 1000;
+  MY_SIZE M = 2000;
   MY_SIZE reset_every = 10;
   {
     srand(1);
@@ -505,9 +507,9 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
 int main(int argc, const char **argv) {
   findCudaDevice(argc, argv);
   // testTwoCPUImplementations(99);
-  testGPUSolution(1);
+  // testGPUSolution(1);
   // testHierarchicalColouring();
-  // testGPUHierarchicalSolution(1);
+  testGPUHierarchicalSolution(99);
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
