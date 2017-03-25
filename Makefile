@@ -13,7 +13,7 @@ OPTIMIZATION_FLAGS := -g
 
 all: $(TGT)
 
-graph: graph.cu graph.hpp problem.hpp colouring.hpp
+graph: graph.cu graph.hpp problem.hpp colouring.hpp Makefile
 		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
 
 %: %.cu Makefile $(HDR)
