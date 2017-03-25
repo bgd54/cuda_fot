@@ -6,14 +6,18 @@ HDR = $(wildcard *.hpp)
 TGT = $(patsubst %.cu,%,$(SRC))
 
 NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
+NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra
+
+OPTIMIZATION_FLAGS := -g
+#OPTIMIZATION_FLAGS := -O3
 
 all: $(TGT)
 
 graph: graph.cu graph.hpp problem.hpp colouring.hpp
-		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) -std=c++11 -Xcompiler -Wall,-Wextra -g
+		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
 
 %: %.cu Makefile $(HDR)
-		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) -std=c++11 -Xcompiler -Wall,-Wextra
+		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
 
 clean:
 		rm -f $(TGT)
