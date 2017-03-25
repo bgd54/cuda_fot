@@ -163,7 +163,8 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
     TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(t, "loopGPUEdgeCentred",
-                  (2 * graph.numPoints() + graph.numEdges()) * num);
+                  sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
+                      num);
   checkCudaErrors(cudaMemcpy(point_weights, d_weights1,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyDeviceToHost));
@@ -265,6 +266,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   // -----------------------
   // -  Start computation  -
   // -----------------------
+  TIMER_START(t);
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
@@ -286,6 +288,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
                                sizeof(float) * graph.numPoints(),
                                cudaMemcpyDeviceToDevice));
     if (reset_every && iteration % reset_every == reset_every - 1) {
+      TIMER_TOGGLE(t);
       reset();
       checkCudaErrors(cudaMemcpy(d_point_weights, point_weights,
                                  sizeof(float) * graph.numPoints(),
@@ -293,8 +296,12 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
       checkCudaErrors(cudaMemcpy(d_point_weights_out, point_weights,
                                  sizeof(float) * graph.numPoints(),
                                  cudaMemcpyHostToDevice));
+      TIMER_TOGGLE(t);
     }
   }
+  PRINT_BANDWIDTH(t, "GPU HierarchicalColouring",
+                  num * (2 * graph.numPoints() + graph.numEdges()) *
+                      sizeof(float));
   // ---------------
   // -  Finish up  -
   // ---------------
@@ -385,10 +392,7 @@ void testGPUSolution(MY_SIZE num) {
   {
     srand(1);
     Problem problem(N, M);
-    // std::cout << "CPU time: ";
-    // long long time = problem.loopCPUEdgeCentred(num);
     problem.loopCPUEdgeCentred(num, reset_every);
-    // std::cout << time << " ms" << std::endl;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       result1.push_back(problem.point_weights[i]);
     }
@@ -397,9 +401,7 @@ void testGPUSolution(MY_SIZE num) {
   {
     srand(1);
     Problem problem(N, M);
-    // long long time = problem.loopGPUEdgeCentred(num);
     problem.loopGPUEdgeCentred(num);
-    // std::cout << "GPU time " << time << " ms" << std::endl;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       rms += std::pow(problem.point_weights[i] - result1[i], 2);
     }
@@ -478,10 +480,7 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
   {
     srand(1);
     Problem problem(N, M);
-    // std::cout << "CPU time: ";
-    // long long time = problem.loopCPUEdgeCentred(num);
     problem.loopCPUEdgeCentred(num, reset_every);
-    // std::cout << time << " ms" << std::endl;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       result1.push_back(problem.point_weights[i]);
     }
@@ -490,9 +489,7 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
   {
     srand(1);
     Problem problem(N, M);
-    // long long time = problem.loopGPUEdgeCentred(num);
     problem.loopGPUHierarchical(num);
-    // std::cout << "GPU time " << time << " ms" << std::endl;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       rms += std::pow(problem.point_weights[i] - result1[i], 2);
     }

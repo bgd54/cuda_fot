@@ -59,13 +59,13 @@ struct Problem {
       }
     }
     PRINT_BANDWIDTH(t, "loopCPUEdgeCentred",
-                    (2 * graph.numPoints() + graph.numEdges()) * num);
+                    sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
+                        num);
     free(temp);
   }
 
   void stepCPUPointCentred(float *temp) {
-    for (MY_SIZE point_ind = 0; point_ind < graph.numPoints();
-         ++point_ind) {
+    for (MY_SIZE point_ind = 0; point_ind < graph.numPoints(); ++point_ind) {
       float sum = 0;
       for (MY_SIZE edge_ind = graph.offsets[point_ind];
            edge_ind < graph.offsets[point_ind + 1]; edge_ind += 1) {
@@ -87,7 +87,8 @@ struct Problem {
       }
     }
     PRINT_BANDWIDTH(t, "loopCPUPointCentred",
-                    (2 * graph.numPoints() + graph.numEdges()) * num);
+                    sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
+                        num);
     free(temp);
   }
 };
