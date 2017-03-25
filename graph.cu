@@ -150,17 +150,19 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
           partition[c].size());
       checkCudaErrors(cudaDeviceSynchronize());
     }
-    checkCudaErrors(cudaMemcpy(d_weights1, d_weights2,
-                               sizeof(float) * graph.numPoints(),
-                               cudaMemcpyDeviceToDevice));
     TIMER_TOGGLE(t);
     if (reset_every && i % reset_every == reset_every - 1) {
       reset();
-      checkCudaErrors(cudaMemcpy(d_weights1, point_weights,
+      // Copy to d_weights2 that is currently holding the result, the next
+      // copy will put it into d_weights1 also.
+      checkCudaErrors(cudaMemcpy(d_weights2, point_weights,
                                  sizeof(float) * graph.numPoints(),
                                  cudaMemcpyHostToDevice));
     }
     TIMER_TOGGLE(t);
+    checkCudaErrors(cudaMemcpy(d_weights1, d_weights2,
+                               sizeof(float) * graph.numPoints(),
+                               cudaMemcpyDeviceToDevice));
   }
   PRINT_BANDWIDTH(t, "loopGPUEdgeCentred",
                   sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
@@ -393,23 +395,27 @@ void testGPUSolution(MY_SIZE num) {
     srand(1);
     Problem problem(N, M);
     problem.loopCPUEdgeCentred(num, reset_every);
+    float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       result1.push_back(problem.point_weights[i]);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
     }
+    std::cout << "Abs max: " << abs_max << std::endl;
   }
 
   {
     srand(1);
     Problem problem(N, M);
-    problem.loopGPUEdgeCentred(num);
+    problem.loopGPUEdgeCentred(num, reset_every);
+    float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       rms += std::pow(problem.point_weights[i] - result1[i], 2);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
     }
     rms = std::pow(rms / result1.size(), 0.5);
+    std::cout << "Abs max: " << abs_max << std::endl;
     std::cout << "RMS: " << rms << std::endl;
   }
-
-  cudaDeviceReset();
 }
 
 void testHierarchicalColouring() {
@@ -481,32 +487,77 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
     srand(1);
     Problem problem(N, M);
     problem.loopCPUEdgeCentred(num, reset_every);
+    float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       result1.push_back(problem.point_weights[i]);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
     }
+    std::cout << "Abs max: " << abs_max << std::endl;
   }
 
   {
     srand(1);
     Problem problem(N, M);
-    problem.loopGPUHierarchical(num);
+    problem.loopGPUHierarchical(num, reset_every);
+    float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       rms += std::pow(problem.point_weights[i] - result1[i], 2);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
     }
+    std::cout << "Abs max: " << abs_max << std::endl;
     rms = std::pow(rms / result1.size(), 0.5);
     std::cout << "RMS: " << rms << std::endl;
   }
+}
 
-  cudaDeviceReset();
+using implementation_algorithm_t = void (Problem::*)(MY_SIZE, MY_SIZE);
+void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
+                            MY_SIZE reset_every,
+                            implementation_algorithm_t algorithm1,
+                            implementation_algorithm_t algorithm2) {
+  std::vector<float> result1;
+  double rms = 0;
+  {
+    srand(1);
+    Problem problem(N, M);
+    (problem.*algorithm1)(num, reset_every);
+    float abs_max = 0;
+    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
+      result1.push_back(problem.point_weights[i]);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
+    }
+    std::cout << "Abs max: " << abs_max << std::endl;
+  }
+
+  {
+    srand(1);
+    Problem problem(N, M);
+    (problem.*algorithm2)(num, reset_every);
+    float abs_max = 0;
+    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
+      rms += std::pow(problem.point_weights[i] - result1[i], 2);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
+    }
+    std::cout << "Abs max: " << abs_max << std::endl;
+    rms = std::pow(rms / result1.size(), 0.5);
+    std::cout << "RMS: " << rms << std::endl;
+  }
 }
 /* 1}}} */
 
 int main(int argc, const char **argv) {
   findCudaDevice(argc, argv);
-  // testTwoCPUImplementations(99);
-  // testGPUSolution(1);
+  // testGPUSolution(std::atoi(argv[1]));
   // testHierarchicalColouring();
-  testGPUHierarchicalSolution(99);
+  // testGPUHierarchicalSolution(11);
+  MY_SIZE num = 99;
+  MY_SIZE N = 1000;
+  MY_SIZE M = 2000;
+  MY_SIZE reset_every = 10;
+  std::cout << "GPU global edge vs GPU hierarchical edge" << std::endl;
+  testTwoImplementations(num, N, M, reset_every, &Problem::loopGPUEdgeCentred,
+                         &Problem::loopGPUHierarchical);
+  cudaDeviceReset();
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
