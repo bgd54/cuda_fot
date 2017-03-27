@@ -13,10 +13,14 @@
     std::cout << std::endl;                                                    \
   } while (0)
 #define TIMER_TOGGLE(t) t.toggle()
-#define PRINT_BANDWIDTH(t, pre, data)                                          \
+#define PRINT_BANDWIDTH(t, pre, data, tot_data)                                \
   do {                                                                         \
-    std::cout << pre << " bandwidth: "                                         \
-              << static_cast<double>(data) / t.getTime() * 1000.0 << " B/s"    \
+    std::cout << pre << ":" << std::endl                                       \
+              << "  time:             " << t.getTime() << " ms\n"              \
+              << "  useful bandwidth: "                                        \
+              << static_cast<double>(data) / t.getTime() * 1000.0 << " B/s\n"  \
+              << "  total bandwidth:  "                                        \
+              << static_cast<double>(tot_data) / t.getTime() * 1000.0 << "B/s" \
               << std::endl;                                                    \
   } while (0)
 

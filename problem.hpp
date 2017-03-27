@@ -58,9 +58,10 @@ struct Problem {
         reset();
       }
     }
-    PRINT_BANDWIDTH(t, "loopCPUEdgeCentred",
-                    sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
-                        num);
+    PRINT_BANDWIDTH(
+        t, "loopCPUEdgeCentred",
+        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num,
+        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num);
     free(temp);
   }
 
@@ -86,9 +87,10 @@ struct Problem {
         reset();
       }
     }
-    PRINT_BANDWIDTH(t, "loopCPUPointCentred",
-                    sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
-                        num);
+    PRINT_BANDWIDTH(
+        t, "loopCPUPointCentred",
+        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num,
+        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num);
     free(temp);
   }
 };

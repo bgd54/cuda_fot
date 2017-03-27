@@ -14,9 +14,7 @@ using MY_SIZE = std::uint32_t;
 
 constexpr MY_SIZE BLOCK_SIZE = 128;
 
-/* Problem {{{1 */
-
-/* problem_stepGPU {{{2 */
+/* problem_stepGPU {{{1 */
 __global__ void problem_stepGPU(float *point_weights, float *edge_weights,
                                 MY_SIZE *edge_list, MY_SIZE *edge_inds,
                                 float *out, MY_SIZE edge_num) {
@@ -27,8 +25,9 @@ __global__ void problem_stepGPU(float *point_weights, float *edge_weights,
         edge_weights[edge_ind] * point_weights[edge_list[2 * edge_ind]];
   }
 }
-/* 2}}} */
+/* 1}}} */
 
+/* problem_stepGPUHierarchical {{{1 */
 __global__ void problem_stepGPUHierarchical(
     MY_SIZE *edge_list, float *point_weights, float *point_weights_out,
     float *edge_weights, MY_SIZE *points_to_be_cached, MY_SIZE cache_size,
@@ -97,8 +96,9 @@ __global__ void problem_stepGPUHierarchical(
     }
   }
 }
+/* 1}}} */
 
-/* loopGPUEdgeCentred {{{2 */
+/* loopGPUEdgeCentred {{{1 */
 void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
   MY_SIZE num_of_colours = partition.size();
@@ -166,7 +166,12 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   }
   PRINT_BANDWIDTH(t, "loopGPUEdgeCentred",
                   sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) *
-                      num);
+                      num,
+                  (sizeof(float) * graph.numPoints() * 2 +  // d_weights
+                   sizeof(float) * graph.numEdges() +       // d_edge_weights
+                   sizeof(MY_SIZE) * graph.numEdges() * 2 + // d_edge_list
+                   sizeof(MY_SIZE) * graph.numEdges() * 2   // d_partition
+                   ) * num);
   checkCudaErrors(cudaMemcpy(point_weights, d_weights1,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyDeviceToHost));
@@ -178,8 +183,9 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
     checkCudaErrors(cudaFree(d_partition[i]));
   }
 }
-/* 2}}} */
+/* 1}}} */
 
+/* loopGPUHierarchical {{{1 */
 void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   HierarchicalColourMemory memory(BLOCK_SIZE, *this);
   std::vector<float *> d_edge_weights;
@@ -200,6 +206,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   checkCudaErrors(cudaMemcpy(d_point_weights_out, point_weights,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyHostToDevice));
+  MY_SIZE total_cache_size = 0; // for bandwidth calculations
   for (const HierarchicalColourMemory::MemoryOfOneColour &memory_of_one_colour :
        memory.colours) {
     float *d_fptr;
@@ -240,6 +247,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
               memory_of_one_colour.points_to_be_cached_offsets[i - 1]);
     }
     shared_sizes.push_back(shared_size);
+    total_cache_size += memory_of_one_colour.points_to_be_cached.size();
     checkCudaErrors(
         cudaMalloc((void **)&d_sptr,
                    sizeof(MY_SIZE) * memory_of_one_colour.edge_list.size()));
@@ -269,6 +277,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   // -  Start computation  -
   // -----------------------
   TIMER_START(t);
+  MY_SIZE total_num_blocks = 0; // for bandwidth calculations
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
@@ -285,6 +294,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
           d_edge_colours[colour_ind], d_num_edge_colours[colour_ind],
           num_threads);
       checkCudaErrors(cudaDeviceSynchronize());
+      total_num_blocks += num_blocks;
     }
     checkCudaErrors(cudaMemcpy(d_point_weights, d_point_weights_out,
                                sizeof(float) * graph.numPoints(),
@@ -301,9 +311,21 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
       TIMER_TOGGLE(t);
     }
   }
-  PRINT_BANDWIDTH(t, "GPU HierarchicalColouring",
-                  num * (2 * graph.numPoints() + graph.numEdges()) *
-                      sizeof(float));
+  PRINT_BANDWIDTH(
+      t, "GPU HierarchicalColouring",
+      num * (2 * graph.numPoints() + graph.numEdges()) * sizeof(float),
+      num * (sizeof(float) * graph.numPoints() * 2 +  // point_weights
+             sizeof(float) * graph.numEdges() +       // edge_weights
+             sizeof(MY_SIZE) * graph.numEdges() * 2 + // edge_list
+             sizeof(MY_SIZE) * total_cache_size +
+             sizeof(MY_SIZE) *
+                 (total_num_blocks +
+                  memory.colours.size()) + // points_to_be_cached_offsets
+             sizeof(std::uint8_t) * graph.numEdges() // edge_colours
+             ));
+  std::cout << "  recycling factor: "
+            << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
+            << std::endl;
   // ---------------
   // -  Finish up  -
   // ---------------
@@ -321,7 +343,6 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   checkCudaErrors(cudaFree(d_point_weights_out));
   checkCudaErrors(cudaFree(d_point_weights));
 }
-
 /* 1}}} */
 
 /* tests {{{1 */
