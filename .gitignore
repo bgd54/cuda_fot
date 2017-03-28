@@ -30,3 +30,5 @@
 
 # vim swapfiles
 *.swp
+# log files
+*.log
