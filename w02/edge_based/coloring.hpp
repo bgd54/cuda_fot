@@ -203,6 +203,7 @@ Block_coloring block_coloring(int* enode, int nedge, int blockSize=128){
     vector<int>node_used; 
     //process edges in block #bIdx
     for(int edgeIdx=start;edgeIdx<end;++edgeIdx){
+      //printf("edge: %d\n", edgeIdx);
       int nodetowrite=enode[2*edgeIdx+1];
       size_t col= std::count(node_used.begin(), node_used.end(),nodetowrite);
       node_used.push_back(nodetowrite);

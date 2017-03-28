@@ -27,9 +27,10 @@ void addTimers(Simulation &sim){
 
 void cache_map_gen(int* enode, int nedge, int* iwillwritethis, int* icachethis,
     Block_coloring& bc){
+  int maxc=0, minc=BLOCKSIZE, sumc = 0;
 
   for(int i=0;i<nedge;++i) icachethis[i]=-1;
-
+//TODO parallellize
   for(int bIdx=0; bIdx<bc.numblock;++bIdx){
     int start= bIdx*bc.bs;
     int end= std::min((bIdx+1)*bc.bs,nedge);
@@ -40,6 +41,12 @@ void cache_map_gen(int* enode, int nedge, int* iwillwritethis, int* icachethis,
       needtoCacheforWrite.insert(iwillwritethis[start+tid]);
     }
 
+    int c_size = needtoCacheforWrite.size();
+    if(minc>c_size) minc = c_size;
+    else if(c_size>maxc) maxc = c_size;
+
+    sumc += c_size;
+
     std::copy(needtoCacheforWrite.begin(),
         needtoCacheforWrite.end(), icachethis+start);
     for(int tid=0;tid+start<end;++tid){
@@ -48,7 +55,10 @@ void cache_map_gen(int* enode, int nedge, int* iwillwritethis, int* icachethis,
         - (icachethis+start);
     }
 
+
   }
+  printf("cache recycling factor:\nworst block: %lf\tbest block: %lf\t avg:%lf\n\n",
+        maxc/(double)BLOCKSIZE,((double)minc)/BLOCKSIZE, sumc/(double)nedge );
   /*
   for(int bIdx=0; bIdx<bc.numblock;++bIdx){
     int start= bIdx*bc.bs;
@@ -161,7 +171,7 @@ int main(int argc, char *argv[]){
   
   printf("start coloring\n");
   TIMER_START(sim.timers[0])
-  Block_coloring c = block_coloring(enode,nedge,nnode);
+  Block_coloring c = block_coloring(enode,nedge);
   TIMER_STOP(sim.timers[0])
   printf("start coloring blocks\n");
   TIMER_START(sim.timers[1])

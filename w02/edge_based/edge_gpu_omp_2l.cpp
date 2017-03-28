@@ -65,7 +65,7 @@ int main(int argc, char *argv[]){
   
   printf("coloring\n");
   TIMER_START(sim.timers[0])
-  Block_coloring c = block_coloring(enode,nedge, nnode);
+  Block_coloring c = block_coloring(enode,nedge);
   TIMER_STOP(sim.timers[0])
   printf("start coloring blocks\n");
   TIMER_START(sim.timers[1])
