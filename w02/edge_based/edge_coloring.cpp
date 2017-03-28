@@ -4,10 +4,16 @@
 #include "graph_helper.hpp"
 #include "rms.hpp"
 #define TIMER_MACRO
-#include "timer.hpp"
+#include "simulation.hpp"
 #include "coloring.hpp"
 
 using namespace std;
+
+void addTimers(Simulation &sim){
+  #ifdef TIMER_MACRO
+  sim.timers.push_back(timer("color"));
+  #endif
+}
 
 int main(int argc, char *argv[]){
   int niter=1000;
@@ -45,62 +51,57 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                              timer
   ///////////////////////////////////////////////////////////////////////
-#ifdef TIMER_MACRO
-  timer total("total"), ssol("ssol"), iter("iter"), rms("rms"), color("color"); //TODO Attila h oldja ezt meg
-#endif
+  Simulation sim = initSimulation(nedge, nnode);
+  addTimers(sim);
 
   /////////////////////////////////////////////////////////
   //                        coloring
   /////////////////////////////////////////////////////////
   
   printf("start coloring\n");
-  TIMER_START(color)
+  TIMER_START(sim.timers[0])
   Coloring c = global_coloring(enode,nedge);
-  TIMER_STOP(color)
+  TIMER_STOP(sim.timers[0])
   printf("start edge based on CPU niter: %d, nnode:%d, nedge:%d, colornum: %d\n",niter,
      nnode,nedge, c.colornum);
 
   //   timer
-  TIMER_START(total)
+  sim.start();
   //______________________________main_loop_____________________________
   for(int i=0;i<=niter;++i){
     //save old
-    TIMER_START(ssol)
+    sim.kernels[0].timerStart();
     for(int j=0;j<nnode;++j){
       node_old[j]=node_val[j];
     }
-    TIMER_STOP(ssol)
+    sim.kernels[0].timerStop();
 
 
     //calc next step
     for(int col=0; col<c.colornum;col++){ 
-      TIMER_START(iter)
+      sim.kernels[1].timerStart();
       for(int j=col>0?c.color_offsets[col-1]:0;j<c.color_offsets[col];++j){
         int edgeIdx=c.color_reord[j];
         node_val[enode[2*edgeIdx+1]]+=
           edge_val[edgeIdx]*node_old[enode[edgeIdx*2+0]];
       }
-      TIMER_STOP(iter)
+      sim.kernels[1].timerStop();
     }
 
 
     //rms
     if(i%100==0){
-      TIMER_START(rms)
+      sim.kernels[2].timerStart();
       rms_calc(node_val,node_old,nnode,i);
-      TIMER_STOP(rms)
+      sim.kernels[2].timerStop();
     }
 
   }
   //_____________________________________________________________________
   //    timer
-  TIMER_STOP(total)
+  sim.stop();
 
-  TIMER_PRINT(ssol)
-  TIMER_PRINT(iter)
-  TIMER_PRINT(rms)
-  TIMER_PRINT(total)
-  TIMER_PRINT(color)
+  sim.printTiming();
   
   //free
   free(enode);

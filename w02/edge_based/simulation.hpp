@@ -24,7 +24,7 @@ struct Kernel{
   }
 
   float getBW(){
-    return byte_per_iter/pow(1024,3)/TIMER_TOTAL(t)*count; 
+    return byte_per_iter/TIMER_TOTAL(t)/pow(1024,3)*count; 
   }
 
   float getTime(){
@@ -63,7 +63,7 @@ struct Simulation{
     float bw = kernels[i].getBW();
     printf(" %6d;  %8.4f;  %8.4f(%8.4f);  %8.4f(%8.4f);  %8.4f;        "
                    " ;   %s \n",
-                   kernels[i].count, 0.0f, 0.0f, 0.0f, time, 0.0f, bw, 
+                   (int)kernels[i].count, 0.0f, 0.0f, 0.0f, time, 0.0f, bw, 
                    kernels[i].name.c_str());
   }
   printf("Total plan time: %8.4f\n", 0.0f);

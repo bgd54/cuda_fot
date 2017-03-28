@@ -6,7 +6,7 @@
 #include "graph_helper.hpp"
 #include "rms.hpp"
 #define TIMER_MACRO
-#include "timer.hpp"
+#include "simulation.hpp"
 #include "coloring.hpp"
 
 using namespace std;
@@ -16,6 +16,14 @@ using namespace std;
 ////////////////////////////////////////////////////////////////////////////////
 // CPU routines
 ////////////////////////////////////////////////////////////////////////////////
+
+void addTimers(Simulation &sim){
+  #ifdef TIMER_MACRO
+  sim.timers.push_back(timer("color"));
+  sim.timers.push_back(timer("colorb"));
+  sim.timers.push_back(timer("calc_cache"));
+  #endif
+}
 
 void cache_map_gen(int* enode, int nedge, int* iwillwritethis, int* icachethis,
     Block_coloring& bc){
@@ -143,32 +151,31 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-#ifdef TIMER_MACRO
-  timer total("total"), ssol("ssol"), iter("iter"), rms("rms"), 
-        color("color1"), color2("colorb"), calccache("calc_c"); //TODO Attila h oldja ezt meg
-#endif
+  Simulation sim = initSimulation(nedge, nnode);
+  addTimers(sim);
+
 
   /////////////////////////////////////////////////////////
   //                        coloring
   /////////////////////////////////////////////////////////
   
   printf("start coloring\n");
-  TIMER_START(color)
+  TIMER_START(sim.timers[0])
   Block_coloring c = block_coloring(enode,nedge,nnode);
-  TIMER_STOP(color)
+  TIMER_STOP(sim.timers[0])
   printf("start coloring blocks\n");
-  TIMER_START(color2)
+  TIMER_START(sim.timers[1])
   Coloring bc = c.color_blocks(enode,nedge);
-  TIMER_STOP(color2)
+  TIMER_STOP(sim.timers[1])
   printf("ready\n");
   printf("calculate cacheable data\n");
-  TIMER_START(calccache)
+  TIMER_START(sim.timers[2])
   int* iwillwritethis, *icachethis;
   iwillwritethis= (int*) malloc(nedge*sizeof(int));
   icachethis    = (int*) malloc(nedge*sizeof(int));
   
   cache_map_gen(enode, nedge, iwillwritethis, icachethis, c); 
-  TIMER_STOP(calccache)
+  TIMER_STOP(sim.timers[2])
 
   /////////////////////////////////////
   //          Device pointers
@@ -216,52 +223,46 @@ int main(int argc, char *argv[]){
   printf("start edge based on CPU niter: %d, nnode:%d, nedge:%d, numblock: %d\n",niter,
      nnode,nedge, c.numblock);
   //   timer
-  TIMER_START(total)
+  sim.start();
   //______________________________main_loop_____________________________
   for(int i=0;i<=niter;++i){
     //save old
-    TIMER_START(ssol)
+    sim.kernels[0].timerStart();
     ssoln<<<(nnode-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d,node_val_d, nnode);
     checkCudaErrors( cudaDeviceSynchronize() );
-    TIMER_STOP(ssol)
+    sim.kernels[0].timerStop();
 
 
     //calc next step
     for(int col=0; col<bc.colornum;col++){ 
       int start = col==0?0:bc.color_offsets[col-1]; 
       int len = bc.color_offsets[col]-start;
-      TIMER_START(iter)
+      sim.kernels[1].timerStart();
       iter_calc<<<len,BLOCKSIZE,BLOCKSIZE*sizeof(float)>>>(node_old_d,
           node_val_d, edge_val_d, enode_d, color_reord_d, nedge, color_d,
           colornum_d, block_reord_d, start, iwillwritethis_d, icachethis_d);
       checkCudaErrors( cudaDeviceSynchronize() );
-      TIMER_STOP(iter)
+      sim.kernels[1].timerStop();
     }
 
     // rms
     if(i%100==0){
-      TIMER_START(rms)
+      sim.kernels[2].timerStart();
       checkCudaErrors( cudaMemcpy(node_val, node_val_d, nnode*sizeof(float),
                               cudaMemcpyDeviceToHost) );
       checkCudaErrors( cudaMemcpy(node_old, node_old_d, nnode*sizeof(float),
                               cudaMemcpyDeviceToHost) );
       rms_calc(node_val,node_old,nnode,i);
-      TIMER_STOP(rms)
+      sim.kernels[2].timerStop();
 
     }
 
   }
   //____________________________end main loop___________________________
   //    timer
-  TIMER_STOP(total)
+  sim.stop();
 
-  TIMER_PRINT(ssol)
-  TIMER_PRINT(iter)
-  TIMER_PRINT(rms)
-  TIMER_PRINT(total)
-  TIMER_PRINT(color)
-  TIMER_PRINT(color2)
-  TIMER_PRINT(calccache)
+  sim.printTiming();
 
   
   //free
