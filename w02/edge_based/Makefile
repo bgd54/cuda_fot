@@ -15,7 +15,7 @@ all: edge_cpu edge_coloring edge_omp edge_gpu edge_gpu_2l\
 	edge_gpu_cw edge_gpu_ca edge_gpu_omp edge_gpu_omp_2l
 
 edge_cpu: edge_cpu.cpp Makefile graph_helper.hpp\
-   	rms.hpp timer.hpp
+   	rms.hpp timer.hpp simulation.hpp
 	g++ -std=c++11 edge_cpu.cpp -o edge_cpu -O3
 
 edge_coloring: edge_coloring.cpp Makefile graph_helper.hpp\
