@@ -45,10 +45,10 @@ int main(int argc, char *argv[]){
 
   float* node_val,*node_old, *edge_val;
   
-  node_val=genDataForNodes(nnode,1);
-  edge_val=genDataForNodes(nedge,1);
+  node_val=genDataForNodes(nnode,node_dim);
+  edge_val=genDataForNodes(nedge,edge_dim);
   
-  node_old=(float*)malloc(nnode*sizeof(float));
+  node_old=(float*)malloc(nnode*node_dim*sizeof(float));
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////

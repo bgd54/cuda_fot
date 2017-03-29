@@ -22,10 +22,12 @@ struct Coloring{
   Coloring(vector<vector<int> > _cr, vector<int> _coff, int nedge){
     colornum=_cr.size();
     color_offsets= (int*) malloc(colornum*sizeof(int));
+#pragma omp parallel for
     for(size_t i=0; i<_coff.size();++i){
       color_offsets[i]=_coff[i];
     }
     color_reord=(int*) malloc(nedge*sizeof(int));
+#pragma omp parallel for collapse(2)
     for(size_t i=0;i<_cr.size();++i){
       for(size_t j=0;j<_cr[i].size();j++){
         color_reord[j+(i>0?color_offsets[i-1]:0)]=_cr[i][j];
@@ -64,20 +66,22 @@ struct Coloring{
 };
 
 
-Coloring global_coloring(int* enode, int nedge){ // TODO nnode parameterben h ne kelljen kiszamolni
+Coloring global_coloring(int* enode, int nedge, int nnode=0){
 
   vector<vector<int> > color_reord;
-  vector<vector<int> > nodetocolor(
-      *std::max_element(enode,enode+nedge)+1,vector<int>() );
-
+  /*vector<vector<int> > nodetocolor(nnode!=0? nnode:
+      (*std::max_element(enode,enode+nedge)+1),vector<int>() );
+  */
+  vector<int> nodetocolor(nnode!=0? nnode:
+      (*std::max_element(enode,enode+nedge)+1), 0 );
   for(int i=0;i<nedge;++i){
-    size_t col= nodetocolor[enode[2*i+1]].size();
+    size_t col= nodetocolor[enode[2*i+1]];//nodetocolor[enode[2*i+1]].size();
 
     if(col < color_reord.size()){
       color_reord[col].push_back(i);
-      nodetocolor[enode[2*i+1]].push_back(col);
+      nodetocolor[enode[2*i+1]]++;//nodetocolor[enode[2*i+1]].push_back(col);
     } else if ( color_reord.size() == col ){
-      nodetocolor[enode[2*i+1]].push_back(col);
+      nodetocolor[enode[2*i+1]]++;//nodetocolor[enode[2*i+1]].push_back(col);
       color_reord.push_back(vector<int>(1,i));
     } else {
       printf(
@@ -107,6 +111,7 @@ struct Block_coloring{
       int * _reord, int nedge): numblock(_numblock), bs(_bs), colornum(_cnum){
     
     color_offsets = (int**) malloc(numblock*sizeof(int*));
+#pragma omp parallel for
     for(int bIdx=0;bIdx<numblock;++bIdx){
       color_offsets[bIdx] = (int*) malloc(_coff[bIdx].size()*sizeof(int));
       for(size_t i=0;i<_coff[bIdx].size();++i){

@@ -86,10 +86,10 @@ int main(int argc, char *argv[]){
 
   float *node_val, *node_old, *edge_val;
   
-  node_val = genDataForNodes(nnode,1);
-  edge_val = genDataForNodes(nedge,1);
+  node_val = genDataForNodes(nnode,node_dim);
+  edge_val = genDataForNodes(nedge,edge_dim);
   
-  node_old=(float*)malloc(nnode*sizeof(float));
+  node_old=(float*)malloc(nnode*node_dim*sizeof(float));
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
@@ -123,8 +123,8 @@ int main(int argc, char *argv[]){
   checkCudaErrors( cudaMalloc((void**)&color_d, nedge*sizeof(int)) );
   checkCudaErrors( cudaMalloc((void**)&colornum_d, c.numblock*sizeof(int)) );
   checkCudaErrors( cudaMalloc((void**)&edge_val_d, nedge*sizeof(float)) );
-  checkCudaErrors( cudaMalloc((void**)&node_old_d, nnode*sizeof(float)) );
-  checkCudaErrors( cudaMalloc((void**)&node_val_d, nnode*sizeof(float)) );
+  checkCudaErrors( cudaMalloc((void**)&node_old_d, nnode*node_dim*sizeof(float)) );
+  checkCudaErrors( cudaMalloc((void**)&node_val_d, nnode*node_dim*sizeof(float)) );
   checkCudaErrors( cudaMalloc((void**)&block_reord_d, c.numblock*sizeof(int)) );
   
   checkCudaErrors( cudaMemcpy(enode_d, enode, 2*nedge*sizeof(int),
@@ -137,7 +137,7 @@ int main(int argc, char *argv[]){
                               cudaMemcpyHostToDevice) );
   checkCudaErrors( cudaMemcpy(edge_val_d, edge_val, nedge*sizeof(float),
                               cudaMemcpyHostToDevice) );
-  checkCudaErrors( cudaMemcpy(node_val_d, node_val, nnode*sizeof(float),
+  checkCudaErrors( cudaMemcpy(node_val_d, node_val, nnode*node_dim*sizeof(float),
                               cudaMemcpyHostToDevice) );
   checkCudaErrors( cudaMemcpy(block_reord_d, bc.color_reord,
                                c.numblock*sizeof(int),
@@ -173,9 +173,9 @@ int main(int argc, char *argv[]){
     // rms
     if(i%100==0){
       sim.kernels[2].timerStart();
-      checkCudaErrors( cudaMemcpy(node_val, node_val_d, nnode*sizeof(float),
+      checkCudaErrors( cudaMemcpy(node_val, node_val_d, nnode*node_dim*sizeof(float),
                               cudaMemcpyDeviceToHost) );
-      checkCudaErrors( cudaMemcpy(node_old, node_old_d, nnode*sizeof(float),
+      checkCudaErrors( cudaMemcpy(node_old, node_old_d, nnode*node_dim*sizeof(float),
                               cudaMemcpyDeviceToHost) );
 
       rms_calc(node_val,node_old,nnode,i);
