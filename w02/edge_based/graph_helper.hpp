@@ -25,20 +25,25 @@ int* generate_graph(const int& dim_x, const int& dim_y, int& nedge, int& nnode){
   nnode=(dim_x+1)*dim_y;
   int* enode =(int*) malloc(nedge*2*sizeof(int));
 
-  for(int y=0;y<dim_y;y++){
-    for(int x=0; x<dim_x;x++){
-      int edgeId = y*dim_x+x;
-      enode[2*edgeId+0]= edgeId+y;
-      enode[2*edgeId+1]= edgeId+y+1;
+  #pragma omp parallel
+  { // start parallel region
+    #pragma omp for collapse(2)
+    for(int y=0;y<dim_y;y++){
+      for(int x=0; x<dim_x;x++){
+        int edgeId = y*dim_x+x;
+        enode[2*edgeId+0]= edgeId+y;
+        enode[2*edgeId+1]= edgeId+y+1;
+      }
     }
-  }
-  for(int y=0;y<dim_y-1;y++){
-    for(int x=0; x<dim_x+1;x++){
-      int edgeId = y*(dim_x+1)+x+dim_x*dim_y;
-      enode[2*edgeId+0]= (y+1)*dim_x+x+y+1;
-      enode[2*edgeId+1]= y*dim_x+x+y;
+    #pragma omp for collapse(2)
+    for(int y=0;y<dim_y-1;y++){
+      for(int x=0; x<dim_x+1;x++){
+        int edgeId = y*(dim_x+1)+x+dim_x*dim_y;
+        enode[2*edgeId+0]= (y+1)*dim_x+x+y+1;
+        enode[2*edgeId+1]= y*dim_x+x+y;
+      }
     }
-  }
+  } // end block of parallel region
 
   return enode;
 }
@@ -48,32 +53,36 @@ int* generate_bidirected_graph(const int& dim_x, const int& dim_y, int& nedge, i
   nnode=(dim_x+1)*dim_y;
   int* enode =(int*) malloc(nedge*2*sizeof(int));
 
-  for(int y=0;y<dim_y;y++){
-    for(int x=0; x<dim_x;x++){
-      int edgeId = y*dim_x+x;
-      enode[4*edgeId+0]= edgeId+y;
-      enode[4*edgeId+1]= edgeId+y+1;
-      enode[4*edgeId+2]= edgeId+y+1;
-      enode[4*edgeId+3]= edgeId+y;
+  #pragma omp parallel
+  { // start parallel region
+    #pragma omp for collapse(2)
+    for(int y=0;y<dim_y;y++){
+      for(int x=0; x<dim_x;x++){
+        int edgeId = y*dim_x+x;
+        enode[4*edgeId+0]= edgeId+y;
+        enode[4*edgeId+1]= edgeId+y+1;
+        enode[4*edgeId+2]= edgeId+y+1;
+        enode[4*edgeId+3]= edgeId+y;
+      }
     }
-  }
-  for(int y=0;y<dim_y-1;y++){
-    for(int x=0; x<dim_x+1;x++){
-      int edgeId = y*(dim_x+1)+x+dim_x*dim_y;
-      enode[4*edgeId+0]= (y+1)*dim_x+x+y+1;
-      enode[4*edgeId+1]= y*dim_x+x+y;
-      enode[4*edgeId+2]= y*dim_x+x+y;
-      enode[4*edgeId+3]= (y+1)*dim_x+x+y+1;
+    #pragma omp for collapse(2)
+    for(int y=0;y<dim_y-1;y++){
+      for(int x=0; x<dim_x+1;x++){
+        int edgeId = y*(dim_x+1)+x+dim_x*dim_y;
+        enode[4*edgeId+0]= (y+1)*dim_x+x+y+1;
+        enode[4*edgeId+1]= y*dim_x+x+y;
+        enode[4*edgeId+2]= y*dim_x+x+y;
+        enode[4*edgeId+3]= (y+1)*dim_x+x+y+1;
+      }
     }
-  }
-
+  } // end block of parallel region
   return enode;
 }
 
 float* genDataForNodes(const int& nnode,const int& dim,
     const float& mean=0.001){
   float* nodedata= (float*) malloc(nnode*dim*sizeof(float));
-
+  #pragma omp parallel for
   for(int i = 0; i<nnode*dim;++i){
     nodedata[i]=(i)/float(nnode)*mean;
   }
