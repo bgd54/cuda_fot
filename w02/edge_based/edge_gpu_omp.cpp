@@ -20,6 +20,7 @@ int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
   bool bidir=false;
+  int node_dim = 1, edge_dim = 1;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -28,6 +29,7 @@ int main(int argc, char *argv[]){
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-bidir")) bidir=true;
+    else if (!strcmp(argv[i],"-ndim")) node_dim=atoi(argv[++i]);
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -52,7 +54,7 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim = initSimulation(nedge, nnode);
+  Simulation sim = initSimulation(nedge, nnode, node_dim);
   addTimers(sim);
 
   
@@ -62,7 +64,7 @@ int main(int argc, char *argv[]){
   
   printf("coloring\n");
   TIMER_START(sim.timers[0])
-  Coloring c = global_coloring(enode,nedge);
+  Coloring c = global_coloring(enode,nedge,nnode);
   TIMER_STOP(sim.timers[0])
   printf("start edge based on CPU niter: %d, nnode:%d, nedge:%d, colornum: %d\n",niter,
      nnode,nedge, c.colornum);
@@ -72,7 +74,7 @@ int main(int argc, char *argv[]){
   int * color_reord = c.color_reord;
   
 #pragma omp target enter data map(to:enode[:nedge*2],color_reord[:nedge],\
-    edge_val[:nedge], node_old[:nnode], node_val[:nnode])
+    edge_val[:nedge], node_old[:nnode*node_dim], node_val[:nnode*node_dim])
   //   timer
   sim.start();
   //______________________________main_loop_____________________________
@@ -82,7 +84,7 @@ int main(int argc, char *argv[]){
     #pragma omp target teams distribute parallel for \
       num_teams((nnode-1)/BLOCKSIZE+1) thread_limit(BLOCKSIZE)\
       map(to:node_old[:nnode], node_val[:nnode])
-    for(int j=0;j<nnode;++j){
+    for(int j=0;j<nnode*node_dim;++j){
       node_old[j]=node_val[j];
     }
     sim.kernels[0].timerStop();
@@ -95,12 +97,14 @@ int main(int argc, char *argv[]){
       sim.kernels[1].timerStart();
       #pragma omp target teams distribute parallel for\
         num_teams((color_size-1)/BLOCKSIZE+1)  thread_limit(BLOCKSIZE)\
-        map(to: node_old[:nnode], node_val[:nnode], enode[:2*nedge], \
-            edge_val[:nedge], color_reord[:nedge])
+        map(to: node_old[:nnode*node_dim], node_val[:nnode*node_dim], \
+            enode[:2*nedge], edge_val[:nedge], color_reord[:nedge])
       for(int j=color_offset; j < color_end; ++j){
         int edgeIdx=color_reord[j];
-        node_val[enode[2*edgeIdx+1]]+=
-          edge_val[edgeIdx]*node_old[enode[edgeIdx*2+0]];
+        for(int dim=0; dim<node_dim;dim++){
+          node_val[enode[2*edgeIdx+1]*node_dim+dim]+=
+            edge_val[edgeIdx]*node_old[enode[edgeIdx*2+0]*node_dim+dim];
+        }
       }
       sim.kernels[1].timerStop();
     }
@@ -109,7 +113,7 @@ int main(int argc, char *argv[]){
     if(i%100==0){
       sim.kernels[2].timerStart();
       #pragma omp target update from(node_old[:nnode],node_val[:nnode])
-      rms_calc(node_val,node_old,nnode,i);
+      rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
     }
    
@@ -121,8 +125,8 @@ int main(int argc, char *argv[]){
   sim.printTiming();
  
   //free target memory
-  #pragma omp target exit data map(delete:enode[:2*nedge], node_old[:nnode],\
-      node_val[:nnode], edge_val[:nedge], color_reord[:nedge])
+  #pragma omp target exit data map(delete:enode[:2*nedge], node_old[:nnode*node_dim],\
+      node_val[:nnode*node_dim], edge_val[:nedge], color_reord[:nedge])
    
   //free
   free(enode);

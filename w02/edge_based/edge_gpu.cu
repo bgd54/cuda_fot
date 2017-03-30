@@ -21,22 +21,25 @@ void addTimers(Simulation &sim){
 ////////////////////////////////////////////////////////////////////////////////
 // GPU routines
 ////////////////////////////////////////////////////////////////////////////////
-__global__ void ssoln(float* old, const float* val, const int nnode){
+__global__ void ssoln(float* old, const float* val, const int nnode, const int node_dim){
   int tid = blockDim.x*blockIdx.x+threadIdx.x;
-  if(tid < nnode){
+  if(tid < nnode*node_dim){
     old[tid]=val[tid];
   }
 }
 
 __global__ void iter_calc(const float* old, float* val,const float* eval,
     const int* enode, const int* color_reord, const int offset, 
-    const int color_size, const int nedge){
+    const int color_size, const int nedge, const int node_dim){
 
   int tid = blockDim.x*blockIdx.x+threadIdx.x;
   int reordIdx = tid + offset;
   if(reordIdx<nedge && tid < color_size){
-    val[enode[2*color_reord[reordIdx]+1]] +=
-      eval[color_reord[reordIdx]]*old[enode[color_reord[reordIdx]*2+0]];
+    int edgeIdx=color_reord[reordIdx];
+    for(int dim=0; dim<node_dim;dim++){ 
+      val[enode[2*edgeIdx+1]*node_dim+dim]+=
+        eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
+    }
   }
 }
 
@@ -46,6 +49,7 @@ int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
   bool bidir=false;
+  int node_dim = 1, edge_dim = 1;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -54,6 +58,7 @@ int main(int argc, char *argv[]){
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-bidir")) bidir=true;
+    else if (!strcmp(argv[i],"-ndim")) node_dim=atoi(argv[++i]);
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -78,7 +83,7 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim = initSimulation(nedge, nnode);
+  Simulation sim = initSimulation(nedge, nnode, node_dim);
   addTimers(sim);
 
 
@@ -88,7 +93,7 @@ int main(int argc, char *argv[]){
   
   printf("start coloring\n");
   TIMER_START(sim.timers[0])
-  Coloring c = global_coloring(enode,nedge);
+  Coloring c = global_coloring(enode,nedge,nnode);
   TIMER_STOP(sim.timers[0])
   printf("coloring ready, allocate arrays in device memory\n");
   /////////////////////////////////////
@@ -124,7 +129,7 @@ int main(int argc, char *argv[]){
   for(int i=0;i<=niter;++i){
     //save old
     sim.kernels[0].timerStart();
-    ssoln<<<(nnode-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d,node_val_d, nnode);
+    ssoln<<<(nnode*node_dim-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d,node_val_d, nnode, node_dim);
     checkCudaErrors( cudaDeviceSynchronize() );
     sim.kernels[0].timerStop();
 
@@ -136,7 +141,7 @@ int main(int argc, char *argv[]){
       sim.kernels[1].timerStart();
       iter_calc<<<(color_size-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d, 
           node_val_d, edge_val_d, enode_d, color_reord_d, color_offset,
-          color_size, nedge);
+          color_size, nedge, node_dim);
       checkCudaErrors( cudaDeviceSynchronize() );
       sim.kernels[1].timerStop();
     }
@@ -148,7 +153,7 @@ int main(int argc, char *argv[]){
                               cudaMemcpyDeviceToHost) );
       checkCudaErrors( cudaMemcpy(node_old, node_old_d, nnode*node_dim*sizeof(float),
                               cudaMemcpyDeviceToHost) );
-      rms_calc(node_val,node_old,nnode,i);
+      rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
     }
 

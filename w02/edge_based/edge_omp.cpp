@@ -20,6 +20,7 @@ int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
   bool bidir=false;
+  int node_dim = 1, edge_dim = 1;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -28,6 +29,7 @@ int main(int argc, char *argv[]){
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-bidir")) bidir=true;
+    else if (!strcmp(argv[i],"-ndim")) node_dim=atoi(argv[++i]);
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -51,7 +53,7 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim = initSimulation(nedge, nnode);
+  Simulation sim = initSimulation(nedge, nnode, node_dim);
   addTimers(sim);
 
 
@@ -61,7 +63,7 @@ int main(int argc, char *argv[]){
   
   printf("coloring\n");
   TIMER_START(sim.timers[0])
-  Coloring c = global_coloring(enode,nedge);
+  Coloring c = global_coloring(enode,nedge,nnode);
   TIMER_STOP(sim.timers[0])
   printf("start edge based on CPU niter: %d, nnode:%d, nedge:%d, colornum: %d\n",niter,
      nnode,nedge, c.colornum);
@@ -72,7 +74,7 @@ int main(int argc, char *argv[]){
   for(int i=0;i<=niter;++i){
     //save old
     sim.kernels[0].timerStart();
-    for(int j=0;j<nnode;++j){
+    for(int j=0;j<nnode*node_dim;++j){
       node_old[j]=node_val[j];
     }
     sim.kernels[0].timerStop();
@@ -83,8 +85,10 @@ int main(int argc, char *argv[]){
       #pragma omp parallel for
       for(int j=col>0?c.color_offsets[col-1]:0;j<c.color_offsets[col];++j){
         int edgeIdx=c.color_reord[j];
-        node_val[enode[2*edgeIdx+1]]+=
-          edge_val[edgeIdx]*node_old[enode[edgeIdx*2+0]];
+        for(int dim=0; dim<node_dim;dim++){
+          node_val[enode[2*edgeIdx+1]*node_dim+dim]+=
+            edge_val[edgeIdx]*node_old[enode[edgeIdx*2+0]*node_dim+dim];
+        }
       }
       sim.kernels[1].timerStop();
     }
@@ -92,7 +96,7 @@ int main(int argc, char *argv[]){
     //rms
     if(i%100==0){
       sim.kernels[2].timerStart();
-      rms_calc(node_val,node_old,nnode,i);
+      rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
     }
    

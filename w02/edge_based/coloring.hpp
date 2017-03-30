@@ -27,7 +27,7 @@ struct Coloring{
       color_offsets[i]=_coff[i];
     }
     color_reord=(int*) malloc(nedge*sizeof(int));
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for
     for(size_t i=0;i<_cr.size();++i){
       for(size_t j=0;j<_cr[i].size();j++){
         color_reord[j+(i>0?color_offsets[i-1]:0)]=_cr[i][j];

@@ -73,7 +73,7 @@ struct Simulation{
 
 };
 
-Simulation initSimulation(size_t nedge, size_t nnode){
+Simulation initSimulation(size_t nedge, size_t nnode, int node_dim=1){
   std::vector<Kernel> kernels = 
         {Kernel("ssoln", 2*nnode*node_dim*sizeof(float)),
           Kernel("iter", (2*nnode+nedge)*sizeof(float)), 

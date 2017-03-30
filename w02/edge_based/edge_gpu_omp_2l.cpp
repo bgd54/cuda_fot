@@ -55,7 +55,7 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim = initSimulation(nedge, nnode);
+  Simulation sim = initSimulation(nedge, nnode, node_dim);
   addTimers(sim);
 
   
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]){
     if(i%100==0){
       sim.kernels[2].timerStart();
       #pragma omp target update from(node_old[:nnode],node_val[:nnode])
-      rms_calc(node_val,node_old,nnode,i);
+      rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
     }
    

@@ -48,7 +48,7 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim = initSimulation(nedge, nnode);
+  Simulation sim = initSimulation(nedge, nnode, node_dim);
   sim.start();
   //______________________________main_loop_____________________________
   for(int i=0;i<=niter;++i){

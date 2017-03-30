@@ -103,9 +103,9 @@ void cache_map_read(int* enode, int nedge, int* ireadold, int* icachethis_old,
 ////////////////////////////////////////////////////////////////////////////////
 // GPU routines
 ////////////////////////////////////////////////////////////////////////////////
-__global__ void ssoln(float* old, const float* val, const int nnode){
+__global__ void ssoln(float* old, const float* val, const int nnode, const int node_dim){
   int tid = blockDim.x*blockIdx.x+threadIdx.x;
-  if(tid < nnode){
+  if(tid < nnode*node_dim){
     old[tid]=val[tid];
   }
 }
@@ -114,7 +114,7 @@ __global__ void iter_calc(const float* old, float* val,const float* eval,
     const int* enode, const int* color_reord, const int nedge,
     const int* color, const int* colornum, const int* blocksInColor,
     int color_start, int* cache_map, int* global_to_cache, int * cache_old_map,
-    int* global_cache_old_map, int* cache_eval_map, int* global_cache_eval_map){
+    int* global_cache_old_map, int* cache_eval_map, int* global_cache_eval_map, const int node_dim){
 
   int tid = threadIdx.x;
   extern  __shared__  float tempval[];
@@ -140,29 +140,49 @@ __global__ void iter_calc(const float* old, float* val,const float* eval,
     ireadeval = cache_eval_map[reordIdx];
     icahceEval = global_cache_eval_map[reordIdx];
     
-    if(iloadThis != -1) tempval[tid] = val[iloadThis];
-    if(icacheOld != -1) tempval[tid+blockDim.x] = old[icacheOld];
-    if(icahceEval != -1) tempval[tid+2*blockDim.x] = eval[icahceEval];
+    if(iloadThis != -1){
+      for(int dim=0; dim<node_dim;dim++){ 
+        tempval[tid*node_dim+dim] = val[iloadThis*node_dim+dim];
+      }
+    }
+    if(icacheOld != -1){
+      for(int dim=0; dim<node_dim;dim++){ 
+        tempval[tid*node_dim+blockDim.x*node_dim+dim] =
+          old[icacheOld*node_dim+dim];
+      }
+    }
+    if(icahceEval != -1) tempval[tid+2*blockDim.x*node_dim] = eval[icahceEval];
   }
   __syncthreads();
 
 
-  float increment = 0.0f;
+  float* increment = new float[node_dim];
   if(reordIdx < nedge){
 
-    increment = tempval[ireadeval+2*blockDim.x]*tempval[ireadOld+blockDim.x];
+    for(int dim=0; dim<node_dim;dim++){ 
+      increment[dim] = tempval[ireadeval+2*blockDim.x*node_dim] *
+        tempval[(ireadOld+blockDim.x)*node_dim+dim];
+    }
+
       //eval[color_reord[reordIdx]]*old[enode[color_reord[reordIdx]*2+0]];
   }
   for(int col=0; col<colornum[bIdx];++col){
     if(reordIdx < nedge && col == color[reordIdx]){
+      for(int dim=0; dim<node_dim;dim++){ 
+        tempval[iwritethisIdx*node_dim+dim]+= increment[dim];
+      }
+
       //val[enode[2*color_reord[reordIdx]+1] ] += increment;
-      tempval[iwritethisIdx] += increment;
     }
     __syncthreads();
   }
   //cachelt ertekek visszairasa
 
-  if(reordIdx<nedge && iloadThis != -1) val[iloadThis] = tempval[tid]; 
+  if(reordIdx<nedge && iloadThis != -1){
+    for(int dim=0; dim<node_dim;dim++){ 
+      val[iloadThis*node_dim+dim] = tempval[tid*node_dim+dim];
+    }
+  }
 }
 
 ///___________________________________________________________________________
@@ -170,6 +190,7 @@ int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
   bool bidir=false;
+  int node_dim = 1, edge_dim = 1;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -178,6 +199,7 @@ int main(int argc, char *argv[]){
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-bidir")) bidir=true;
+    else if (!strcmp(argv[i],"-ndim")) node_dim=atoi(argv[++i]);
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -202,7 +224,7 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim = initSimulation(nedge, nnode);
+  Simulation sim = initSimulation(nedge, nnode, node_dim);
   addTimers(sim);
 
 
@@ -307,7 +329,7 @@ int main(int argc, char *argv[]){
   for(int i=0;i<=niter;++i){
     //save old
     sim.kernels[0].timerStart();
-    ssoln<<<(nnode-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d,node_val_d, nnode);
+    ssoln<<<(nnode*node_dim-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d,node_val_d, nnode, node_dim);
     checkCudaErrors( cudaDeviceSynchronize() );
     sim.kernels[0].timerStop();
 
@@ -316,10 +338,10 @@ int main(int argc, char *argv[]){
       int start = col==0?0:bc.color_offsets[col-1]; 
       int len = bc.color_offsets[col]-start;
       sim.kernels[1].timerStart();
-      iter_calc<<<len,BLOCKSIZE,3*BLOCKSIZE*sizeof(float)>>>(node_old_d,
+      iter_calc<<<len,BLOCKSIZE,3*BLOCKSIZE*node_dim*sizeof(float)>>>(node_old_d, //2*nodedim+1*BS?
           node_val_d, edge_val_d, enode_d, color_reord_d, nedge, color_d,
           colornum_d, block_reord_d, start, iwillwritethis_d, icachethis_d,
-          ireadold_d, icachethis_old_d, ireadeval_d, icachethis_eval_d);
+          ireadold_d, icachethis_old_d, ireadeval_d, icachethis_eval_d, node_dim);
       checkCudaErrors( cudaDeviceSynchronize() );
       sim.kernels[1].timerStop();
     }
@@ -331,7 +353,7 @@ int main(int argc, char *argv[]){
                               cudaMemcpyDeviceToHost) );
       checkCudaErrors( cudaMemcpy(node_old, node_old_d, nnode*node_dim*sizeof(float),
                               cudaMemcpyDeviceToHost) );
-      rms_calc(node_val,node_old,nnode,i);
+      rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
     }
 
