@@ -19,15 +19,15 @@ struct Problem {
   Problem(MY_SIZE N, MY_SIZE M) : graph(N, M) {
     point_weights = (float *)malloc(sizeof(float) * N * M);
     edge_weights = (float *)malloc(sizeof(float) * graph.numEdges());
+    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
+      edge_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
+    }
     reset();
   }
 
   void reset() {
     for (MY_SIZE i = 0; i < graph.numPoints(); ++i) {
       point_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
-    }
-    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
     }
   }
 
