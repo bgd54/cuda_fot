@@ -8,6 +8,7 @@
 #define TIMER_MACRO
 #include "simulation.hpp"
 #include "coloring.hpp"
+#include "cache_calc.hpp"
 
 using namespace std;
 
@@ -25,54 +26,6 @@ void addTimers(Simulation &sim){
   #endif
 }
 
-void cache_map_gen(int* enode, int nedge, int* iwillwritethis, int* icachethis,
-    Block_coloring& bc){
-  int maxc=0, minc=BLOCKSIZE, sumc = 0;
-
-  for(int i=0;i<nedge;++i) icachethis[i]=-1;
-//TODO parallellize
-  for(int bIdx=0; bIdx<bc.numblock;++bIdx){
-    int start= bIdx*bc.bs;
-    int end= std::min((bIdx+1)*bc.bs,nedge);
-    std::set<int> needtoCacheforWrite;
-    for(int tid=0; tid + start < end; ++tid){
-      //kigyujtom a nodeidkat amiket irni fogok szalankent es osszessegeben
-      iwillwritethis[start+tid]=enode[2*bc.color_reord[start+tid]+1];
-      needtoCacheforWrite.insert(iwillwritethis[start+tid]);
-    }
-
-    int c_size = needtoCacheforWrite.size();
-    if(minc>c_size) minc = c_size;
-    else if(c_size>maxc) maxc = c_size;
-
-    sumc += c_size;
-
-    std::copy(needtoCacheforWrite.begin(),
-        needtoCacheforWrite.end(), icachethis+start);
-    for(int tid=0;tid+start<end;++tid){
-      iwillwritethis[start+tid] = 
-        std::find(icachethis+start, icachethis+end, iwillwritethis[start+tid])
-        - (icachethis+start);
-    }
-
-
-  }
-  printf("cache recycling factor:\nworst block: %lf\tbest block: %lf\t avg:%lf\n\n",
-        maxc/(double)BLOCKSIZE,((double)minc)/BLOCKSIZE, sumc/(double)nedge );
-  /*
-  for(int bIdx=0; bIdx<bc.numblock;++bIdx){
-    int start= bIdx*bc.bs;
-    int end= std::min((bIdx+1)*bc.bs,nedge);
-    for(int tid=0; tid + start < end; ++tid){
-      printf("bIdx: %3d tid: %3d i: %3d icache: %6d, iwrite: %3d, which: %6d\n", bIdx, tid, start+tid,
-         icachethis[start+tid], iwillwritethis[start+tid],
-         enode[2*bc.color_reord[start+tid]+1]);
-    }
-  }
-  */
-
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // GPU routines
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,33 +36,42 @@ __global__ void ssoln(float* old, const float* val, const int nnode, const int n
   }
 }
 
-__global__ void iter_calc(const float* old, float* val,const float* eval,
-    const int* enode, const int* color_reord, const int nedge,
-    const int* color, const int* colornum, const int* blocksInColor,
-    int color_start, int* cache_map, int* global_to_cache, const int node_dim){
+__global__ void iter_calc(const float* __restrict__  old, 
+    float* __restrict__ val, const int node_dim ,const float* __restrict__ eval,
+    const int nedge, const int* __restrict__ enode, 
+    const int* __restrict__ color_reord, const int* __restrict__ threadcolors,
+    const int* __restrict__ colornum, const int* __restrict__ blocksInColor,
+    int color_start, const int* __restrict__ global_to_cache, 
+    const int* __restrict__ cacheOffsets,
+    const MY_IDX_TYPE* __restrict__ writeC){
 
   int tid = threadIdx.x;
-  extern  __shared__  float tempval[];
+  extern  __shared__  float shared[];
 
 
   int bIdx = blocksInColor[blockIdx.x+color_start];
   int reordIdx = tid + bIdx*blockDim.x;
 
   int iwritethisIdx = -1;
-  int iloadThis = -1;
 
   if(reordIdx<nedge){
-    iwritethisIdx = cache_map[reordIdx];
-    iloadThis = global_to_cache[reordIdx];
-    if(iloadThis != -1) {
-      for(int dim=0; dim<node_dim;dim++){ 
-        tempval[tid*node_dim+dim] = val[iloadThis*node_dim+dim];
-      }
+    iwritethisIdx = writeC[reordIdx];
+  }
+  //calc cache params
+  int cache_offset = bIdx == 0? 0:cacheOffsets[bIdx-1]; 
+  int cache_size = cacheOffsets[bIdx] - cache_offset;
+  //CACHE IN
+  for (int i = 0; i < cache_size; i += blockDim.x) {
+    if (i + tid < cache_size) {
+      for(int dim=0; dim<node_dim; dim++)
+        shared[(i + tid)*node_dim+dim] =
+            val[global_to_cache[cache_offset + i + tid]*node_dim+dim];
     }
   }
+    
   __syncthreads();
 
-
+  //CALC INCREMENT
   float* increment = new float[node_dim];
   if(reordIdx < nedge){
     for(int dim=0; dim<node_dim;dim++){ 
@@ -117,20 +79,24 @@ __global__ void iter_calc(const float* old, float* val,const float* eval,
         old[enode[color_reord[reordIdx]*2+0]*node_dim+dim];
     }
   }
+
+  //CALC VAL
   for(int col=0; col<colornum[bIdx];++col){
-    if(reordIdx < nedge && col == color[reordIdx]){
+    if(reordIdx < nedge && col == threadcolors[reordIdx]){
       for(int dim=0; dim<node_dim;dim++){ 
-        val[iwritethisIdx*node_dim+dim]+= increment[dim];
+        shared[iwritethisIdx*node_dim+dim]+= increment[dim];
       }
     }
     __syncthreads();
   }
   delete[] increment;
-  //cachelt ertekek visszairasa
 
-  if(reordIdx<nedge && iloadThis != -1){
-    for(int dim=0; dim<node_dim;dim++){ 
-      val[iloadThis*node_dim+dim] = tempval[tid*node_dim+dim];
+  //CACHE BACK
+  for (int i = 0; i < cache_size; i += blockDim.x) {
+    if (i + tid < cache_size) {
+      for(int dim=0; dim<node_dim; dim++)
+        val[global_to_cache[cache_offset + i + tid]*node_dim+dim] = 
+          shared[(i + tid)*node_dim+dim];
     }
   }
   
@@ -194,11 +160,9 @@ int main(int argc, char *argv[]){
   printf("ready\n");
   printf("calculate cacheable data\n");
   TIMER_START(sim.timers[2])
-  int* iwillwritethis, *icachethis;
-  iwillwritethis= (int*) malloc(nedge*sizeof(int));
-  icachethis    = (int*) malloc(nedge*sizeof(int));
-  
-  cache_map_gen(enode, nedge, iwillwritethis, icachethis, c); 
+ 
+  cacheMap cm = genCacheMap(enode, nedge, c);
+
   TIMER_STOP(sim.timers[2])
 
   /////////////////////////////////////
@@ -208,7 +172,6 @@ int main(int argc, char *argv[]){
   int *enode_d, *color_reord_d, *colornum_d, *color_d;
   float *node_val_d,*node_old_d,*edge_val_d;
   int *block_reord_d;
-  int *iwillwritethis_d, *icachethis_d;
 
   checkCudaErrors( cudaMalloc((void**)&enode_d, 2*nedge*sizeof(int)) );
   checkCudaErrors( cudaMalloc((void**)&color_reord_d, nedge*sizeof(int)) );
@@ -218,8 +181,6 @@ int main(int argc, char *argv[]){
   checkCudaErrors( cudaMalloc((void**)&node_old_d, nnode*node_dim*sizeof(float)) );
   checkCudaErrors( cudaMalloc((void**)&node_val_d, nnode*node_dim*sizeof(float)) );
   checkCudaErrors( cudaMalloc((void**)&block_reord_d, c.numblock*sizeof(int)) );
-  checkCudaErrors( cudaMalloc((void**)&iwillwritethis_d, nedge*sizeof(int)) );
-  checkCudaErrors( cudaMalloc((void**)&icachethis_d, nedge*sizeof(int)) );
   
   checkCudaErrors( cudaMemcpy(enode_d, enode, 2*nedge*sizeof(int),
                               cudaMemcpyHostToDevice) );
@@ -236,10 +197,6 @@ int main(int argc, char *argv[]){
   checkCudaErrors( cudaMemcpy(block_reord_d, bc.color_reord,
                                c.numblock*sizeof(int),
                                cudaMemcpyHostToDevice) );
-  checkCudaErrors( cudaMemcpy(iwillwritethis_d, iwillwritethis,
-                               nedge*sizeof(int), cudaMemcpyHostToDevice) );
-  checkCudaErrors( cudaMemcpy(icachethis_d, icachethis,
-                               nedge*sizeof(int), cudaMemcpyHostToDevice) );
 
   ///////////////////////////////////////////////////////////
   //                      Start
@@ -262,9 +219,11 @@ int main(int argc, char *argv[]){
       int start = col==0?0:bc.color_offsets[col-1]; 
       int len = bc.color_offsets[col]-start;
       sim.kernels[1].timerStart();
-      iter_calc<<<len,BLOCKSIZE,BLOCKSIZE*node_dim*sizeof(float)>>>(node_old_d,
-          node_val_d, edge_val_d, enode_d, color_reord_d, nedge, color_d,
-          colornum_d, block_reord_d, start, iwillwritethis_d, icachethis_d, node_dim);
+      //TODO shared memory calc.. 4*->worst case
+      iter_calc<<<len,BLOCKSIZE,4*BLOCKSIZE*node_dim*sizeof(float)>>>(
+          node_old_d, node_val_d, node_dim,  edge_val_d, nedge,  enode_d, 
+          color_reord_d, color_d, colornum_d, block_reord_d, start,
+          cm.globalToCacheMap_d, cm.blockOffsets_d, cm.writeC_d);
       checkCudaErrors( cudaDeviceSynchronize() );
       sim.kernels[1].timerStop();
     }
@@ -294,8 +253,6 @@ int main(int argc, char *argv[]){
   free(node_old);
   free(node_val);
   free(edge_val);
-  free(iwillwritethis);
-  free(icachethis);
   //cuda freee
   checkCudaErrors( cudaFree(enode_d) );
   checkCudaErrors( cudaFree(color_reord_d) );
@@ -305,8 +262,6 @@ int main(int argc, char *argv[]){
   checkCudaErrors( cudaFree(color_d) );
   checkCudaErrors( cudaFree(colornum_d) );
   checkCudaErrors( cudaFree(block_reord_d) );
-  checkCudaErrors( cudaFree(iwillwritethis_d) );
-  checkCudaErrors( cudaFree(icachethis_d) );
   
   return 0;
 }

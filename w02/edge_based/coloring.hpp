@@ -120,7 +120,7 @@ struct Block_coloring{
 
     color_reord = _reord;
     reordcolor = (int*) malloc(nedge*sizeof(int));
-#pragma omp prallel for
+#pragma omp parallel for
     for(int bIdx=0; bIdx<numblock;++bIdx){
       int start= bIdx*bs;
       int end= std::min((bIdx+1)*bs,nedge);

@@ -89,10 +89,10 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
         std::back_insert_iterator<vector<int>>(pointsToCachePerBlocks[bIdx]) );
     #pragma omp parallel for
     for(int Idx = start; Idx<end; ++Idx){
-      writeC[Idx] = *std::find(pointsToCachePerBlocks[bIdx].begin(),
-          pointsToCachePerBlocks[bIdx].end(), writeC[Idx]);
-      readC[Idx] = *std::find(pointsToCachePerBlocks[bIdx].begin(),
-          pointsToCachePerBlocks[bIdx].end(), readC[Idx]);
+      writeC[Idx] = (std::find(pointsToCachePerBlocks[bIdx].begin(),
+          pointsToCachePerBlocks[bIdx].end(), writeC[Idx])-pointsToCachePerBlocks[bIdx].begin());
+      readC[Idx] = (std::find(pointsToCachePerBlocks[bIdx].begin(),
+          pointsToCachePerBlocks[bIdx].end(), readC[Idx])-pointsToCachePerBlocks[bIdx].begin());
     }
   }
   printf(
