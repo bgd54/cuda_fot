@@ -69,11 +69,9 @@ struct Coloring{
 Coloring global_coloring(int* enode, int nedge, int nnode=0){
 
   vector<vector<int> > color_reord;
-  /*vector<vector<int> > nodetocolor(nnode!=0? nnode:
-      (*std::max_element(enode,enode+nedge)+1),vector<int>() );
-  */
   vector<int> nodetocolor(nnode!=0? nnode:
       (*std::max_element(enode,enode+nedge)+1), 0 );
+
   for(int i=0;i<nedge;++i){
     size_t col= nodetocolor[enode[2*i+1]];//nodetocolor[enode[2*i+1]].size();
 
@@ -89,9 +87,10 @@ Coloring global_coloring(int* enode, int nedge, int nnode=0){
           (int)col, (int)color_reord.size(), i, enode[2*i+1]);
     }
   }
-  vector<int> offsets(1,color_reord[0].size());
-  for(size_t i=1; i<color_reord.size();++i){
-    offsets.push_back(offsets[i-1]+color_reord[i].size());
+  vector<int> offsets(color_reord.size(),color_reord[0].size());
+  
+  for(size_t i=1; i<color_reord.size(); ++i){
+    offsets[i] = offsets[i-1] + color_reord[i].size();
   }
   return Coloring(color_reord,offsets, nedge);
 
@@ -121,6 +120,7 @@ struct Block_coloring{
 
     color_reord = _reord;
     reordcolor = (int*) malloc(nedge*sizeof(int));
+#pragma omp prallel for
     for(int bIdx=0; bIdx<numblock;++bIdx){
       int start= bIdx*bs;
       int end= std::min((bIdx+1)*bs,nedge);
@@ -174,9 +174,9 @@ struct Block_coloring{
       }
     }
     //printf("numb:%d, start calc offsets\n",numblock);
-    vector<int> offsets(1,block_reord[0].size());
+    vector<int> offsets(block_reord.size(), block_reord[0].size());
     for(size_t i=1; i<block_reord.size();++i){
-      offsets.push_back(offsets[i-1]+block_reord[i].size());
+      offsets[i] = offsets[i-1]+block_reord[i].size();
     }
 
     return Coloring(block_reord,offsets,numblock);
@@ -201,11 +201,12 @@ Block_coloring block_coloring(int* enode, int nedge, int blockSize=128){
   vector<vector<int> > offsets(numblock);
   int* reord = (int*) malloc(nedge*sizeof(int));
 
+#pragma omp parallel for
   for(int bIdx=0;bIdx<numblock;++bIdx){
     //process 1 block
     int start = bIdx*bs, end= std::min((bIdx+1)*bs,nedge);
     vector<vector<int> > color2edge;
-    vector<int>node_used; 
+    vector<int> node_used;//TODO ehelyett egy map? 
     //process edges in block #bIdx
     for(int edgeIdx=start;edgeIdx<end;++edgeIdx){
       //printf("edge: %d\n", edgeIdx);
