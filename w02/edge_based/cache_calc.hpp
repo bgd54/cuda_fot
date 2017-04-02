@@ -4,19 +4,43 @@
 #include <algorithm>
 #include <set>
 #include <vector>
+#include "helper_cuda.h"
+#include "helper_string.h"
 
 struct cacheMap{
   #define MY_IDX_TYPE unsigned short
-  int numblock;
+  int numblock, nedge;
   int* globalToCacheMap;
   int* blockOffsets;
   MY_IDX_TYPE *readC, *writeC;
-  //TODO CUDA foglalasok
-  
+  //____________Device pointers______________
+  int *globalToCacheMap_d, *blockOffsets_d;
+  MY_IDX_TYPE *readC_d, *writeC_d;
+
   cacheMap(int _numb, int* _globalToC, int* _blockOffs, 
-      MY_IDX_TYPE* wc, MY_IDX_TYPE* rc):numblock(_numb), 
-        globalToCacheMap(_globalToC), blockOffsets(_blockOffs), readC(rc), 
-        writeC(wc) {}
+      MY_IDX_TYPE* wc, MY_IDX_TYPE* rc, int _nedge):numblock(_numb), 
+      nedge(_nedge), globalToCacheMap(_globalToC), blockOffsets(_blockOffs), 
+      readC(rc), writeC(wc) {
+
+    checkCudaErrors( cudaMalloc((void**)&blockOffsets_d,
+          numblock*sizeof(int)) );
+    checkCudaErrors( cudaMalloc((void**)&globalToCacheMap_d,
+          blockOffsets[numblock-1]*sizeof(int)) );
+    checkCudaErrors( cudaMalloc((void**)&writeC_d,
+          nedge*sizeof(MY_IDX_TYPE)) );
+    checkCudaErrors( cudaMalloc((void**)&readC_d,
+          nedge*sizeof(MY_IDX_TYPE)) );
+
+    checkCudaErrors( cudaMemcpy(blockOffsets_d, blockOffsets,
+          numblock*sizeof(int),  cudaMemcpyHostToDevice) );
+    checkCudaErrors( cudaMemcpy(globalToCacheMap_d, globalToCacheMap,
+          blockOffsets[numblock-1]*sizeof(int),  cudaMemcpyHostToDevice) );
+    checkCudaErrors( cudaMemcpy(writeC_d, writeC,
+          nedge*sizeof(MY_IDX_TYPE),  cudaMemcpyHostToDevice) );
+    checkCudaErrors( cudaMemcpy(readC_d, readC,
+          nedge*sizeof(MY_IDX_TYPE),  cudaMemcpyHostToDevice) );
+        
+  }
 
   ~cacheMap(){
     free(globalToCacheMap);
@@ -24,7 +48,12 @@ struct cacheMap{
     free(readC);
     free(writeC);
 
-  }//TODO
+    //cuda freee
+    checkCudaErrors( cudaFree(globalToCacheMap_d) );
+    checkCudaErrors( cudaFree(blockOffsets_d) );
+    checkCudaErrors( cudaFree(writeC_d) );
+    checkCudaErrors( cudaFree(readC_d) );
+  }
 
 };
 
@@ -86,7 +115,8 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
     }
   }
 
-  return cacheMap(bc.numblock,globalToCacheMap,blockOffsets,readC, writeC);
+  return cacheMap(bc.numblock, globalToCacheMap, blockOffsets, readC,
+                  writeC, nedge);
 }
 
 
