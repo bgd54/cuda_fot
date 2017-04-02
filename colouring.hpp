@@ -22,8 +22,10 @@ struct HierarchicalColourMemory {
     // std::vector<std::vector<MY_SIZE>>
     //    points_to_be_cached; // every thread caches the one with index
     //                         // the multiple of its tid
-    std::vector<MY_SIZE> points_to_be_cached;
-    std::vector<MY_SIZE> points_to_be_cached_offsets = {0};
+    std::vector<MY_SIZE> read_points_to_be_cached;
+    std::vector<MY_SIZE> read_points_to_be_cached_offsets = {0};
+    std::vector<MY_SIZE> write_points_to_be_cached;
+    std::vector<MY_SIZE> write_points_to_be_cached_offsets = {0};
     std::vector<MY_SIZE> edge_list; // same as before, just points to shared mem
                                     // computed from the above
     std::vector<std::uint8_t> edge_colours;     // the colour for each edge
@@ -122,35 +124,49 @@ private:
     const MY_SIZE *edge_list = graph.edge_list;
     colourset_t colourset(1ull << colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
-    std::map<MY_SIZE, std::vector<MY_SIZE>> points_to_edges;
+    std::map<MY_SIZE, std::vector<MY_SIZE>> read_points_to_edges;
+    std::map<MY_SIZE, std::vector<MY_SIZE>> write_points_to_edges;
     for (MY_SIZE i = from; i < to; ++i) {
       MY_SIZE point_to = edge_list[2 * i + 1];
       MY_SIZE point_from = edge_list[2 * i];
       point_colours[point_to] |= colourset;
       colour.edge_weights.push_back(problem.edge_weights[i]);
-      points_to_edges[point_to].push_back(i);
-      points_to_edges[point_from].push_back(i);
+      write_points_to_edges[point_to].push_back(i);
+      read_points_to_edges[point_from].push_back(i);
     }
-    // colour.edge_list.resize(2 * (to - from));
     std::vector<MY_SIZE> c_edge_list(2 * (to - from));
-    std::vector<MY_SIZE> points_to_be_cached;
-    for (const auto &t : points_to_edges) {
+    std::vector<MY_SIZE> read_points_to_be_cached;
+    std::vector<MY_SIZE> write_points_to_be_cached;
+    for (const auto &t : read_points_to_edges) {
       MY_SIZE point_ind = t.first;
       const std::vector<MY_SIZE> &edge_inds = t.second;
       for (MY_SIZE e : edge_inds) {
-        MY_SIZE offset = point_ind == edge_list[2 * e + 1] ? 1 : 0;
-        c_edge_list[2 * (e - from) + offset] = points_to_be_cached.size();
+        MY_SIZE offset = 0;
+        c_edge_list[2 * (e - from) + offset] = read_points_to_be_cached.size();
       }
-      points_to_be_cached.push_back(point_ind);
+      read_points_to_be_cached.push_back(point_ind);
+    }
+    for (const auto &t : write_points_to_edges) {
+      MY_SIZE point_ind = t.first;
+      const std::vector<MY_SIZE> &edge_inds = t.second;
+      for (MY_SIZE e : edge_inds) {
+        MY_SIZE offset = 1;
+        c_edge_list[2 * (e - from) + offset] = write_points_to_be_cached.size();
+      }
+      write_points_to_be_cached.push_back(point_ind);
     }
     colour.edge_list.insert(colour.edge_list.end(), c_edge_list.begin(),
                             c_edge_list.end());
-    // colour.points_to_be_cached.push_back(points_to_be_cached);
-    colour.points_to_be_cached.insert(colour.points_to_be_cached.end(),
-                                      points_to_be_cached.begin(),
-                                      points_to_be_cached.end());
-    colour.points_to_be_cached_offsets.push_back(
-        colour.points_to_be_cached.size());
+    colour.read_points_to_be_cached.insert(
+        colour.read_points_to_be_cached.end(), read_points_to_be_cached.begin(),
+        read_points_to_be_cached.end());
+    colour.write_points_to_be_cached.insert(
+        colour.write_points_to_be_cached.end(),
+        write_points_to_be_cached.begin(), write_points_to_be_cached.end());
+    colour.read_points_to_be_cached_offsets.push_back(
+        colour.read_points_to_be_cached.size());
+    colour.write_points_to_be_cached_offsets.push_back(
+        colour.write_points_to_be_cached.size());
     colourEdges(from, to, problem.graph, colour);
   }
 

@@ -30,16 +30,28 @@ __global__ void problem_stepGPU(float *point_weights, float *edge_weights,
 /* problem_stepGPUHierarchical {{{1 */
 __global__ void problem_stepGPUHierarchical(
     MY_SIZE *edge_list, float *point_weights, float *point_weights_out,
-    float *edge_weights, MY_SIZE *points_to_be_cached, MY_SIZE cache_size,
-    MY_SIZE *points_to_be_cached_offsets, std::uint8_t *edge_colours,
+    float *edge_weights, MY_SIZE *read_points_to_be_cached,
+    MY_SIZE *read_points_to_be_cached_offsets,
+    MY_SIZE *write_points_to_be_cached,
+    MY_SIZE *write_points_to_be_cached_offsets, std::uint8_t *edge_colours,
     std::uint8_t *num_edge_colours, MY_SIZE num_threads) {
   MY_SIZE bid = blockIdx.x;
   MY_SIZE thread_ind = bid * blockDim.x + threadIdx.x;
   MY_SIZE tid = threadIdx.x;
 
+  MY_SIZE read_points_offset = read_points_to_be_cached_offsets[bid];
+  MY_SIZE read_num_cached_point =
+      read_points_to_be_cached_offsets[bid + 1] - read_points_offset;
+  MY_SIZE write_points_offset = write_points_to_be_cached_offsets[bid];
+  MY_SIZE write_num_cached_point =
+      write_points_to_be_cached_offsets[bid + 1] - write_points_offset;
+  MY_SIZE max_num_cached_point = read_num_cached_point > write_num_cached_point
+                                     ? read_num_cached_point
+                                     : write_num_cached_point;
+
   extern __shared__ float shared[];
   float *point_cache_in = shared;
-  float *point_cache_out = shared + cache_size;
+  float *point_cache_out = shared + read_num_cached_point;
 
   MY_SIZE out_ind, in_ind;
 
@@ -50,28 +62,20 @@ __global__ void problem_stepGPUHierarchical(
     our_colour = edge_colours[thread_ind];
   }
 
-  MY_SIZE points_offset = points_to_be_cached_offsets[bid];
-  MY_SIZE num_cached_point =
-      points_to_be_cached_offsets[bid + 1] - points_offset;
-  if (num_cached_point > cache_size) {
-    printf("ERROR: Bid: %d Tid: %d, num_cached_point: %d cache_size: %d\n", bid,
-           tid, num_cached_point, cache_size);
-  }
-  // printf("DEBUG: bid: %d tid: %d num_cached_point: %d cache_size:
-  // %d\n",bid,tid,num_cached_point,cache_size);
-  // printf("       thread_ind: %d, num_threads: %d\n",thread_ind,num_threads);
-
   // Cache in
-  for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
-    if (i + tid < num_cached_point) {
+  for (MY_SIZE i = 0; i < max_num_cached_point; i += blockDim.x) {
+    if (i + tid < read_num_cached_point) {
       point_cache_in[i + tid] =
-          point_weights[points_to_be_cached[points_offset + i + tid]];
+          point_weights[read_points_to_be_cached[read_points_offset + i + tid]];
+    }
+    if (i + tid < write_num_cached_point) {
       point_cache_out[i + tid] =
-          point_weights_out[points_to_be_cached[points_offset + i + tid]];
+          point_weights_out[write_points_to_be_cached[write_points_offset + i +
+                                                      tid]];
     }
   }
 
-  __syncthreads(); // TODO really syncthreads?
+  __syncthreads();
 
   // Computation
   float result = 0;
@@ -89,9 +93,10 @@ __global__ void problem_stepGPUHierarchical(
   }
 
   // Cache out
-  for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
-    if (i + tid < num_cached_point) {
-      point_weights_out[points_to_be_cached[points_offset + i + tid]] =
+  for (MY_SIZE i = 0; i < write_num_cached_point; i += blockDim.x) {
+    if (i + tid < write_num_cached_point) {
+      point_weights_out[write_points_to_be_cached[write_points_offset + i +
+                                                  tid]] =
           point_cache_out[i + tid];
     }
   }
@@ -189,13 +194,15 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
 void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   HierarchicalColourMemory memory(BLOCK_SIZE, *this);
   std::vector<float *> d_edge_weights;
-  std::vector<MY_SIZE *> d_points_to_be_cached;
+  std::vector<MY_SIZE *> d_read_points_to_be_cached;
+  std::vector<MY_SIZE *> d_write_points_to_be_cached;
   std::vector<MY_SIZE *> d_edge_list;
   std::vector<std::uint8_t *> d_edge_colours;
   std::vector<std::uint8_t *> d_num_edge_colours;
   std::vector<MY_SIZE> shared_sizes;
   float *d_point_weights, *d_point_weights_out;
-  std::vector<MY_SIZE *> d_points_to_be_cached_offsets;
+  std::vector<MY_SIZE *> d_read_points_to_be_cached_offsets;
+  std::vector<MY_SIZE *> d_write_points_to_be_cached_offsets;
   checkCudaErrors(
       cudaMalloc((void **)&d_point_weights, sizeof(float) * graph.numPoints()));
   checkCudaErrors(cudaMalloc((void **)&d_point_weights_out,
@@ -212,6 +219,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
     float *d_fptr;
     MY_SIZE *d_sptr;
     std::uint8_t *d_uptr;
+    // Edge weights
     checkCudaErrors(
         cudaMalloc((void **)&d_fptr,
                    sizeof(float) * memory_of_one_colour.edge_weights.size()));
@@ -220,34 +228,70 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
         cudaMemcpy(d_fptr, memory_of_one_colour.edge_weights.data(),
                    sizeof(float) * memory_of_one_colour.edge_weights.size(),
                    cudaMemcpyHostToDevice));
-    MY_SIZE shared_size = 0;
-    checkCudaErrors(cudaMalloc(
-        (void **)&d_sptr,
-        sizeof(MY_SIZE) * memory_of_one_colour.points_to_be_cached.size()));
-    d_points_to_be_cached.push_back(d_sptr);
+    // Read points to be cached
+    checkCudaErrors(
+        cudaMalloc((void **)&d_sptr,
+                   sizeof(MY_SIZE) *
+                       memory_of_one_colour.read_points_to_be_cached.size()));
+    d_read_points_to_be_cached.push_back(d_sptr);
     checkCudaErrors(cudaMemcpy(
-        d_sptr, memory_of_one_colour.points_to_be_cached.data(),
-        sizeof(MY_SIZE) * memory_of_one_colour.points_to_be_cached.size(),
+        d_sptr, memory_of_one_colour.read_points_to_be_cached.data(),
+        sizeof(MY_SIZE) * memory_of_one_colour.read_points_to_be_cached.size(),
         cudaMemcpyHostToDevice));
+    // Read points to be cached: offsets
     checkCudaErrors(cudaMalloc(
         (void **)&d_sptr,
         sizeof(MY_SIZE) *
-            memory_of_one_colour.points_to_be_cached_offsets.size()));
-    d_points_to_be_cached_offsets.push_back(d_sptr);
+            memory_of_one_colour.read_points_to_be_cached_offsets.size()));
+    d_read_points_to_be_cached_offsets.push_back(d_sptr);
     checkCudaErrors(cudaMemcpy(
-        d_sptr, memory_of_one_colour.points_to_be_cached_offsets.data(),
+        d_sptr, memory_of_one_colour.read_points_to_be_cached_offsets.data(),
         sizeof(MY_SIZE) *
-            memory_of_one_colour.points_to_be_cached_offsets.size(),
+            memory_of_one_colour.read_points_to_be_cached_offsets.size(),
         cudaMemcpyHostToDevice));
+    // Write points to be cached
+    checkCudaErrors(
+        cudaMalloc((void **)&d_sptr,
+                   sizeof(MY_SIZE) *
+                       memory_of_one_colour.write_points_to_be_cached.size()));
+    d_write_points_to_be_cached.push_back(d_sptr);
+    checkCudaErrors(cudaMemcpy(
+        d_sptr, memory_of_one_colour.write_points_to_be_cached.data(),
+        sizeof(MY_SIZE) * memory_of_one_colour.write_points_to_be_cached.size(),
+        cudaMemcpyHostToDevice));
+    // Write points to be cached: offsets
+    checkCudaErrors(cudaMalloc(
+        (void **)&d_sptr,
+        sizeof(MY_SIZE) *
+            memory_of_one_colour.write_points_to_be_cached_offsets.size()));
+    d_write_points_to_be_cached_offsets.push_back(d_sptr);
+    checkCudaErrors(cudaMemcpy(
+        d_sptr, memory_of_one_colour.write_points_to_be_cached_offsets.data(),
+        sizeof(MY_SIZE) *
+            memory_of_one_colour.write_points_to_be_cached_offsets.size(),
+        cudaMemcpyHostToDevice));
+    // Shared memory sizes
+    MY_SIZE shared_size_read = 0, shared_size_write = 0;
     for (MY_SIZE i = 1;
-         i < memory_of_one_colour.points_to_be_cached_offsets.size(); ++i) {
-      shared_size = std::max<MY_SIZE>(
-          shared_size,
-          memory_of_one_colour.points_to_be_cached_offsets[i] -
-              memory_of_one_colour.points_to_be_cached_offsets[i - 1]);
+         i < memory_of_one_colour.read_points_to_be_cached_offsets.size();
+         ++i) {
+      shared_size_read = std::max<MY_SIZE>(
+          shared_size_read,
+          memory_of_one_colour.read_points_to_be_cached_offsets[i] -
+              memory_of_one_colour.read_points_to_be_cached_offsets[i - 1]);
     }
-    shared_sizes.push_back(shared_size);
-    total_cache_size += memory_of_one_colour.points_to_be_cached.size();
+    for (MY_SIZE i = 1;
+         i < memory_of_one_colour.write_points_to_be_cached_offsets.size();
+         ++i) {
+      shared_size_write = std::max<MY_SIZE>(
+          shared_size_write,
+          memory_of_one_colour.write_points_to_be_cached_offsets[i] -
+              memory_of_one_colour.write_points_to_be_cached_offsets[i - 1]);
+    }
+    shared_sizes.push_back(shared_size_read + shared_size_write);
+    total_cache_size += memory_of_one_colour.read_points_to_be_cached.size() +
+                        memory_of_one_colour.write_points_to_be_cached.size();
+    // Edge list
     checkCudaErrors(
         cudaMalloc((void **)&d_sptr,
                    sizeof(MY_SIZE) * memory_of_one_colour.edge_list.size()));
@@ -256,6 +300,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
         cudaMemcpy(d_sptr, memory_of_one_colour.edge_list.data(),
                    sizeof(MY_SIZE) * memory_of_one_colour.edge_list.size(),
                    cudaMemcpyHostToDevice));
+    // Edge colours
     checkCudaErrors(cudaMalloc((void **)&d_uptr,
                                sizeof(std::uint8_t) *
                                    memory_of_one_colour.edge_colours.size()));
@@ -264,6 +309,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
                                sizeof(std::uint8_t) *
                                    memory_of_one_colour.edge_colours.size(),
                                cudaMemcpyHostToDevice));
+    // Num edge colours
     checkCudaErrors(cudaMalloc(
         (void **)&d_uptr,
         sizeof(std::uint8_t) * memory_of_one_colour.num_edge_colours.size()));
@@ -289,8 +335,10 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
       MY_SIZE cache_size = sizeof(float) * 2 * shared_sizes[colour_ind];
       problem_stepGPUHierarchical<<<num_blocks, BLOCK_SIZE, cache_size>>>(
           d_edge_list[colour_ind], d_point_weights, d_point_weights_out,
-          d_edge_weights[colour_ind], d_points_to_be_cached[colour_ind],
-          shared_sizes[colour_ind], d_points_to_be_cached_offsets[colour_ind],
+          d_edge_weights[colour_ind], d_read_points_to_be_cached[colour_ind],
+          d_read_points_to_be_cached_offsets[colour_ind],
+          d_write_points_to_be_cached[colour_ind],
+          d_write_points_to_be_cached_offsets[colour_ind],
           d_edge_colours[colour_ind], d_num_edge_colours[colour_ind],
           num_threads);
       checkCudaErrors(cudaDeviceSynchronize());
@@ -324,7 +372,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
              sizeof(std::uint8_t) * graph.numEdges() // edge_colours
              ));
   std::cout << "  recycling factor: "
-            << 2 * static_cast<double>(total_cache_size) / (2 * graph.numEdges())
+            << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
   // ---------------
   // -  Finish up  -
@@ -336,8 +384,10 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
     checkCudaErrors(cudaFree(d_num_edge_colours[i]));
     checkCudaErrors(cudaFree(d_edge_colours[i]));
     checkCudaErrors(cudaFree(d_edge_list[i]));
-    checkCudaErrors(cudaFree(d_points_to_be_cached_offsets[i]));
-    checkCudaErrors(cudaFree(d_points_to_be_cached[i]));
+    checkCudaErrors(cudaFree(d_read_points_to_be_cached_offsets[i]));
+    checkCudaErrors(cudaFree(d_read_points_to_be_cached[i]));
+    checkCudaErrors(cudaFree(d_write_points_to_be_cached_offsets[i]));
+    checkCudaErrors(cudaFree(d_write_points_to_be_cached[i]));
     checkCudaErrors(cudaFree(d_edge_weights[i]));
   }
   checkCudaErrors(cudaFree(d_point_weights_out));
@@ -469,12 +519,20 @@ void testHierarchicalColouring() {
       for (float w : c.edge_weights) {
         std::cout << w << " ";
       }
-      std::cout << std::endl << "Points to be cached: ";
-      for (const auto &p : c.points_to_be_cached) {
+      std::cout << std::endl << "Read points to be cached: ";
+      for (const auto &p : c.read_points_to_be_cached) {
         std::cout << p << " ";
       }
-      std::cout << std::endl << "Points to be cached (offsets): ";
-      for (const auto &p : c.points_to_be_cached_offsets) {
+      std::cout << std::endl << "Read points to be cached (offsets): ";
+      for (const auto &p : c.read_points_to_be_cached_offsets) {
+        std::cout << p << " ";
+      }
+      std::cout << std::endl << "Write points to be cached: ";
+      for (const auto &p : c.write_points_to_be_cached) {
+        std::cout << p << " ";
+      }
+      std::cout << std::endl << "Write points to be cached (offsets): ";
+      for (const auto &p : c.write_points_to_be_cached_offsets) {
         std::cout << p << " ";
       }
       std::cout << std::endl << "Edge list: ";
