@@ -371,7 +371,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
                   memory.colours.size()) + // points_to_be_cached_offsets
              sizeof(std::uint8_t) * graph.numEdges() // edge_colours
              ));
-  std::cout << "  recycling factor: "
+  std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
   // ---------------
