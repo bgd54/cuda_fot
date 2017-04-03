@@ -12,7 +12,8 @@
 using namespace std;
 
 #define BLOCKSIZE 128
-
+#define MAX_NODE_DIM 10
+//TODO check for MAX_NODE_DIM > node_dim
 
 void addTimers(Simulation &sim){
   #ifdef TIMER_MACRO
@@ -20,7 +21,6 @@ void addTimers(Simulation &sim){
   sim.timers.push_back(timer("colorb"));
   #endif
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // GPU routines
@@ -32,34 +32,36 @@ __global__ void ssoln(float* old, const float* val, const int nnode, const int n
   }
 }
 
-__global__ void iter_calc(const float* old, float* val,const float* eval,
-    const int* enode, const int* color_reord, const int nedge,
-    const int* color, const int* colornum, const int* blocksInColor,
+__global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val,const float* __restrict__ eval,
+    const int* __restrict__ enode, const int* __restrict__ color_reord, const int nedge,
+    const int* __restrict__ color, const int* __restrict__ colornum, const int* __restrict__ blocksInColor,
     int color_start, const int node_dim){
 
   int tid = threadIdx.x;
   
   int bIdx = blocksInColor[blockIdx.x+color_start];
   int reordIdx = tid + bIdx*blockDim.x;
-  float* increment = new float[node_dim];
+  float increment[MAX_NODE_DIM];
+  int edgeIdx=0;
+  int mycolor=-1;
   if(reordIdx < nedge){
-    int edgeIdx=color_reord[reordIdx];
+    edgeIdx=color_reord[reordIdx];
+    mycolor = color[reordIdx];
     for(int dim=0; dim<node_dim;dim++){ 
-      increment[dim]+=
+      increment[dim] =
         eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
     }
   }
+
+  //CALC VAL
   for(int col=0; col<colornum[bIdx];++col){
-    if(reordIdx < nedge && col == color[reordIdx]){
-      int edgeIdx=color_reord[reordIdx];
+    if(reordIdx < nedge && col == mycolor){
       for(int dim=0; dim<node_dim;dim++){ 
         val[enode[2*edgeIdx+1]*node_dim+dim]+= increment[dim];
       }
     }
     __syncthreads();
   }
-  delete[] increment;
-  //cachelt ertekek visszairasa
 
 }
 
@@ -118,15 +120,15 @@ int main(int argc, char *argv[]){
   TIMER_START(sim.timers[1])
   Coloring bc = c.color_blocks(enode,nedge);
   TIMER_STOP(sim.timers[1])
-  printf("coloring ready, allocate arrays in device memory\n");
   
   /////////////////////////////////////
   //          Device pointers
   /////////////////////////////////////
+  printf("coloring ready, allocate arrays in device memory\n");
   int *enode_d, *color_reord_d, *colornum_d, *color_d;
   float *node_val_d,*node_old_d,*edge_val_d;
   int *block_reord_d;
-  
+
   checkCudaErrors( cudaMalloc((void**)&enode_d, 2*nedge*sizeof(int)) );
   checkCudaErrors( cudaMalloc((void**)&color_reord_d, nedge*sizeof(int)) );
   checkCudaErrors( cudaMalloc((void**)&color_d, nedge*sizeof(int)) );
@@ -167,6 +169,7 @@ int main(int argc, char *argv[]){
     checkCudaErrors( cudaDeviceSynchronize() );
     sim.kernels[0].timerStop();
 
+
     //calc next step
     for(int col=0; col<bc.colornum;col++){ 
       int start = col==0?0:bc.color_offsets[col-1]; 
@@ -186,7 +189,6 @@ int main(int argc, char *argv[]){
                               cudaMemcpyDeviceToHost) );
       checkCudaErrors( cudaMemcpy(node_old, node_old_d, nnode*node_dim*sizeof(float),
                               cudaMemcpyDeviceToHost) );
-
       rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
     }
@@ -198,6 +200,7 @@ int main(int argc, char *argv[]){
 
   sim.printTiming();
 
+  
   //free
   free(enode);
   free(node_old);

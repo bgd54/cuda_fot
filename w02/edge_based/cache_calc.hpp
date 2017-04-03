@@ -18,7 +18,7 @@ struct cacheMap{
   MY_IDX_TYPE *readC_d, *writeC_d;
 
   cacheMap(int _numb, int* _globalToC, int* _blockOffs, 
-      MY_IDX_TYPE* wc, MY_IDX_TYPE* rc, int _nedge):numblock(_numb), 
+      MY_IDX_TYPE* rc, MY_IDX_TYPE* wc, int _nedge):numblock(_numb), 
       nedge(_nedge), globalToCacheMap(_globalToC), blockOffsets(_blockOffs), 
       readC(rc), writeC(wc) {
 
