@@ -15,9 +15,11 @@ using MY_SIZE = std::uint32_t;
 constexpr MY_SIZE BLOCK_SIZE = 128;
 
 /* problem_stepGPU {{{1 */
-__global__ void problem_stepGPU(float *point_weights, float *edge_weights,
-                                MY_SIZE *edge_list, MY_SIZE *edge_inds,
-                                float *out, MY_SIZE edge_num) {
+__global__ void problem_stepGPU(const float *__restrict__ point_weights,
+                                const float *__restrict__ edge_weights,
+                                const MY_SIZE *__restrict__ edge_list,
+                                const MY_SIZE *__restrict__ edge_inds,
+                                float *__restrict__ out, MY_SIZE edge_num) {
   MY_SIZE id = blockIdx.x * blockDim.x + threadIdx.x;
   if (id < edge_num) {
     MY_SIZE edge_ind = edge_inds[id];
@@ -29,12 +31,16 @@ __global__ void problem_stepGPU(float *point_weights, float *edge_weights,
 
 /* problem_stepGPUHierarchical {{{1 */
 __global__ void problem_stepGPUHierarchical(
-    MY_SIZE *edge_list, float *point_weights, float *point_weights_out,
-    float *edge_weights, MY_SIZE *read_points_to_be_cached,
-    MY_SIZE *read_points_to_be_cached_offsets,
-    MY_SIZE *write_points_to_be_cached,
-    MY_SIZE *write_points_to_be_cached_offsets, std::uint8_t *edge_colours,
-    std::uint8_t *num_edge_colours, MY_SIZE num_threads) {
+    const MY_SIZE *__restrict__ edge_list,
+    const float *__restrict__ point_weights,
+    float *__restrict__ point_weights_out,
+    const float *__restrict__ edge_weights,
+    const MY_SIZE *__restrict__ read_points_to_be_cached,
+    const MY_SIZE *__restrict__ read_points_to_be_cached_offsets,
+    const MY_SIZE *__restrict__ write_points_to_be_cached,
+    const MY_SIZE *__restrict__ write_points_to_be_cached_offsets,
+    const std::uint8_t *__restrict__ edge_colours,
+    const std::uint8_t *__restrict__ num_edge_colours, MY_SIZE num_threads) {
   MY_SIZE bid = blockIdx.x;
   MY_SIZE thread_ind = bid * blockDim.x + threadIdx.x;
   MY_SIZE tid = threadIdx.x;
