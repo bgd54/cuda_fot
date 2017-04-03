@@ -13,6 +13,7 @@
 using namespace std;
 
 #define BLOCKSIZE 128
+#define MAX_NODE_DIM 10
 
 ////////////////////////////////////////////////////////////////////////////////
 // CPU routines
@@ -72,27 +73,31 @@ __global__ void iter_calc(const float* __restrict__  old,
   __syncthreads();
 
   //CALC INCREMENT
-  float* increment = new float[node_dim];
+  float increment[MAX_NODE_DIM];
+  int edgeIdx=0;
+  int mycolor=-1;
   if(reordIdx < nedge){
+    edgeIdx=color_reord[reordIdx];
+    mycolor = threadcolors[reordIdx];
     for(int dim=0; dim<node_dim;dim++){ 
-      increment[dim] = eval[color_reord[reordIdx]] *
-        old[enode[color_reord[reordIdx]*2+0]*node_dim+dim];
+      increment[dim] =
+        eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
     }
   }
 
   //CALC VAL
   for(int col=0; col<colornum[bIdx];++col){
-    if(reordIdx < nedge && col == threadcolors[reordIdx]){
+    if(reordIdx < nedge && col == mycolor){
       for(int dim=0; dim<node_dim;dim++){ 
-        shared[iwritethisIdx*node_dim+dim]+= increment[dim];
+        //val[enode[2*edgeIdx+1]*node_dim+dim] += increment[dim];
+        shared[iwritethisIdx*node_dim+dim] += increment[dim];
       }
     }
     __syncthreads();
   }
-  delete[] increment;
 
   //CACHE BACK
-  for (int i = 0; i < cache_size; i += blockDim.x) {
+    for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
       for(int dim=0; dim<node_dim; dim++)
         val[global_to_cache[cache_offset + i + tid]*node_dim+dim] = 
@@ -237,7 +242,6 @@ int main(int argc, char *argv[]){
                               cudaMemcpyDeviceToHost) );
       rms_calc(node_val,node_old,nnode,i,node_dim);
       sim.kernels[2].timerStop();
-
     }
 
   }

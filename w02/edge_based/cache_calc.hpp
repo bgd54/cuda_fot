@@ -64,6 +64,9 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
   
   MY_IDX_TYPE * readC = (MY_IDX_TYPE*) malloc(nedge*sizeof(MY_IDX_TYPE));
   MY_IDX_TYPE * writeC = (MY_IDX_TYPE*) malloc(nedge*sizeof(MY_IDX_TYPE));
+  //tmp vars for collecting written node idx per edge
+  std::vector<int> _readC(nedge,-1);
+  std::vector<int> _writeC(nedge,-1);
 
   vector<vector<int>> pointsToCachePerBlocks(bc.numblock);
 
@@ -74,10 +77,10 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
     std::set<int> pointsToCache;
     for(int tid=0; tid + start < end; ++tid){
       int Idx = tid+start;
-      writeC[Idx] = enode[2*bc.color_reord[Idx] + 1]; 
-      readC[Idx]  = enode[2*bc.color_reord[Idx] + 0];
-      pointsToCache.insert(writeC[Idx]);
-      pointsToCache.insert(readC[Idx]);
+      _writeC[Idx] = enode[2*bc.color_reord[Idx] + 1]; 
+      //_readC[Idx]  = enode[2*bc.color_reord[Idx] + 0];
+      pointsToCache.insert(_writeC[Idx]);
+  //    pointsToCache.insert(_readC[Idx]);
     }
     int cache_size = pointsToCache.size();
     if(minc>cache_size) minc = cache_size;
@@ -90,9 +93,9 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
     #pragma omp parallel for
     for(int Idx = start; Idx<end; ++Idx){
       writeC[Idx] = (std::find(pointsToCachePerBlocks[bIdx].begin(),
-          pointsToCachePerBlocks[bIdx].end(), writeC[Idx])-pointsToCachePerBlocks[bIdx].begin());
-      readC[Idx] = (std::find(pointsToCachePerBlocks[bIdx].begin(),
-          pointsToCachePerBlocks[bIdx].end(), readC[Idx])-pointsToCachePerBlocks[bIdx].begin());
+          pointsToCachePerBlocks[bIdx].end(), _writeC[Idx])-pointsToCachePerBlocks[bIdx].begin());
+      //readC[Idx] = (std::find(pointsToCachePerBlocks[bIdx].begin(),
+        //  pointsToCachePerBlocks[bIdx].end(), _readC[Idx])-pointsToCachePerBlocks[bIdx].begin());
     }
   }
   printf(
@@ -114,6 +117,7 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
         pointsToCachePerBlocks[bIdx][i]; 
     }
   }
+
 
   return cacheMap(bc.numblock, globalToCacheMap, blockOffsets, readC,
                   writeC, nedge);
