@@ -97,7 +97,7 @@ __global__ void iter_calc(const float* __restrict__  old,
   }
 
   //CACHE BACK
-    for (int i = 0; i < cache_size; i += blockDim.x) {
+  for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
       for(int dim=0; dim<node_dim; dim++)
         val[global_to_cache[cache_offset + i + tid]*node_dim+dim] = 
