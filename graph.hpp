@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <ostream>
+#include <cassert>
+#include <algorithm>
 
 struct Graph {
 private:
@@ -147,6 +150,46 @@ public:
   MY_SIZE numEdges() const { return num_edges; }
 
   MY_SIZE numPoints() const { return N * M; }
+
+  /**
+   * Scotch graph file, format according to the user manual 5.1:
+   * http://gforge.inria.fr/docman/view.php/248/7104/scotch_user5.1.pdf
+   */
+  void writeGraph (std::ostream& os) const {
+    os << 0 << std::endl;      // Version number
+    os << numPoints() << " " << numEdges() << std::endl;
+    os << 0 << " ";            // Base index
+    os << "000";  // Flags: no vertex weights, no edge weights, no labels
+    std::vector<std::pair<MY_SIZE,MY_SIZE>> g;
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      g.push_back(std::make_pair(edge_list[2*i],edge_list[2*i+1]));
+    }
+    std::sort(g.begin(), g.end());
+    MY_SIZE vertex = 0;
+    std::vector<MY_SIZE> neighbours;
+    for (const auto &edge : g) {
+      if (edge.first != vertex) {
+        assert(vertex < edge.first);
+        os << std::endl << neighbours.size();
+        for (MY_SIZE n : neighbours) {
+          os << " " << n;
+        }
+        neighbours.clear();
+        for (++vertex;vertex < edge.first; ++vertex) {
+          os << std::endl << 0;
+        }
+      }
+      neighbours.push_back(edge.second);
+    }
+    os << std::endl << neighbours.size();
+    for (MY_SIZE n : neighbours) {
+      os << " " << n;
+    }
+    neighbours.clear();
+    for (++vertex;vertex < numPoints(); ++vertex) {
+      os << std::endl << 0;
+    }
+  }
 };
 
 #endif /* end of include guard: GRAPH_HPP_35BFQORK */
