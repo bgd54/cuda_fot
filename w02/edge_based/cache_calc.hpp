@@ -120,7 +120,7 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
       
       readC[Idx] = (std::find(readPointsToCachePerBlocks[bIdx].begin(),
           readPointsToCachePerBlocks[bIdx].end(), _readC[Idx]) - 
-            pointsToCachePerBlocks[bIdx].begin() );
+            readPointsToCachePerBlocks[bIdx].begin() );
     }
   }
   printf(

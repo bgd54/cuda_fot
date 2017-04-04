@@ -103,7 +103,7 @@ __global__ void iter_calc( const float* __restrict__  old,
 
   //CALC VAL
   for(int col=0; col<colornum[bIdx];++col){
-    if(reordIdx < nedge && col == color[reordIdx]){
+    if(reordIdx < nedge && col == mycolor){
       for(int dim=0; dim<node_dim;dim++){ 
         valC[iwritethisIdx*node_dim+dim]+= increment[dim];
       }

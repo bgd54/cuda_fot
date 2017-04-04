@@ -8,7 +8,7 @@ CPPFLAGS 	= $(CCFLAGS) -std=c++11
 OMPFLAGS 	= -I/home/ireguly/forge/clang_4/llvm/build/projects/openmp/runtime/src/ -fopenmp=libomp
 OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp-contract=fast -Xclang -target-feature -Xclang +ptx35
 
-NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
+NVCCFLAGS	:= -lineinfo -arch=sm_35 --use_fast_math
 CFLAGS := -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 
 all: edge_cpu edge_coloring edge_omp edge_gpu edge_gpu_2l\
@@ -35,11 +35,11 @@ edge_gpu_2l: edge_gpu_2l.cu Makefile graph_helper.hpp coloring.hpp\
 	nvcc edge_gpu_2l.cu -o edge_gpu_2l $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
 
 edge_gpu_cw: edge_gpu_cw.cu Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp
+	rms.hpp timer.hpp simulation.hpp cache_calc.hpp
 	nvcc edge_gpu_cw.cu -o edge_gpu_cw $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
 
 edge_gpu_ca: edge_gpu_ca.cu Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp
+	rms.hpp timer.hpp simulation.hpp cache_calc.hpp
 	nvcc edge_gpu_ca.cu -o edge_gpu_ca $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
 
 edge_gpu_omp: 	edge_gpu_omp.cpp Makefile graph_helper.hpp coloring.hpp\
