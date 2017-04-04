@@ -42,7 +42,7 @@ __global__ void iter_calc(const float* __restrict__  old,
     const int nedge, const int* __restrict__ enode, 
     const int* __restrict__ color_reord, const int* __restrict__ threadcolors,
     const int* __restrict__ colornum, const int* __restrict__ blocksInColor,
-    int color_start, const int* __restrict__ global_to_cache, 
+    const int color_start, const int* __restrict__ global_to_cache, 
     const int* __restrict__ cacheOffsets,
     const MY_IDX_TYPE* __restrict__ writeC){
 
@@ -61,11 +61,13 @@ __global__ void iter_calc(const float* __restrict__  old,
   //calc cache params
   int cache_offset = bIdx == 0? 0:cacheOffsets[bIdx-1]; 
   int cache_size = cacheOffsets[bIdx] - cache_offset;
+  //set pointers to cache
+  float* valC = shared;
   //CACHE IN
   for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
       for(int dim=0; dim<node_dim; dim++)
-        shared[(i + tid)*node_dim+dim] =
+        valC[(i + tid)*node_dim+dim] =
             val[global_to_cache[cache_offset + i + tid]*node_dim+dim];
     }
   }
@@ -80,8 +82,7 @@ __global__ void iter_calc(const float* __restrict__  old,
     edgeIdx=color_reord[reordIdx];
     mycolor = threadcolors[reordIdx];
     for(int dim=0; dim<node_dim;dim++){ 
-      increment[dim] =
-        eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
+      increment[dim] = eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
     }
   }
 
@@ -90,7 +91,7 @@ __global__ void iter_calc(const float* __restrict__  old,
     if(reordIdx < nedge && col == mycolor){
       for(int dim=0; dim<node_dim;dim++){ 
         //val[enode[2*edgeIdx+1]*node_dim+dim] += increment[dim];
-        shared[iwritethisIdx*node_dim+dim] += increment[dim];
+        valC[iwritethisIdx*node_dim+dim] += increment[dim];
       }
     }
     __syncthreads();
@@ -101,7 +102,7 @@ __global__ void iter_calc(const float* __restrict__  old,
     if (i + tid < cache_size) {
       for(int dim=0; dim<node_dim; dim++)
         val[global_to_cache[cache_offset + i + tid]*node_dim+dim] = 
-          shared[(i + tid)*node_dim+dim];
+          valC[(i + tid)*node_dim+dim];
     }
   }
   
@@ -226,7 +227,7 @@ int main(int argc, char *argv[]){
       sim.kernels[1].timerStart();
       //TODO shared memory calc.. 4*->worst case
       iter_calc<<<len,BLOCKSIZE,4*BLOCKSIZE*node_dim*sizeof(float)>>>(
-          node_old_d, node_val_d, node_dim,  edge_val_d, nedge,  enode_d, 
+          node_old_d, node_val_d, node_dim, edge_val_d, nedge, enode_d,
           color_reord_d, color_d, colornum_d, block_reord_d, start,
           cm.globalToCacheMap_d, cm.blockOffsets_d, cm.writeC_d);
       checkCudaErrors( cudaDeviceSynchronize() );
