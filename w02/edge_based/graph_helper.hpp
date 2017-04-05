@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <cmath>
 #include <algorithm>
+#include <vector>
 //Negyzetracs generalasa
 //  csucsok indexelese sorfolytonosan
 //  elek indexelese: vizszintesek sorfolytonosan majd a fuggolegesek sorf.
@@ -89,6 +90,18 @@ float* genDataForNodes(const int& nnode,const int& dim,
 
   return nodedata;
 
+}
+
+std::vector<int> _reorder(const int* mapping, const int* enode,
+    const int& nedge){
+
+  std::vector<int> reordered_enode(2*nedge);
+  #pragma omp parallel for
+  for(int origEdgeIdx=0; origEdgeIdx<nedge; ++origEdgeIdx){
+    reordered_enode[2*mapping[origEdgeIdx]+0] = enode[2*origEdgeIdx+0];
+    reordered_enode[2*mapping[origEdgeIdx]+1] = enode[2*origEdgeIdx+1];
+  }
+  return reordered_enode;
 }
 
 #endif

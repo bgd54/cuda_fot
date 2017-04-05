@@ -11,6 +11,7 @@
 using namespace std;
 
 #define BLOCKSIZE 128
+#define MAX_NODE_DIM 10
 
 void addTimers(Simulation &sim){
   #ifdef TIMER_MACRO
@@ -23,6 +24,7 @@ int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
   bool bidir=false;
+  int node_dim = 1, edge_dim = 1;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -31,6 +33,7 @@ int main(int argc, char *argv[]){
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-bidir")) bidir=true;
+    else if (!strcmp(argv[i],"-ndim")) node_dim=atoi(argv[++i]);
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -41,15 +44,15 @@ int main(int argc, char *argv[]){
   //                            graph gen
   ///////////////////////////////////////////////////////////////////////
 
-  int nnode,nedge;
+  int nnode, nedge;
   int* enode = bidir ? 
     generate_bidirected_graph(dx,dy,nedge,nnode) : 
     generate_graph(dx,dy,nedge,nnode);
 
-  float* node_val,*node_old, *edge_val;
+  float *node_val, *node_old, *edge_val;
   
-  node_val=genDataForNodes(nnode,node_dim);
-  edge_val=genDataForNodes(nedge,edge_dim);
+  node_val = genDataForNodes(nnode,node_dim);
+  edge_val = genDataForNodes(nedge,edge_dim);
   
   node_old=(float*)malloc(nnode*node_dim*sizeof(float));
   ///////////////////////////////////////////////////////////////////////
@@ -58,7 +61,7 @@ int main(int argc, char *argv[]){
   Simulation sim = initSimulation(nedge, nnode, node_dim);
   addTimers(sim);
 
-  
+
   /////////////////////////////////////////////////////////
   //                        coloring
   /////////////////////////////////////////////////////////
@@ -81,7 +84,7 @@ int main(int argc, char *argv[]){
   int * color_reord = c.color_reord;
   
 #pragma omp target enter data map(to:enode[:nedge*2], edge_val[:nedge],\
-    node_old[:nnode], node_val[:nnode])
+    node_old[:nnode*node_dim], node_val[:nnode*node_dim])
 #pragma omp target enter data map(to: color_reord[:nedge], colornum_d[:c.numblock],\
     block_reord_d[:c.numblock], color_d[:nedge])
   //   timer
@@ -92,8 +95,8 @@ int main(int argc, char *argv[]){
     sim.kernels[0].timerStart();
     #pragma omp target teams distribute parallel for \
       num_teams((nnode-1)/BLOCKSIZE+1) thread_limit(BLOCKSIZE)\
-      map(to:node_old[:nnode], node_val[:nnode])
-    for(int j=0;j<nnode;++j){
+      map(to:node_old[:nnode*node_dim], node_val[:nnode*node_dim])
+    for(int j=0;j<nnode*node_dim;++j){
       node_old[j]=node_val[j];
     }
     sim.kernels[0].timerStop();
@@ -107,24 +110,25 @@ int main(int argc, char *argv[]){
         num_teams(len)  thread_limit(BLOCKSIZE)\
         map(to: node_old[:nnode], node_val[:nnode], enode[:2*nedge], \
             edge_val[:nedge], color_reord[:nedge], color_d[:nedge], \
-            colornum_d[:c.numblock], block_reord_d[:c.numblock])
-      for(int j=0; j < len*BLOCKSIZE; ++j){//j: tid in color
-        //problema: elm mukdik de a teamnum meg minden implementacio fuggo
-        int tid  = omp_get_thread_num();
-        int bIdx =block_reord_d[omp_get_team_num()];
-        int reordIdx = tid+bIdx*omp_get_num_teams();
-        float increment = 0.0f;
-        if(reordIdx < nedge){
-          increment = 
-            edge_val[color_reord[reordIdx]]*node_old[enode[color_reord[reordIdx]*2+0]];
-        }
-
-        for(int col=0; col<colornum_d[bIdx];++col){
-          if(reordIdx < nedge && col == color_d[reordIdx]){
-            node_val[enode[2*color_reord[reordIdx]+1] ] += increment;
+            colornum_d[:c.numblock], block_reord_d[:c.numblock]) collapse(2)
+      for(int j=0; j < len; ++j){//j: tid in color
+        for(int tid=0; tid<BLOCKSIZE;++tid){
+          int bIdx =block_reord_d[j];
+          int reordIdx = tid+bIdx*BLOCKSIZE;
+          float increment[MAX_NODE_DIM];
+          if(reordIdx < nedge){
+            for(int dim=0; dim<node_dim; dim++)
+            increment[dim] = edge_val[color_reord[reordIdx]*node_dim+dim] *
+              node_old[enode[color_reord[reordIdx]*2+0]*node_dim+dim];
           }
-          //eeees region cannot be closely nested in distribute parallel for
-          #pragma omp barrier
+ 
+          for(int col=0; col<colornum_d[bIdx];++col){
+            if(reordIdx < nedge && col == color_d[reordIdx]){
+              for(int dim=0; dim<node_dim; dim++)
+                node_val[enode[2*color_reord[reordIdx]+1]*node_dim+dim ] += increment[dim];
+            }
+            //BARRIER
+          }
         }
 
       }
