@@ -218,6 +218,20 @@ public:
   }
 
   /**
+   * Writes the edgelist in the following format:
+   *   - the first line contains two numbers separated by spaces, `numPoints()`
+   *     and `numEdges()` respectively.
+   *   - the following `numEdges()` lines contain two numbers, `i` and `j`,
+   *     separated by spaces, and it means that there is an edge from `i` to `j`
+   */
+  void writeEdgeList(std::ostream &os) const {
+    os << numPoints() << " " << numEdges() << std::endl;
+    for (std::size_t i = 0; i < numEdges(); ++i) {
+      os << edge_list[2 * i] << " " << edge_list[2 * i + 1] << std::endl;
+    }
+  }
+
+  /**
    * Reads from a Scotch reordering file and reorders the edge list accordingly.
    */
   int readScotchReordering(std::istream &is) {

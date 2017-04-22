@@ -14,7 +14,10 @@ OPTIMIZATION_FLAGS := -g
 all: $(TGT)
 
 graph: graph.cu graph.hpp problem.hpp colouring.hpp Makefile
-		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
+		nvcc graph.cu -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
+
+test_scotch: graph.hpp problem.hpp colouring.hpp Makefile test_scotch.cpp
+		g++ test_scotch.cpp -o $@ $(INC) -std=c++11 $(OPTIMIZATION_FLAGS)
 
 %: %.cu Makefile $(HDR)
 		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
