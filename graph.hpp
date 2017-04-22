@@ -18,9 +18,13 @@ inline int startNewProcess(const char *cmd, char *const argv[]) {
     std::cerr << "Starting new process failed. (Fork failed.)" << std::endl;
     return 1;
   case 0: // Child
+  {
     execv(cmd, argv);
-    std::cerr << "Starting new process failed. (Execv failed.)" << std::endl;
+    int err = errno;
+    std::cerr << "Starting new process failed. (Execv failed.)"
+              << " Errno: " << err << std::endl;
     return 2;
+  }
   default: // Parent
     int status = 0;
     while (!WIFEXITED(status)) {
@@ -230,8 +234,8 @@ public:
       is >> from >> to;
       reordering[from] = to;
     }
-    std::for_each(edge_list, edge_list + numEdges(),
-                  [&reordering](MY_SIZE a) { return reordering[a]; });
+    std::for_each(edge_list, edge_list + 2 * numEdges(),
+                  [&reordering](MY_SIZE &a) { a = reordering[a]; });
     std::vector<std::pair<MY_SIZE, MY_SIZE>> new_edge_list = getSortedEdges();
     for (MY_SIZE i = 0; i < numEdges(); ++i) {
       edge_list[2 * i + 0] = new_edge_list[i].first;
@@ -243,7 +247,7 @@ public:
   /**
    * Reorder using Scotch.
    */
-  void reorder() {
+  int reorder() {
     {
       std::ofstream fout("/tmp/sulan/graph.grf");
       writeGraph(fout);
@@ -256,7 +260,7 @@ public:
                           (char *)"-vst",
                           nullptr};
     if (startNewProcess(cmd, argv)) {
-      return;
+      return 2;
     }
     {
       std::ifstream fin("/tmp/sulan/graph.ord");
@@ -265,8 +269,10 @@ public:
         std::cerr << "Some error has happened. (See how verbose an error "
                      "message I am?)"
                   << status << std::endl;
+        return 1;
       }
     }
+    return 0;
   }
 
 private:
