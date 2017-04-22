@@ -1,12 +1,39 @@
 #ifndef GRAPH_HPP_35BFQORK
 #define GRAPH_HPP_35BFQORK
 
+#include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
-#include <vector>
+#include <fstream>
 #include <ostream>
-#include <cassert>
-#include <algorithm>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
+
+inline int startNewProcess(const char *cmd, char *const argv[]) {
+  pid_t pid = fork();
+  switch (pid) {
+  case -1: // Error
+    std::cerr << "Starting new process failed. (Fork failed.)" << std::endl;
+    return 1;
+  case 0: // Child
+    execv(cmd, argv);
+    std::cerr << "Starting new process failed. (Execv failed.)" << std::endl;
+    return 2;
+  default: // Parent
+    int status = 0;
+    while (!WIFEXITED(status)) {
+      waitpid(pid, &status, 0);
+    }
+    if (WEXITSTATUS(status)) {
+      std::cerr << "Subprocess exited with exit code: " << WEXITSTATUS(status)
+                << std::endl;
+      return 3;
+    }
+  }
+  return 0;
+}
 
 struct Graph {
 private:
@@ -121,8 +148,7 @@ public:
   /* 1}}} */
 
   std::vector<std::vector<MY_SIZE>>
-  colourEdges(MY_SIZE from = 0,
-              MY_SIZE to = static_cast<MY_SIZE>(-1)) const {
+  colourEdges(MY_SIZE from = 0, MY_SIZE to = static_cast<MY_SIZE>(-1)) const {
     if (to > numEdges()) {
       to = numEdges();
     }
@@ -155,16 +181,12 @@ public:
    * Scotch graph file, format according to the user manual 5.1:
    * http://gforge.inria.fr/docman/view.php/248/7104/scotch_user5.1.pdf
    */
-  void writeGraph (std::ostream& os) const {
-    os << 0 << std::endl;      // Version number
+  void writeGraph(std::ostream &os) const {
+    os << 0 << std::endl; // Version number
     os << numPoints() << " " << numEdges() << std::endl;
-    os << 0 << " ";            // Base index
-    os << "000";  // Flags: no vertex weights, no edge weights, no labels
-    std::vector<std::pair<MY_SIZE,MY_SIZE>> g;
-    for (MY_SIZE i = 0; i < numEdges(); ++i) {
-      g.push_back(std::make_pair(edge_list[2*i],edge_list[2*i+1]));
-    }
-    std::sort(g.begin(), g.end());
+    os << 0 << " "; // Base index
+    os << "000";    // Flags: no vertex weights, no edge weights, no labels
+    std::vector<std::pair<MY_SIZE, MY_SIZE>> g = getSortedEdges();
     MY_SIZE vertex = 0;
     std::vector<MY_SIZE> neighbours;
     for (const auto &edge : g) {
@@ -175,7 +197,7 @@ public:
           os << " " << n;
         }
         neighbours.clear();
-        for (++vertex;vertex < edge.first; ++vertex) {
+        for (++vertex; vertex < edge.first; ++vertex) {
           os << std::endl << 0;
         }
       }
@@ -186,9 +208,75 @@ public:
       os << " " << n;
     }
     neighbours.clear();
-    for (++vertex;vertex < numPoints(); ++vertex) {
+    for (++vertex; vertex < numPoints(); ++vertex) {
       os << std::endl << 0;
     }
+  }
+
+  /**
+   * Reads from a Scotch reordering file and reorders the edge list accordingly.
+   */
+  int readScotchReordering(std::istream &is) {
+    {
+      MY_SIZE file_num_points;
+      is >> file_num_points;
+      if (file_num_points != numPoints()) {
+        return 1;
+      }
+    }
+    std::vector<MY_SIZE> reordering(numPoints());
+    for (MY_SIZE i = 0; i < numPoints(); ++i) {
+      MY_SIZE from, to;
+      is >> from >> to;
+      reordering[from] = to;
+    }
+    std::for_each(edge_list, edge_list + numEdges(),
+                  [&reordering](MY_SIZE a) { return reordering[a]; });
+    std::vector<std::pair<MY_SIZE, MY_SIZE>> new_edge_list = getSortedEdges();
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      edge_list[2 * i + 0] = new_edge_list[i].first;
+      edge_list[2 * i + 1] = new_edge_list[i].second;
+    }
+    return 0;
+  }
+
+  /**
+   * Reorder using Scotch.
+   */
+  void reorder() {
+    {
+      std::ofstream fout("/tmp/sulan/graph.grf");
+      writeGraph(fout);
+    }
+    char *cmd = (char *)"/home/software/scotch_5.1.12/bin/gord";
+    char *const argv[] = {cmd,
+                          (char *)"/tmp/sulan/graph.grf",
+                          (char *)"/tmp/sulan/graph.ord",
+                          (char *)"/tmp/sulan/graph.log",
+                          (char *)"-vst",
+                          nullptr};
+    if (startNewProcess(cmd, argv)) {
+      return;
+    }
+    {
+      std::ifstream fin("/tmp/sulan/graph.ord");
+      int status = readScotchReordering(fin);
+      if (status) {
+        std::cerr << "Some error has happened. (See how verbose an error "
+                     "message I am?)"
+                  << status << std::endl;
+      }
+    }
+  }
+
+private:
+  std::vector<std::pair<MY_SIZE, MY_SIZE>> getSortedEdges() const {
+    std::vector<std::pair<MY_SIZE, MY_SIZE>> g;
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      g.push_back(std::make_pair(edge_list[2 * i], edge_list[2 * i + 1]));
+    }
+    std::sort(g.begin(), g.end());
+    return g;
   }
 };
 

@@ -628,6 +628,40 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
     std::cout << "RMS: " << rms << std::endl;
   }
 }
+
+void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
+                            MY_SIZE reset_every,
+                            implementation_algorithm_t algorithm1,
+                            implementation_algorithm_t algorithm2) {
+  std::vector<float> result1;
+  double rms = 0;
+  {
+    srand(1);
+    Problem problem(N, M);
+    problem.graph.reorder();
+    (problem.*algorithm1)(num, reset_every);
+    float abs_max = 0;
+    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
+      result1.push_back(problem.point_weights[i]);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
+    }
+    std::cout << "Abs max: " << abs_max << std::endl;
+  }
+
+  {
+    srand(1);
+    Problem problem(N, M);
+    (problem.*algorithm2)(num, reset_every);
+    float abs_max = 0;
+    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
+      rms += std::pow(problem.point_weights[i] - result1[i], 2);
+      abs_max = std::max(abs_max, problem.point_weights[i]);
+    }
+    std::cout << "Abs max: " << abs_max << std::endl;
+    rms = std::pow(rms / result1.size(), 0.5);
+    std::cout << "RMS: " << rms << std::endl;
+  }
+}
 /* 1}}} */
 
 int main(int argc, const char **argv) {
@@ -639,9 +673,9 @@ int main(int argc, const char **argv) {
   MY_SIZE N = 1000;
   MY_SIZE M = 2000;
   MY_SIZE reset_every = 10;
-  std::cout << "GPU global edge vs GPU hierarchical edge" << std::endl;
-  testTwoImplementations(num, N, M, reset_every, &Problem::loopGPUEdgeCentred,
-                         &Problem::loopGPUHierarchical);
+  //std::cout << "GPU global edge vs GPU hierarchical edge" << std::endl;
+  testReordering(num, N, M, reset_every, &Problem::loopGPUEdgeCentred,
+                         &Problem::loopGPUEdgeCentred);
   cudaDeviceReset();
 }
 
