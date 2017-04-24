@@ -25,7 +25,7 @@ struct timer{
   double total_time;
 
   timer(std::string _name):name(_name), total_time(0.0){}
-  timer():tv(), name(""), total_time(0.0){}
+  timer():name(""), total_time(0.0){}
 
   void start(){
     gettimeofday(&tv,NULL);

@@ -14,7 +14,6 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
-
   for(int i=1; i < argc; ++i){
     if (!strcmp(argv[i],"-niter")) niter=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
@@ -30,17 +29,17 @@ int main(int argc, char *argv[]){
   ///////////////////////////////////////////////////////////////////////
   //                            graph gen
   ///////////////////////////////////////////////////////////////////////
-  int nedge, nnode;
+
+  int nnode, nedge;
   int* enode = bidir ? 
     generate_bidirected_graph(dx,dy,nedge,nnode) : 
     generate_graph(dx,dy,nedge,nnode);
 
-  float* node_val,*node_old, *edge_val;
+  float *node_val, *node_old, *edge_val;
   
-  node_val=genDataForNodes(nnode,node_dim);
-  edge_val=genDataForNodes(nedge,edge_dim);
+  node_val = genDataForNodes(nnode,node_dim);
+  edge_val = genDataForNodes(nedge,edge_dim);
   
-
   node_old=(float*)malloc(nnode*node_dim*sizeof(float));
 
   printf("start edge based on CPU niter: %d, nnode:%d, nedge:%d\n",niter,

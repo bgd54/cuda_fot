@@ -11,44 +11,31 @@ OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp
 NVCCFLAGS	:= -lineinfo -arch=sm_35 --use_fast_math
 CFLAGS := -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 
-all: edge_cpu edge_coloring edge_omp edge_gpu edge_gpu_2l\
-	edge_gpu_cw edge_gpu_ca edge_gpu_omp edge_gpu_omp_2l
+all: edge_cpu edge_omp
 
-edge_cpu: edge_cpu.cpp Makefile graph_helper.hpp\
-   	rms.hpp timer.hpp simulation.hpp
-	g++ -std=c++11 edge_cpu.cpp -o edge_cpu -O3
+arg.o: arg.hpp arg.cpp Makefile
+	g++ arg.cpp -c -o arg.o ${CPPFLAGS}
 
-edge_coloring: edge_coloring.cpp Makefile graph_helper.hpp\
-   	coloring.hpp rms.hpp timer.hpp simulation.hpp
-	g++ -std=c++11 edge_coloring.cpp -o edge_coloring -O3
+argcu.o: arg.hpp arg.cpp Makefile
+	nvcc arg.cpp -c -o argcu.o $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
 
-edge_omp: edge_omp.cpp Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp
-	g++ -std=c++11 edge_omp.cpp -o edge_omp -fopenmp -O3
+seqkernels.o: seqkernels.cpp Makefile arg.o
+	g++ seqkernels.cpp -c -o seqkernels.o ${CPPFLAGS}
 
-edge_gpu: edge_gpu.cu Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp
-	nvcc edge_gpu.cu -o edge_gpu $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+coloring.o: coloring.hpp coloring.cpp dummycoloring.cpp Makefile
+	g++ coloring.cpp -c -o coloring.o ${CPPFLAGS}
 
-edge_gpu_2l: edge_gpu_2l.cu Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp
-	nvcc edge_gpu_2l.cu -o edge_gpu_2l $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+simulation.o: simulation.hpp simulation.cpp Makefile
+	g++ simulation.cpp -c -o simulation.o ${CPPFLAGS}
 
-edge_gpu_cw: edge_gpu_cw.cu Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp cache_calc.hpp
-	nvcc edge_gpu_cw.cu -o edge_gpu_cw $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+edge_cpu: edge_sim.cpp Makefile graph_helper.hpp\
+   	rms.hpp timer.hpp kernels.hpp graph_gen.hpp arg.o seqkernels.o simulation.o coloring.o
+	g++ -std=c++11 edge_sim.cpp arg.o seqkernels.o simulation.o coloring.o dummycoloring.cpp -o edge_cpu ${CPPFLAGS}
 
-edge_gpu_ca: edge_gpu_ca.cu Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp cache_calc.hpp
-	nvcc edge_gpu_ca.cu -o edge_gpu_ca $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
-
-edge_gpu_omp: 	edge_gpu_omp.cpp Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp	
-	$(CPP) $(CPPFLAGS) $(OMPFLAGS) $(OMPOFFLOAD) edge_gpu_omp.cpp -o edge_gpu_omp
-
-edge_gpu_omp_2l: 	edge_gpu_omp_2l.cpp Makefile graph_helper.hpp coloring.hpp\
-	rms.hpp timer.hpp simulation.hpp	
-	$(CPP) $(CPPFLAGS) $(OMPFLAGS) $(OMPOFFLOAD) edge_gpu_omp_2l.cpp -o edge_gpu_omp_2l
+edge_omp: edge_sim.cpp Makefile graph_helper.hpp\
+   	rms.hpp timer.hpp kernels.hpp graph_gen.hpp arg.o\
+   	ompkernels.o simulation.o coloring.o globalcoloring.cpp
+	g++ -std=c++11 edge_sim.cpp arg.o ompkernels.cpp simulation.o coloring.o globalcoloring.cpp -o edge_omp ${CPPFLAGS} -fopenmp
 
 clean:
 	rm -rf *.o
