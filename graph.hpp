@@ -5,39 +5,12 @@
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <fstream>
 #include <ostream>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <tuple>
 #include <vector>
-
-inline int startNewProcess(const char *cmd, char *const argv[]) {
-  pid_t pid = fork();
-  switch (pid) {
-  case -1: // Error
-    std::cerr << "Starting new process failed. (Fork failed.)" << std::endl;
-    return 1;
-  case 0: // Child
-  {
-    execv(cmd, argv);
-    int err = errno;
-    std::cerr << "Starting new process failed. (Execv failed.)"
-              << " Errno: " << err << std::endl;
-    return 2;
-  }
-  default: // Parent
-    int status = 0;
-    while (!WIFEXITED(status)) {
-      waitpid(pid, &status, 0);
-    }
-    if (WEXITSTATUS(status)) {
-      std::cerr << "Subprocess exited with exit code: " << WEXITSTATUS(status)
-                << std::endl;
-      return 3;
-    }
-  }
-  return 0;
-}
+#include "reorder.hpp"
 
 struct Graph {
 private:
@@ -182,42 +155,6 @@ public:
   MY_SIZE numPoints() const { return N * M; }
 
   /**
-   * Scotch graph file, format according to the user manual 5.1:
-   * http://gforge.inria.fr/docman/view.php/248/7104/scotch_user5.1.pdf
-   */
-  void writeGraph(std::ostream &os) const {
-    os << 0 << std::endl; // Version number
-    os << numPoints() << " " << numEdges() << std::endl;
-    os << 0 << " "; // Base index
-    os << "000";    // Flags: no vertex weights, no edge weights, no labels
-    std::vector<std::pair<MY_SIZE, MY_SIZE>> g = getSortedEdges();
-    MY_SIZE vertex = 0;
-    std::vector<MY_SIZE> neighbours;
-    for (const auto &edge : g) {
-      if (edge.first != vertex) {
-        assert(vertex < edge.first);
-        os << std::endl << neighbours.size();
-        for (MY_SIZE n : neighbours) {
-          os << " " << n;
-        }
-        neighbours.clear();
-        for (++vertex; vertex < edge.first; ++vertex) {
-          os << std::endl << 0;
-        }
-      }
-      neighbours.push_back(edge.second);
-    }
-    os << std::endl << neighbours.size();
-    for (MY_SIZE n : neighbours) {
-      os << " " << n;
-    }
-    neighbours.clear();
-    for (++vertex; vertex < numPoints(); ++vertex) {
-      os << std::endl << 0;
-    }
-  }
-
-  /**
    * Writes the edgelist in the following format:
    *   - the first line contains two numbers separated by spaces, `numPoints()`
    *     and `numEdges()` respectively.
@@ -232,87 +169,48 @@ public:
   }
 
   /**
-   * Reads from a Scotch reordering file and reorders the edge list accordingly.
-   */
-  int readScotchReordering(std::istream &is) {
-    {
-      MY_SIZE file_num_points;
-      is >> file_num_points;
-      if (file_num_points != numPoints()) {
-        return 1;
-      }
-    }
-    std::vector<MY_SIZE> reordering(numPoints());
-    MY_SIZE num_zero = 0;
-    for (MY_SIZE i = 0; i < numPoints(); ++i) {
-      MY_SIZE from, to;
-      if (!is) {
-        // FIXME somehow it can't read the whole thing
-        std::cerr << "good: " << is.good() << std::endl
-                  << "fail: " << is.fail() << std::endl
-                  << "bad: " << is.bad() << std::endl
-                  << "bool: " << static_cast<bool>(is) << std::endl;
-        return 2;
-      }
-      is >> from >> to;
-      reordering[from] = to;
-      std::cerr << from << " " << to << std::endl;
-      if (to == 0) {
-        ++num_zero;
-      }
-    }
-    std::cout << "Num zero: " << num_zero << " "
-              << std::count(reordering.begin(), reordering.end(), 0)
-              << std::endl;
-    std::for_each(edge_list, edge_list + 2 * numEdges(),
-                  [&reordering](MY_SIZE &a) { a = reordering[a]; });
-    std::vector<std::pair<MY_SIZE, MY_SIZE>> new_edge_list = getSortedEdges();
-    for (MY_SIZE i = 0; i < numEdges(); ++i) {
-      edge_list[2 * i + 0] = new_edge_list[i].first;
-      edge_list[2 * i + 1] = new_edge_list[i].second;
-    }
-    return 0;
-  }
-
-  /**
    * Reorder using Scotch.
+   *
+   * Also reorders the edge and point data in the arguments. These must be of
+   * length `numEdges()` and `numPoints()`, respectively.
    */
-  int reorder() {
-    {
-      std::ofstream fout("/tmp/sulan/graph.grf");
-      writeGraph(fout);
+  void reorder(float *edge_data = nullptr, float *point_data = nullptr) {
+    ScotchReorder reorder(*this);
+    std::vector<SCOTCH_Num> permutation = reorder.reorder();
+    // Permute points
+    if (point_data) {
+      std::vector<float> point_tmp(numPoints());
+      for (MY_SIZE i = 0; i < numPoints(); ++i) {
+        point_tmp[permutation[i]] = point_data[i];
+      }
+      std::copy(point_tmp.begin(), point_tmp.end(), point_data);
     }
-    char *cmd = (char *)"/home/software/scotch_5.1.12/bin/gord";
-    char *const argv[] = {cmd,
-                          (char *)"/tmp/sulan/graph.grf",
-                          (char *)"/tmp/sulan/graph.ord",
-                          (char *)"/tmp/sulan/graph.log",
-                          (char *)"-vst",
-                          nullptr};
-    if (startNewProcess(cmd, argv)) {
-      return 2;
-    }
-    {
-      std::ifstream fin("/tmp/sulan/graph.ord");
-      int status = readScotchReordering(fin);
-      if (status) {
-        std::cerr << "Some error has happened. (See how verbose an error "
-                     "message I am?)"
-                  << status << std::endl;
-        return 1;
+    // Permute edge_list
+    std::for_each(edge_list, edge_list + numEdges() * 2,
+                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
+    if (edge_data) {
+      std::vector<std::tuple<MY_SIZE, MY_SIZE, float, float>> edge_tmp(
+          numEdges());
+      for (MY_SIZE i = 0; i < numEdges(); ++i) {
+        edge_tmp.push_back(
+            std::make_tuple(edge_list[2 * i], edge_list[2 * i + 1],
+                            edge_data[2 * i], edge_data[2 * i + 1]));
+      }
+      std::sort(edge_tmp.begin(), edge_tmp.end());
+      for (MY_SIZE i = 0; i < numEdges(); ++i) {
+        std::tie(edge_list[2 * i], edge_list[2 * i + 1], edge_data[2 * i],
+                 edge_data[2 * i + 1]) = edge_tmp[i];
+      }
+    } else {
+      std::vector<std::tuple<MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
+      for (MY_SIZE i = 0; i < numEdges(); ++i) {
+        edge_tmp[i] = std::make_tuple(edge_list[2 * i], edge_list[2 * i + 1]);
+      }
+      std::sort(edge_tmp.begin(), edge_tmp.end());
+      for (MY_SIZE i = 0; i < numEdges(); ++i) {
+        std::tie(edge_list[2 * i], edge_list[2 * i + 1]) = edge_tmp[i];
       }
     }
-    return 0;
-  }
-
-private:
-  std::vector<std::pair<MY_SIZE, MY_SIZE>> getSortedEdges() const {
-    std::vector<std::pair<MY_SIZE, MY_SIZE>> g;
-    for (MY_SIZE i = 0; i < numEdges(); ++i) {
-      g.push_back(std::make_pair(edge_list[2 * i], edge_list[2 * i + 1]));
-    }
-    std::sort(g.begin(), g.end());
-    return g;
   }
 };
 
