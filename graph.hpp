@@ -243,11 +243,27 @@ public:
       }
     }
     std::vector<MY_SIZE> reordering(numPoints());
+    MY_SIZE num_zero = 0;
     for (MY_SIZE i = 0; i < numPoints(); ++i) {
       MY_SIZE from, to;
+      if (!is) {
+        // FIXME somehow it can't read the whole thing
+        std::cerr << "good: " << is.good() << std::endl
+                  << "fail: " << is.fail() << std::endl
+                  << "bad: " << is.bad() << std::endl
+                  << "bool: " << static_cast<bool>(is) << std::endl;
+        return 2;
+      }
       is >> from >> to;
       reordering[from] = to;
+      std::cerr << from << " " << to << std::endl;
+      if (to == 0) {
+        ++num_zero;
+      }
     }
+    std::cout << "Num zero: " << num_zero << " "
+              << std::count(reordering.begin(), reordering.end(), 0)
+              << std::endl;
     std::for_each(edge_list, edge_list + 2 * numEdges(),
                   [&reordering](MY_SIZE &a) { a = reordering[a]; });
     std::vector<std::pair<MY_SIZE, MY_SIZE>> new_edge_list = getSortedEdges();
