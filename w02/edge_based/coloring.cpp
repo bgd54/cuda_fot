@@ -159,8 +159,8 @@ Block_coloring& Block_coloring::operator= (const Block_coloring& bc){
   bs = bc.bs;
   nedge = bc.nedge;
 
-  colornum = (int*) malloc(nedge*sizeof(int));
-  memcpy((void*) colornum, (void*)bc.colornum, nedge*sizeof(int) );
+  colornum = (int*) malloc(numblock*sizeof(int));
+  memcpy((void*) colornum, (void*)bc.colornum, numblock*sizeof(int) );
 
   color_reord = (int*) malloc(nedge*sizeof(int));
   memcpy((void*) color_reord, (void*)bc.color_reord, nedge*sizeof(int) );

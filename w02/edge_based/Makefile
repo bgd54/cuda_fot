@@ -3,7 +3,7 @@ INC	:= -I$(CUDA_HOME)/include -I.
 LIB	:= -L$(CUDA_HOME)/lib64 -lcudart -lgomp
 
 CPP       	= clang++ 
-CCFLAGS  	= -O3
+CCFLAGS  	= -g
 CPPFLAGS 	= $(CCFLAGS) -std=c++11
 OMPFLAGS 	= -I/home/ireguly/forge/clang_4/llvm/build/projects/openmp/runtime/src/ -fopenmp=libomp
 OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp-contract=fast -Xclang -target-feature -Xclang +ptx35
@@ -34,7 +34,7 @@ edge_cpu: edge_sim.cpp Makefile graph_helper.hpp\
 
 edge_omp: edge_sim.cpp Makefile graph_helper.hpp\
    	rms.hpp timer.hpp kernels.hpp graph_gen.hpp arg.o\
-   	ompkernel.cpp simulation.o coloring.o globalcoloring.cpp
+   	ompkernels.cpp simulation.o coloring.o globalcoloring.cpp
 	g++ -std=c++11 edge_sim.cpp arg.o ompkernels.cpp simulation.o coloring.o globalcoloring.cpp -o edge_omp ${CPPFLAGS} -fopenmp
 	
 edge_gpu: edge_sim.cpp Makefile graph_helper.hpp\
@@ -42,6 +42,12 @@ edge_gpu: edge_sim.cpp Makefile graph_helper.hpp\
 	cudakernels.cu globalcoloring.cpp coloring.cpp simulation.cpp cache_calc.hpp
 	nvcc edge_sim.cpp -DUSE_CUDA -DBLOCKSIZE=128 argcu.o simulation.cpp coloring.cpp\
 	   	globalcoloring.cpp cudakernels.cu -o edge_gpu \
+		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
+edge_gpu_2l: edge_sim.cpp Makefile graph_helper.hpp\
+	rms.hpp timer.hpp kernels.hpp graph_gen.hpp argcu.o\
+	cuda2lkernels.cu two_level_coloring.cpp coloring.cpp simulation.cpp cache_calc.hpp
+	nvcc edge_sim.cpp -DUSE_CUDA -DBLOCKSIZE=128 -DMAX_NODE_DIM=10 argcu.o simulation.cpp coloring.cpp\
+	   	two_level_coloring.cpp cuda2lkernels.cu -o edge_gpu_2l \
 		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
 
 clean:

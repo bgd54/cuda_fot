@@ -32,13 +32,13 @@ struct cacheMap{
     blockOffsets(_blockOffs), globalReadToCacheMap(_globalRToC),
     blockReadOffsets(_blockROffs), readC(rc), writeC(wc) {
 
-  if(numblock == 0){
-    globalToCacheMap_d = blockOffsets_d = nullptr;
-    globalReadToCacheMap_d = blockReadOffsets_d = nullptr;
-    readC_d = writeC_d = nullptr;
-    return;
-  }
   #ifdef USE_CUDA
+    if(numblock == 0){
+      globalToCacheMap_d = blockOffsets_d = nullptr;
+      globalReadToCacheMap_d = blockReadOffsets_d = nullptr;
+      readC_d = writeC_d = nullptr;
+      return;
+    }
     checkCudaErrors( cudaMalloc((void**)&blockOffsets_d,
           numblock*sizeof(int)) );
     checkCudaErrors( cudaMalloc((void**)&globalToCacheMap_d,
