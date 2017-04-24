@@ -1,3 +1,5 @@
+#include "helper_cuda.h"
+#include "helper_string.h"
 #include "kernels.hpp"
 #include "ssol_cudakernel.cu"
 

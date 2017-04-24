@@ -39,9 +39,9 @@ edge_omp: edge_sim.cpp Makefile graph_helper.hpp\
 	
 edge_gpu: edge_sim.cpp Makefile graph_helper.hpp\
 	rms.hpp timer.hpp kernels.hpp graph_gen.hpp argcu.o\
-	cudkernels.cu coloring.o globalcoloring.cpp
-	nvcc edge_sim.cpp -DUSE_CUDA argcu.o simulation.o coloring.o\
-	   	globalcoloring.cpp cudkernels.cu -o edge_gpu \
+	cudakernels.cu globalcoloring.cpp coloring.cpp simulation.cpp cache_calc.hpp
+	nvcc edge_sim.cpp -DUSE_CUDA -DBLOCKSIZE=128 argcu.o simulation.cpp coloring.cpp\
+	   	globalcoloring.cpp cudakernels.cu -o edge_gpu \
 		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
 
 clean:

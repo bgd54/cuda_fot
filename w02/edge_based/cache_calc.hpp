@@ -5,6 +5,8 @@
 #include <set>
 #include <vector>
 #ifdef USE_CUDA
+#include <cuda_runtime_api.h>
+#include <cuda.h>
 #include "helper_cuda.h"
 #include "helper_string.h"
 #endif
@@ -30,6 +32,12 @@ struct cacheMap{
     blockOffsets(_blockOffs), globalReadToCacheMap(_globalRToC),
     blockReadOffsets(_blockROffs), readC(rc), writeC(wc) {
 
+  if(numblock == 0){
+    globalToCacheMap_d = blockOffsets_d = nullptr;
+    globalReadToCacheMap_d = blockReadOffsets_d = nullptr;
+    readC_d = writeC_d = nullptr;
+    return;
+  }
   #ifdef USE_CUDA
     checkCudaErrors( cudaMalloc((void**)&blockOffsets_d,
           numblock*sizeof(int)) );
@@ -83,10 +91,11 @@ struct cacheMap{
 cacheMap genCacheMap(const int* enode, const int &nedge, 
     const Block_coloring & bc){
   
-  if(bc.reordcolor == nullptr){
+  if(bc.reordcolor == nullptr || bc.numblock == 0){
     return cacheMap(0, nullptr, nullptr, nullptr,
       nullptr, nullptr, nullptr, nedge);
   }
+  printf("Warning Cache Gen\n");
 
   int maxc=0, minc=bc.bs, sumc = 0; // helper variables for recycling faktor
   
