@@ -11,13 +11,13 @@ OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp
 NVCCFLAGS	:= -lineinfo -arch=sm_35 --use_fast_math
 CFLAGS := -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 
-all: edge_cpu edge_omp
+all: edge_cpu edge_omp edge_gpu
 
 arg.o: arg.hpp arg.cpp Makefile
 	g++ arg.cpp -c -o arg.o ${CPPFLAGS}
 
 argcu.o: arg.hpp arg.cpp Makefile
-	nvcc arg.cpp -c -o argcu.o $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+	nvcc arg.cpp -DUSE_CUDA -c -o argcu.o $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
 
 seqkernels.o: seqkernels.cpp Makefile arg.o
 	g++ seqkernels.cpp -c -o seqkernels.o ${CPPFLAGS}
@@ -34,8 +34,15 @@ edge_cpu: edge_sim.cpp Makefile graph_helper.hpp\
 
 edge_omp: edge_sim.cpp Makefile graph_helper.hpp\
    	rms.hpp timer.hpp kernels.hpp graph_gen.hpp arg.o\
-   	ompkernels.o simulation.o coloring.o globalcoloring.cpp
+   	ompkernel.cpp simulation.o coloring.o globalcoloring.cpp
 	g++ -std=c++11 edge_sim.cpp arg.o ompkernels.cpp simulation.o coloring.o globalcoloring.cpp -o edge_omp ${CPPFLAGS} -fopenmp
+	
+edge_gpu: edge_sim.cpp Makefile graph_helper.hpp\
+	rms.hpp timer.hpp kernels.hpp graph_gen.hpp argcu.o\
+	cudkernels.cu coloring.o globalcoloring.cpp
+	nvcc edge_sim.cpp -DUSE_CUDA argcu.o simulation.o coloring.o\
+	   	globalcoloring.cpp cudkernels.cu -o edge_gpu \
+		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
 
 clean:
 	rm -rf *.o
