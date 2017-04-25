@@ -1,92 +1,73 @@
-#ifndef CACHE_MAP_HPP
-#define CACHE_MAP_HPP
-#include "coloring.hpp"
-#include <algorithm>
-#include <set>
-#include <vector>
+#include "cache_calc.hpp"
+cacheMap::cacheMap(int _numb, int* _globalToC, int* _blockOffs,  int* _globalRToC,
+    int* _blockROffs,  MY_IDX_TYPE* rc, MY_IDX_TYPE* wc, int _nedge):
+  numblock(_numb), nedge(_nedge), globalToCacheMap(_globalToC),
+  blockOffsets(_blockOffs), globalReadToCacheMap(_globalRToC),
+  blockReadOffsets(_blockROffs), readC(rc), writeC(wc) {
+
 #ifdef USE_CUDA
-#include "helper_cuda.h"
-#include "helper_string.h"
+  if(numblock == 0){
+    globalToCacheMap_d = blockOffsets_d = nullptr;
+    globalReadToCacheMap_d = blockReadOffsets_d = nullptr;
+    readC_d = writeC_d = nullptr;
+    return;
+  }
+  checkCudaErrors( cudaMalloc((void**)&blockOffsets_d,
+        numblock*sizeof(int)) );
+  checkCudaErrors( cudaMalloc((void**)&globalToCacheMap_d,
+        blockOffsets[numblock-1]*sizeof(int)) );
+  checkCudaErrors( cudaMalloc((void**)&blockReadOffsets_d,
+        numblock*sizeof(int)) );
+  checkCudaErrors( cudaMalloc((void**)&globalReadToCacheMap_d,
+        blockReadOffsets[numblock-1]*sizeof(int)) );
+  checkCudaErrors( cudaMalloc((void**)&writeC_d,
+        nedge*sizeof(MY_IDX_TYPE)) );
+  checkCudaErrors( cudaMalloc((void**)&readC_d,
+        nedge*sizeof(MY_IDX_TYPE)) );
+
+  checkCudaErrors( cudaMemcpy(blockOffsets_d, blockOffsets,
+        numblock*sizeof(int),  cudaMemcpyHostToDevice) );
+  checkCudaErrors( cudaMemcpy(globalToCacheMap_d, globalToCacheMap,
+        blockOffsets[numblock-1]*sizeof(int),  cudaMemcpyHostToDevice) );
+  checkCudaErrors( cudaMemcpy(blockReadOffsets_d, blockReadOffsets,
+        numblock*sizeof(int),  cudaMemcpyHostToDevice) );
+  checkCudaErrors( cudaMemcpy(globalReadToCacheMap_d, globalReadToCacheMap,
+        blockReadOffsets[numblock-1]*sizeof(int),  cudaMemcpyHostToDevice) );
+  checkCudaErrors( cudaMemcpy(writeC_d, writeC,
+        nedge*sizeof(MY_IDX_TYPE),  cudaMemcpyHostToDevice) );
+  checkCudaErrors( cudaMemcpy(readC_d, readC,
+        nedge*sizeof(MY_IDX_TYPE),  cudaMemcpyHostToDevice) );
+#endif      
+}
+
+cacheMap::~cacheMap(){
+  free(globalToCacheMap);
+  free(blockOffsets);
+  free(globalReadToCacheMap);
+  free(blockReadOffsets);
+  free(readC);
+  free(writeC);
+
+#ifdef USE_CUDA
+  //cuda freee
+  checkCudaErrors( cudaFree(globalToCacheMap_d) );
+  checkCudaErrors( cudaFree(blockOffsets_d) );
+  checkCudaErrors( cudaFree(globalReadToCacheMap_d) );
+  checkCudaErrors( cudaFree(blockReadOffsets_d) );
+  checkCudaErrors( cudaFree(writeC_d) );
+  checkCudaErrors( cudaFree(readC_d) );
 #endif
+}
 
-struct cacheMap{
-  #define MY_IDX_TYPE unsigned short
-  int numblock, nedge;
-  int* globalToCacheMap;
-  int* blockOffsets;
-  int* globalReadToCacheMap;
-  int* blockReadOffsets;
-  MY_IDX_TYPE *readC, *writeC;
-  #ifdef USE_CUDA
-  //____________Device pointers______________
-  int *globalToCacheMap_d, *blockOffsets_d;
-  int *globalReadToCacheMap_d, *blockReadOffsets_d;
-  MY_IDX_TYPE *readC_d, *writeC_d;
-  #endif
-  //Constructors
-  cacheMap(int _numb, int* _globalToC, int* _blockOffs,  int* _globalRToC,
-      int* _blockROffs,  MY_IDX_TYPE* rc, MY_IDX_TYPE* wc, int _nedge):
-    numblock(_numb), nedge(_nedge), globalToCacheMap(_globalToC),
-    blockOffsets(_blockOffs), globalReadToCacheMap(_globalRToC),
-    blockReadOffsets(_blockROffs), readC(rc), writeC(wc) {
-
-  #ifdef USE_CUDA
-    checkCudaErrors( cudaMalloc((void**)&blockOffsets_d,
-          numblock*sizeof(int)) );
-    checkCudaErrors( cudaMalloc((void**)&globalToCacheMap_d,
-          blockOffsets[numblock-1]*sizeof(int)) );
-    checkCudaErrors( cudaMalloc((void**)&blockReadOffsets_d,
-          numblock*sizeof(int)) );
-    checkCudaErrors( cudaMalloc((void**)&globalReadToCacheMap_d,
-          blockReadOffsets[numblock-1]*sizeof(int)) );
-    checkCudaErrors( cudaMalloc((void**)&writeC_d,
-          nedge*sizeof(MY_IDX_TYPE)) );
-    checkCudaErrors( cudaMalloc((void**)&readC_d,
-          nedge*sizeof(MY_IDX_TYPE)) );
-
-    checkCudaErrors( cudaMemcpy(blockOffsets_d, blockOffsets,
-          numblock*sizeof(int),  cudaMemcpyHostToDevice) );
-    checkCudaErrors( cudaMemcpy(globalToCacheMap_d, globalToCacheMap,
-          blockOffsets[numblock-1]*sizeof(int),  cudaMemcpyHostToDevice) );
-    checkCudaErrors( cudaMemcpy(blockReadOffsets_d, blockReadOffsets,
-          numblock*sizeof(int),  cudaMemcpyHostToDevice) );
-    checkCudaErrors( cudaMemcpy(globalReadToCacheMap_d, globalReadToCacheMap,
-          blockReadOffsets[numblock-1]*sizeof(int),  cudaMemcpyHostToDevice) );
-    checkCudaErrors( cudaMemcpy(writeC_d, writeC,
-          nedge*sizeof(MY_IDX_TYPE),  cudaMemcpyHostToDevice) );
-    checkCudaErrors( cudaMemcpy(readC_d, readC,
-          nedge*sizeof(MY_IDX_TYPE),  cudaMemcpyHostToDevice) );
-  #endif      
-  }
-
-  ~cacheMap(){
-    free(globalToCacheMap);
-    free(blockOffsets);
-    free(globalReadToCacheMap);
-    free(blockReadOffsets);
-    free(readC);
-    free(writeC);
-
-  #ifdef USE_CUDA
-    //cuda freee
-    checkCudaErrors( cudaFree(globalToCacheMap_d) );
-    checkCudaErrors( cudaFree(blockOffsets_d) );
-    checkCudaErrors( cudaFree(globalReadToCacheMap_d) );
-    checkCudaErrors( cudaFree(blockReadOffsets_d) );
-    checkCudaErrors( cudaFree(writeC_d) );
-    checkCudaErrors( cudaFree(readC_d) );
-  #endif
-  }
-
-};
 
 cacheMap genCacheMap(const int* enode, const int &nedge, 
     const Block_coloring & bc){
   
-  if(bc.reordcolor == nullptr){
+  if(bc.reordcolor == nullptr || bc.numblock == 0){
     return cacheMap(0, nullptr, nullptr, nullptr,
       nullptr, nullptr, nullptr, nedge);
   }
+  printf("Warning Cache Gen\n");
 
   int maxc=0, minc=bc.bs, sumc = 0; // helper variables for recycling faktor
   
@@ -176,6 +157,3 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
   return cacheMap(bc.numblock, globalToCacheMap, blockOffsets,
       globalReadToCacheMap, blockReadOffsets, readC, writeC, nedge);
 }
-
-
-#endif /* end of guard CACHE_MAP_HPP */

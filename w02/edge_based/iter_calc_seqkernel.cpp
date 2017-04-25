@@ -3,7 +3,7 @@
 void iter_calc(const int nedge, const int nnode, const int node_dim,
    const Block_coloring& bc, const Coloring& c, const arg& arg_enode,
    const arg& arg_edge_val, arg& arg_node_val, const arg& arg_node_old,
-   Kernel& timer){
+   cacheMap& cm, Kernel& timer){
 
   int* enode = (int*) arg_enode.data;
   float * node_val = (float*) arg_node_val.data;

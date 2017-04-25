@@ -3,7 +3,7 @@ INC	:= -I$(CUDA_HOME)/include -I.
 LIB	:= -L$(CUDA_HOME)/lib64 -lcudart -lgomp
 
 CPP       	= clang++ 
-CCFLAGS  	= -g
+CCFLAGS  	= -O3
 CPPFLAGS 	= $(CCFLAGS) -std=c++11
 OMPFLAGS 	= -I/home/ireguly/forge/clang_4/llvm/build/projects/openmp/runtime/src/ -fopenmp=libomp
 OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp-contract=fast -Xclang -target-feature -Xclang +ptx35
@@ -11,43 +11,39 @@ OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp
 NVCCFLAGS	:= -lineinfo -arch=sm_35 --use_fast_math
 CFLAGS := -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 
-all: edge_cpu edge_omp edge_gpu
+BASECPP := arg.cpp edge_sim.cpp simulation.cpp
+BASEHPP := arg.hpp simulation.hpp coloring.hpp kernels.hpp timer.hpp graph_gen.hpp rms.hpp graph_helper.hpp reordering.hpp 
+BASEDEF := -DBLOCKSIZE=128 -DMAX_NODE_DIM=10
 
-arg.o: arg.hpp arg.cpp Makefile
-	g++ arg.cpp -c -o arg.o ${CPPFLAGS}
+all: edge_cpu edge_omp edge_gpu edge_gpu_2l edge_gpu_ca edge_gpu_cw
 
-argcu.o: arg.hpp arg.cpp Makefile
-	nvcc arg.cpp -DUSE_CUDA -c -o argcu.o $(INC) $(NVCCFLAGS) $(CFLAGS) $(LIB)
+edge_cpu: Makefile ${BASECPP} ${BASEHPP} coloring.cpp dummycoloring.cpp cache_calc.cpp\
+		seqkernels.cpp 
+	g++ ${CPPFLAGS} ${BASECPP} coloring.cpp dummycoloring.cpp cache_calc.cpp\
+		seqkernels.cpp -o edge_cpu
 
-seqkernels.o: seqkernels.cpp Makefile arg.o
-	g++ seqkernels.cpp -c -o seqkernels.o ${CPPFLAGS}
-
-coloring.o: coloring.hpp coloring.cpp dummycoloring.cpp Makefile
-	g++ coloring.cpp -c -o coloring.o ${CPPFLAGS}
-
-simulation.o: simulation.hpp simulation.cpp Makefile
-	g++ simulation.cpp -c -o simulation.o ${CPPFLAGS}
-
-edge_cpu: edge_sim.cpp Makefile graph_helper.hpp\
-   	rms.hpp timer.hpp kernels.hpp graph_gen.hpp arg.o seqkernels.o simulation.o coloring.o
-	g++ -std=c++11 edge_sim.cpp arg.o seqkernels.o simulation.o coloring.o dummycoloring.cpp -o edge_cpu ${CPPFLAGS}
-
-edge_omp: edge_sim.cpp Makefile graph_helper.hpp\
-   	rms.hpp timer.hpp kernels.hpp graph_gen.hpp arg.o\
-   	ompkernels.cpp simulation.o coloring.o globalcoloring.cpp
-	g++ -std=c++11 edge_sim.cpp arg.o ompkernels.cpp simulation.o coloring.o globalcoloring.cpp -o edge_omp ${CPPFLAGS} -fopenmp
+edge_omp: Makefile ${BASECPP} ${BASEHPP} coloring.cpp cache_calc.cpp globalcoloring.cpp ompkernels.cpp
+	g++ ${CPPFLAGS} -fopenmp ${BASECPP} coloring.cpp globalcoloring.cpp cache_calc.cpp\
+	   ompkernels.cpp -o edge_omp
 	
-edge_gpu: edge_sim.cpp Makefile graph_helper.hpp\
-	rms.hpp timer.hpp kernels.hpp graph_gen.hpp argcu.o\
-	cudakernels.cu globalcoloring.cpp coloring.cpp simulation.cpp cache_calc.hpp
-	nvcc edge_sim.cpp -DUSE_CUDA -DBLOCKSIZE=128 argcu.o simulation.cpp coloring.cpp\
-	   	globalcoloring.cpp cudakernels.cu -o edge_gpu \
+edge_gpu: Makefile ${BASECPP} ${BASEHPP} coloring.cpp cache_calc.cpp globalcoloring.cpp cudakernels.cu
+	nvcc -DUSE_CUDA ${BASEDEF} ${BASECPP} coloring.cpp\
+	   	globalcoloring.cpp cudakernels.cu cache_calc.cpp -o edge_gpu \
 		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
-edge_gpu_2l: edge_sim.cpp Makefile graph_helper.hpp\
-	rms.hpp timer.hpp kernels.hpp graph_gen.hpp argcu.o\
-	cuda2lkernels.cu two_level_coloring.cpp coloring.cpp simulation.cpp cache_calc.hpp
-	nvcc edge_sim.cpp -DUSE_CUDA -DBLOCKSIZE=128 -DMAX_NODE_DIM=10 argcu.o simulation.cpp coloring.cpp\
-	   	two_level_coloring.cpp cuda2lkernels.cu -o edge_gpu_2l \
+
+edge_gpu_2l: Makefile ${BASECPP} ${BASEHPP} coloring.cpp cache_calc.cpp two_level_coloring.cpp cuda2lkernels.cu
+	nvcc -DUSE_CUDA ${BASEDEF} ${BASECPP} coloring.cpp\
+	   	two_level_coloring.cpp cuda2lkernels.cu cache_calc.cpp -o edge_gpu_2l \
+		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
+
+edge_gpu_ca: Makefile ${BASECPP} ${BASEHPP} coloring.cpp cache_calc.cpp two_level_coloring.cpp cuda_cache_kernels.cu
+	nvcc -DUSE_CUDA ${BASEDEF} ${BASECPP} coloring.cpp\
+	   	two_level_coloring.cpp cuda_cache_kernels.cu cache_calc.cpp -o edge_gpu_ca \
+		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
+
+edge_gpu_cw:Makefile ${BASECPP} ${BASEHPP} coloring.cpp cache_calc.cpp two_level_coloring.cpp cuda_cw_kernels.cu
+	nvcc -DUSE_CUDA ${BASEDEF} ${BASECPP} coloring.cpp\
+	   	two_level_coloring.cpp cuda_cw_kernels.cu cache_calc.cpp -o edge_gpu_cw \
 		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
 
 clean:

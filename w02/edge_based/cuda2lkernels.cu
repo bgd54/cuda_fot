@@ -39,7 +39,7 @@ __global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val
 void iter_calc(const int nedge, const int nnode, const int node_dim,
    const Block_coloring& bc, const Coloring& c, const arg& arg_enode,
    const arg& arg_edge_val, arg& arg_node_val, const arg& arg_node_old,
-   Kernel& timer){
+   cacheMap& cm, Kernel& timer){
 
   int* enode_d = (int*) arg_enode.data_d;
   int* color_reord_d = (int *) bc.arg_color_reord.data_d;

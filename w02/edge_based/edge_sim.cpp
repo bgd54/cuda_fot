@@ -97,7 +97,8 @@ int main(int argc, char *argv[]){
     ssoln(nnode, node_dim, arg_node_val, arg_node_old, sim.kernels[0]);
 
     //calc next step
-    iter_calc(nedge, nnode, node_dim, bc, c, arg_enode, arg_edge_val, arg_node_val, arg_node_old, sim.kernels[1]);
+    iter_calc(nedge, nnode, node_dim, bc, c, arg_enode, arg_edge_val, arg_node_val,
+        arg_node_old, cm, sim.kernels[1]);
 
     // rms
     if(i%100==0){
