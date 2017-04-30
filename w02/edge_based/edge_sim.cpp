@@ -65,8 +65,7 @@ int main(int argc, char *argv[]){
   /////////////////////////////////////////////////////////
   printf("start reordering\n");
   TIMER_START(sim.timers[0])
-  //TODO reordering abstrction
-  reorder();
+  reorder( arg_enode, arg_edge_val, dx, dy);
   TIMER_STOP(sim.timers[0])
 
   /////////////////////////////////////////////////////////

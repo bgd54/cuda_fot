@@ -12,18 +12,19 @@
 //dim_x darab el szerepel soronkent es dim_y sor van
 //elkozpontu reprezentaciot ad vissza.
 //  - - - - dim_x=4
-// | | | | | -> fuggoleges elek soronkent: dim_x+1=5
+// | | | |  -> fuggoleges elek soronkent: dim_x=4
 //  - - - -
-// | | | | | 
+// | | | |  
 //  - - - -
-// | | | | | 
+// | | | |  
 //  - - - -
-// | | | | | 
+// | | | |  
 //  - - - - dim_y = 5
-//           -> fuggoleges elekbol allo sorok szama: dim_y-1=4
+// | | | |  
+//           -> fuggoleges elekbol allo sorok szama: dim_y=5
 int* generate_graph(const int& dim_x, const int& dim_y, int& nedge, int& nnode){
-  nedge = dim_x*dim_y + (dim_x+1)*(dim_y-1); 
-  nnode=(dim_x+1)*dim_y;
+  nedge = dim_x*dim_y*2; 
+  nnode=(dim_x+1)*(dim_y+1)-1;//-1 jobb also sarok
   int* enode =(int*) malloc(nedge*2*sizeof(int));
 
   #pragma omp parallel
@@ -37,11 +38,11 @@ int* generate_graph(const int& dim_x, const int& dim_y, int& nedge, int& nnode){
       }
     }
     #pragma omp for collapse(2)
-    for(int y=0;y<dim_y-1;y++){
-      for(int x=0; x<dim_x+1;x++){
-        int edgeId = y*(dim_x+1)+x+dim_x*dim_y;
-        enode[2*edgeId+0]= (y+1)*dim_x+x+y+1;
-        enode[2*edgeId+1]= y*dim_x+x+y;
+    for(int y=0;y<dim_y;y++){
+      for(int x=0; x<dim_x;x++){
+        int edgeId = y*dim_x+x + nedge/2;
+        enode[2*edgeId+0]= (y+1)* (dim_x+1) + x;
+        enode[2*edgeId+1]=  y   * (dim_x+1) + x;
       }
     }
   } // end block of parallel region
@@ -50,8 +51,8 @@ int* generate_graph(const int& dim_x, const int& dim_y, int& nedge, int& nnode){
 }
 
 int* generate_bidirected_graph(const int& dim_x, const int& dim_y, int& nedge, int& nnode){
-  nedge =2*(dim_x*dim_y + (dim_x+1)*(dim_y-1));
-  nnode=(dim_x+1)*dim_y;
+  nedge = dim_x*dim_y*2*2; 
+  nnode=(dim_x+1)*(dim_y+1)-1;//-1 jobb also sarok
   int* enode =(int*) malloc(nedge*2*sizeof(int));
 
   #pragma omp parallel
@@ -67,13 +68,13 @@ int* generate_bidirected_graph(const int& dim_x, const int& dim_y, int& nedge, i
       }
     }
     #pragma omp for collapse(2)
-    for(int y=0;y<dim_y-1;y++){
-      for(int x=0; x<dim_x+1;x++){
-        int edgeId = y*(dim_x+1)+x+dim_x*dim_y;
-        enode[4*edgeId+0]= (y+1)*dim_x+x+y+1;
-        enode[4*edgeId+1]= y*dim_x+x+y;
-        enode[4*edgeId+2]= y*dim_x+x+y;
-        enode[4*edgeId+3]= (y+1)*dim_x+x+y+1;
+    for(int y=0;y<dim_y;y++){
+      for(int x=0; x<dim_x;x++){
+        int edgeId = y*dim_x+x+nedge/4;
+        enode[4*edgeId+0]= (y+1)* (dim_x+1) + x;
+        enode[4*edgeId+1]=  y   * (dim_x+1) + x;
+        enode[4*edgeId+2]=  y   * (dim_x+1) + x;
+        enode[4*edgeId+3]= (y+1)* (dim_x+1) + x;
       }
     }
   } // end block of parallel region

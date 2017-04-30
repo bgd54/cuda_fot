@@ -95,10 +95,10 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
     }
     int cache_size = pointsToCache.size()+readPointsToCache.size();
     if(minc>cache_size) minc = cache_size;
-    else if(cache_size>maxc) maxc = cache_size;
+    if(cache_size>maxc) maxc = cache_size;
 
     sumc += cache_size;
-
+    //printf("BID:%d, cs: %d, min>%d max: %d, sum:%d\n",bIdx,cache_size,minc,maxc,sumc);
     std::copy( pointsToCache.begin(), pointsToCache.end(),
         std::back_insert_iterator<vector<int>>(pointsToCachePerBlocks[bIdx]) );
     std::copy( readPointsToCache.begin(), readPointsToCache.end(),
@@ -118,7 +118,7 @@ cacheMap genCacheMap(const int* enode, const int &nedge,
   }
   printf(
       "cache recycling factor:\nworst block: %lf\tbest block: %lf\t avg:%lf\n\n",
-        maxc/(double)bc.bs,((double)minc)/bc.bs, sumc/(double)nedge );
+        maxc/(2.0*bc.bs),minc/(bc.bs*2.0), sumc/(2.0*nedge) );
 
   int* blockOffsets = (int*) malloc(bc.numblock*sizeof(int));
   int* blockReadOffsets = (int*) malloc(bc.numblock*sizeof(int));
