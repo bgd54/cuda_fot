@@ -14,7 +14,6 @@
 
 struct Graph {
 private:
-  //const MY_SIZE N, M; // num of rows/columns (of points)
   MY_SIZE num_points, num_edges;
 
 public:
@@ -22,11 +21,12 @@ public:
   MY_SIZE *offsets, *point_list;
 
   /* Initialisation {{{1 */
-  Graph(MY_SIZE N/*_*/, MY_SIZE M/*_*/) /*: N(N_), M(M_)*/ {
+  Graph(MY_SIZE N, MY_SIZE M) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
+    num_points = N * M;
     edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
-    fillEdgeList2(N,M);
+    fillEdgeList2(N, M);
 
     // TODO
     // offsets = (MY_SIZE *)malloc(sizeof(MY_SIZE) * (N * M + 1));
@@ -40,12 +40,12 @@ public:
    *
    * Format:
    *   - first line: num_points and num_edges ("\d+\s+\d+")
-   *   - next num_edges line: an edge, denoted by two numbers, the start- and 
+   *   - next num_edges line: an edge, denoted by two numbers, the start- and
    *     endpoint respectively ("\d+\s+\d+")
    * If the reading is broken for some reason, the succesfully read edges are
    * kept and num_edges is set accordingly.
    */
-  Graph (std::istream &is) /*: N(0), M(0)*/ {
+  Graph(std::istream &is) /*: N(0), M(0)*/ {
     is >> num_points >> num_edges;
     edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
     for (MY_SIZE i = 0; i < num_edges; ++i) {
@@ -53,7 +53,7 @@ public:
         num_edges = i;
         break;
       }
-      is >> edge_list[2*i] >> edge_list[2*i+1];
+      is >> edge_list[2 * i] >> edge_list[2 * i + 1];
     }
   }
 
@@ -239,7 +239,6 @@ public:
     }
   }
 };
-
 
 #endif /* end of include guard: GRAPH_HPP_35BFQORK */
 // vim:set et sw=2 ts=2 fdm=marker:
