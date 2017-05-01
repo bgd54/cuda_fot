@@ -31,17 +31,18 @@ template <class UnsignedType> struct GraphCSR {
       edges.push_back(std::make_pair(edge_list[2 * i], edge_list[2 * i + 1]));
     }
     std::sort(edges.begin(), edges.end());
-    UnsignedType old_point = num_points;
     UnsignedType point_ind = 0;
+    point_indices[0] = 0;
     for (UnsignedType i = 0; i < num_edges; ++i) {
       UnsignedType point = edges[i].first;
-      if (point != old_point) {
-        point_indices[point_ind++] = i;
-        old_point = point;
+      while (point != point_ind) {
+        point_indices[++point_ind] = i;
       }
       edge_endpoints[i] = edges[i].second;
     }
-    point_indices[num_points] = num_edges;
+    while (point_ind != num_points) {
+      point_indices[++point_ind] = num_edges;
+    }
   }
 
   ~GraphCSR() {
