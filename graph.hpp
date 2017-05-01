@@ -133,7 +133,7 @@ public:
     // TODO optimize so the sets have roughly equal sizes
     //      ^ do we really need that in hierarchical colouring?
     std::vector<std::vector<MY_SIZE>> edge_partitions;
-    std::vector<std::uint8_t> point_colours(N * M, 0);
+    std::vector<std::uint8_t> point_colours(numPoints(), 0);
     for (MY_SIZE i = from; i < to; ++i) {
       std::uint8_t colour = point_colours[edge_list[2 * i + 1]]++;
       if (colour == edge_partitions.size()) {
