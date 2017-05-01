@@ -6,7 +6,7 @@
 #include <vector>
 
 //#define MY_SIZE int
-using MY_SIZE = std::uint32_t;
+//using MY_SIZE = std::uint32_t;
 
 #include "colouring.hpp"
 #include "helper_cuda.h"
@@ -638,12 +638,14 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   {
     srand(1);
     Problem problem(N, M);
-    problem.graph.reorder();
+    std::cout << "Problem 1 created" << std::endl;
+    problem.reorder();
+    std::cout << "Problem 1 reordered" << std::endl;
     (problem.*algorithm1)(num, reset_every);
     float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       result1.push_back(problem.point_weights[i]);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
+      abs_max = std::max(abs_max, std::abs(problem.point_weights[i]));
     }
     std::cout << "Abs max: " << abs_max << std::endl;
   }
@@ -651,11 +653,13 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   {
     srand(1);
     Problem problem(N, M);
+    std::cout << "Problem 2 created" << std::endl;
     (problem.*algorithm2)(num, reset_every);
+    problem.reorder();
     float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       rms += std::pow(problem.point_weights[i] - result1[i], 2);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
+      abs_max = std::max(abs_max, std::abs(problem.point_weights[i]));
     }
     std::cout << "Abs max: " << abs_max << std::endl;
     rms = std::pow(rms / result1.size(), 0.5);
@@ -669,9 +673,10 @@ int main(int argc, const char **argv) {
   // testGPUSolution(std::atoi(argv[1]));
   // testHierarchicalColouring();
   // testGPUHierarchicalSolution(11);
-  MY_SIZE num = 99;
+  MY_SIZE num = 9;
   MY_SIZE N = 1000;
   MY_SIZE M = 2000;
+  // Reset doesn't work with reorder
   MY_SIZE reset_every = 10;
   //std::cout << "GPU global edge vs GPU hierarchical edge" << std::endl;
   testReordering(num, N, M, reset_every, &Problem::loopGPUEdgeCentred,

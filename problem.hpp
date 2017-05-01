@@ -93,6 +93,8 @@ struct Problem {
         sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num);
     free(temp);
   }
+
+  void reorder() { graph.reorder(edge_weights, point_weights); }
 };
 
 #endif /* end of include guard: PROBLEM_HPP_CGW3IDMV */

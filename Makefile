@@ -17,7 +17,7 @@ SCOTCH_FLAGS += -L/home/software/scotch_5.1.12/lib/
 all: $(TGT)
 
 graph: graph.cu graph.hpp problem.hpp reorder.hpp reorder.cpp colouring.hpp Makefile
-		nvcc graph.cu reorder.cpp -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
+	nvcc graph.cu reorder.cpp -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t"
 
 test_scotch: graph.hpp problem.hpp reorder.hpp reorder.cpp colouring.hpp Makefile test_scotch.cpp
 		g++ test_scotch.cpp reorder.cpp -o $@ $(INC) -std=c++11 $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="unsigned int"

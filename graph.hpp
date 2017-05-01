@@ -1,16 +1,16 @@
 #ifndef GRAPH_HPP_35BFQORK
 #define GRAPH_HPP_35BFQORK
 
+#include "reorder.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <ostream>
 #include <tuple>
 #include <vector>
-#include "reorder.hpp"
 
 struct Graph {
 private:
@@ -189,17 +189,15 @@ public:
     std::for_each(edge_list, edge_list + numEdges() * 2,
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     if (edge_data) {
-      std::vector<std::tuple<MY_SIZE, MY_SIZE, float, float>> edge_tmp(
-          numEdges());
+      std::vector<std::tuple<MY_SIZE, MY_SIZE, float>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp.push_back(
-            std::make_tuple(edge_list[2 * i], edge_list[2 * i + 1],
-                            edge_data[2 * i], edge_data[2 * i + 1]));
+        edge_tmp[i] = std::make_tuple(edge_list[2 * i], edge_list[2 * i + 1],
+                                      edge_data[i]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        std::tie(edge_list[2 * i], edge_list[2 * i + 1], edge_data[2 * i],
-                 edge_data[2 * i + 1]) = edge_tmp[i];
+        std::tie(edge_list[2 * i], edge_list[2 * i + 1], edge_data[i]) =
+            edge_tmp[i];
       }
     } else {
       std::vector<std::tuple<MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
