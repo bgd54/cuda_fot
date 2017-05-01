@@ -14,25 +14,47 @@
 
 struct Graph {
 private:
-  const MY_SIZE N, M; // num of rows/columns (of points)
-  MY_SIZE num_edges;
+  //const MY_SIZE N, M; // num of rows/columns (of points)
+  MY_SIZE num_points, num_edges;
 
 public:
   MY_SIZE *edge_list;
   MY_SIZE *offsets, *point_list;
 
   /* Initialisation {{{1 */
-  Graph(MY_SIZE N_, MY_SIZE M_) : N(N_), M(M_) {
+  Graph(MY_SIZE N/*_*/, MY_SIZE M/*_*/) /*: N(N_), M(M_)*/ {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
-    fillEdgeList2();
+    fillEdgeList2(N,M);
 
     // TODO
     // offsets = (MY_SIZE *)malloc(sizeof(MY_SIZE) * (N * M + 1));
     // point_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
-    // fillPointList();
+    // fillPointList(N,M);
     offsets = point_list = nullptr;
+  }
+
+  /**
+   * Constructs graph from stream.
+   *
+   * Format:
+   *   - first line: num_points and num_edges ("\d+\s+\d+")
+   *   - next num_edges line: an edge, denoted by two numbers, the start- and 
+   *     endpoint respectively ("\d+\s+\d+")
+   * If the reading is broken for some reason, the succesfully read edges are
+   * kept and num_edges is set accordingly.
+   */
+  Graph (std::istream &is) /*: N(0), M(0)*/ {
+    is >> num_points >> num_edges;
+    edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
+    for (MY_SIZE i = 0; i < num_edges; ++i) {
+      if (!is) {
+        num_edges = i;
+        break;
+      }
+      is >> edge_list[2*i] >> edge_list[2*i+1];
+    }
   }
 
   ~Graph() {
@@ -41,7 +63,10 @@ public:
     free(edge_list);
   }
 
-  void fillEdgeList() {
+  /**
+   * Grid, unidirectional: right and down
+   */
+  void fillEdgeList(MY_SIZE N, MY_SIZE M) {
     MY_SIZE array_ind = 0, upper_point_ind = 0, lower_point_ind = M;
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
@@ -60,7 +85,10 @@ public:
     }
   }
 
-  void fillEdgeList2() {
+  /**
+   * Grid, bidirectional
+   */
+  void fillEdgeList2(MY_SIZE N, MY_SIZE M) {
     MY_SIZE array_ind = 0, upper_point_ind = 0, lower_point_ind = M;
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
@@ -93,7 +121,7 @@ public:
     }
   }
 
-  void fillPointList() {
+  void fillPointList(MY_SIZE N, MY_SIZE M) {
     MY_SIZE point_ind = 0, list_ind = 0, edge_ind = 0;
     MY_SIZE prev_degree = 0;
     for (MY_SIZE r = 0; r < N - 1; ++r) {
@@ -152,7 +180,7 @@ public:
 
   MY_SIZE numEdges() const { return num_edges; }
 
-  MY_SIZE numPoints() const { return N * M; }
+  MY_SIZE numPoints() const { return num_points; }
 
   /**
    * Writes the edgelist in the following format:
@@ -211,6 +239,7 @@ public:
     }
   }
 };
+
 
 #endif /* end of include guard: GRAPH_HPP_35BFQORK */
 // vim:set et sw=2 ts=2 fdm=marker:
