@@ -80,6 +80,9 @@ public:
   ScotchReorder &operator=(const ScotchReorder &rhs) = delete;
 
   std::vector<SCOTCH_Num> reorder();
+
+public:
+  const char *strategy_string = "g";
 };
 
 #endif /* end of include guard: REORDER_HPP_IGDYRZTN */

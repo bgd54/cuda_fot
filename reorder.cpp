@@ -23,6 +23,7 @@ ScotchReorder::ScotchReorder(const Graph &_graph)
   SCOTCH_THROW(SCOTCH_graphCheck(&graph));
   try {
 	  SCOTCH_THROW(SCOTCH_stratInit(&strategy));
+	  SCOTCH_THROW(SCOTCH_stratGraphOrder(&strategy,strategy_string));
   } catch (ScotchError &) {
     SCOTCH_graphExit(&graph);
     throw;
