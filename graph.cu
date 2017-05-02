@@ -2,11 +2,12 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <vector>
 
 //#define MY_SIZE int
-//using MY_SIZE = std::uint32_t;
+// using MY_SIZE = std::uint32_t;
 
 #include "colouring.hpp"
 #include "helper_cuda.h"
@@ -401,6 +402,8 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
 }
 /* 1}}} */
 
+using implementation_algorithm_t = void (Problem::*)(MY_SIZE, MY_SIZE);
+
 /* tests {{{1 */
 void testTwoCPUImplementations(MY_SIZE num) {
   // std::cout.precision(3);
@@ -595,7 +598,6 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
   }
 }
 
-using implementation_algorithm_t = void (Problem::*)(MY_SIZE, MY_SIZE);
 void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
                             MY_SIZE reset_every,
                             implementation_algorithm_t algorithm1,
@@ -629,15 +631,16 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   }
 }
 
-void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
-                            MY_SIZE reset_every,
-                            implementation_algorithm_t algorithm1,
-                            implementation_algorithm_t algorithm2) {
+void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
+                    implementation_algorithm_t algorithm1,
+                    implementation_algorithm_t algorithm2) {
   std::vector<float> result1;
   double rms = 0;
   {
     srand(1);
     Problem problem(N, M);
+    /*std::ifstream f("test.in");*/
+    /*Problem problem (f);*/
     std::cout << "Problem 1 created" << std::endl;
     problem.reorder();
     std::cout << "Problem 1 reordered" << std::endl;
@@ -653,6 +656,8 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   {
     srand(1);
     Problem problem(N, M);
+    /*std::ifstream f("rotor37_mesh");*/
+    /*Problem problem (f);*/
     std::cout << "Problem 2 created" << std::endl;
     (problem.*algorithm2)(num, reset_every);
     problem.reorder();
@@ -668,19 +673,29 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
 }
 /* 1}}} */
 
+void generateTimes(std::string in_file) {
+  constexpr MY_SIZE num = 99;
+  std::cout << ":::: Generating problems from file: " << in_file
+            << "::::" << std::endl;
+  std::function<void(implementation_algorithm_t)> run =
+      [&in_file](implementation_algorithm_t algo) {
+        std::ifstream f(in_file);
+        Problem problem(f);
+        std::cout << "--Problem created" << std::endl;
+        (problem.*algo)(num, 0);
+        std::cout << "--Problem finished." << std::endl;
+      };
+  run(&Problem::loopCPUEdgeCentred);
+  run(&Problem::loopGPUEdgeCentred);
+  run(&Problem::loopGPUHierarchical);
+  std::cout << "Finished." << std::endl;
+}
+
 int main(int argc, const char **argv) {
   findCudaDevice(argc, argv);
-  // testGPUSolution(std::atoi(argv[1]));
-  // testHierarchicalColouring();
-  // testGPUHierarchicalSolution(11);
-  MY_SIZE num = 9;
-  MY_SIZE N = 1000;
-  MY_SIZE M = 2000;
-  // Reset doesn't work with reorder
-  MY_SIZE reset_every = 10;
-  //std::cout << "GPU global edge vs GPU hierarchical edge" << std::endl;
-  testReordering(num, N, M, reset_every, &Problem::loopGPUEdgeCentred,
-                         &Problem::loopGPUEdgeCentred);
+  generateTimes("grid_513x513_default");
+  generateTimes("grid_513x513_rcm");
+  generateTimes("grid_513x513_hardcoded");
   cudaDeviceReset();
 }
 
