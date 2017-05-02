@@ -2,8 +2,9 @@
 #include <cstdlib>
 #include <cmath>
 #include <stdio.h>
+#include <vector>
 
-void reorder( arg & arg_enode, arg &arg_eval, int dx, int dy ){
+void reorder( arg & arg_enode, arg &arg_eval, int dx, int dy, arg& arg_node_val){
   int *new_enode = (int*) malloc(
       arg_enode.set_size*arg_enode.set_dim*sizeof(int));
   float *new_eval = (float*) malloc(
@@ -70,6 +71,32 @@ void reorder( arg & arg_enode, arg &arg_eval, int dx, int dy ){
   }
   if(edge_idx*2 != arg_enode.set_size) 
     printf("WARNING: edges reordered: %d/%d\n",edge_idx*2,arg_enode.set_size); 
+  int nnode = arg_node_val.set_size;
+  //indexelni regivel ertek uj index
+  std::vector<int> nodemap(nnode,-1);
+  int nodeIdx =0;
+  for(int i=0; i<arg_enode.set_dim*arg_enode.set_size;++i){
+    if(nodemap[new_enode[i]] == -1){
+      nodemap[new_enode[i]] = nodeIdx++;
+    }
+    new_enode[i] = nodemap[new_enode[i]];
+  }
+  
+  if(nodeIdx != nnode) 
+    printf("WARNING: nodes reordered: %d/%d\n",nodeIdx,nnode); 
+  float *new_node_val = (float*) malloc(
+      arg_node_val.set_size*arg_node_val.set_dim*sizeof(float));
+  float* node_val = (float*)arg_node_val.data;
+  for(int i=0; i<nnode; ++i){
+    for(int dim=0; dim<arg_node_val.set_dim;++dim){
+      //printf("i %d dim %d nnode %d set_dim %d nodemap %d\n",i,dim,nnode,arg_node_val.set_dim,nodemap[i]);
+      new_node_val[nodemap[i]*arg_node_val.set_dim+dim] = 
+        node_val[i*arg_node_val.set_dim+dim]; 
+    }
+  }
+  arg_node_val.set_data(
+      nnode, arg_node_val.set_dim, arg_node_val.data_size, (char*)new_node_val
+      );
 
   arg_enode.set_data(
       arg_enode.set_size,arg_enode.set_dim,arg_enode.data_size,(char*)new_enode
