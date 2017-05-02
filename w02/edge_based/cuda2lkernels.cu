@@ -6,7 +6,7 @@
 __global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val,const float* __restrict__ eval,
     const int* __restrict__ enode, const int* __restrict__ color_reord, const int nedge,
     const int* __restrict__ color, const int* __restrict__ colornum, const int* __restrict__ blocksInColor,
-    int color_start, const int node_dim){
+    int color_start, const int node_dim, const int nnode){
 
   int tid = threadIdx.x;
   
@@ -18,9 +18,13 @@ __global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val
   if(reordIdx < nedge){
     edgeIdx=color_reord[reordIdx];
     mycolor = color[reordIdx];
-    for(int dim=0; dim<node_dim;dim++){ 
-      increment[dim] =
-        eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
+    for(int dim=0; dim<node_dim;dim++){
+    #ifdef USE_SOA
+      int nodeind = enode[edgeIdx*2+0] + nnode * dim;
+    #else
+      int nodeind = enode[edgeIdx*2+0]*node_dim + dim;
+    #endif
+      increment[dim] = eval[edgeIdx]*old[nodeind];
     }
   }
 
@@ -28,7 +32,12 @@ __global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val
   for(int col=0; col<colornum[bIdx];++col){
     if(reordIdx < nedge && col == mycolor){
       for(int dim=0; dim<node_dim;dim++){ 
-        val[enode[2*edgeIdx+1]*node_dim+dim]+= increment[dim];
+      #ifdef USE_SOA
+        int nodeind = enode[edgeIdx*2+1] + nnode * dim;
+      #else
+        int nodeind = enode[edgeIdx*2+1]*node_dim + dim;
+      #endif
+        val[nodeind] += increment[dim];
       }
     }
     __syncthreads();
@@ -58,7 +67,7 @@ void iter_calc(const int nedge, const int nnode, const int node_dim,
     timer.timerStart();
     iter_calc<<<len,BLOCKSIZE>>>(node_old_d,
         node_val_d, edge_val_d, enode_d, color_reord_d, nedge, color_d,
-        colornum_d, block_reord_d, start, node_dim);
+        colornum_d, block_reord_d, start, node_dim, nnode);
     checkCudaErrors( cudaDeviceSynchronize() );
     timer.timerStop();
   }

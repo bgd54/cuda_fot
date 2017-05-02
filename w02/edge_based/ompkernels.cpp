@@ -29,8 +29,13 @@ void iter_calc(const int nedge, const int nnode, const int node_dim,
     for(int j=col>0?c.color_offsets[col-1]:0;j<c.color_offsets[col];++j){
       int edgeIdx=c.color_reord[j];
       for(int dim=0; dim<node_dim;dim++){
+      #ifndef USE_SOA
         node_val[enode[2*edgeIdx+1]*node_dim+dim]+=
           edge_val[edgeIdx]*node_old[enode[edgeIdx*2+0]*node_dim+dim];
+      #else
+        node_val[nnode*dim + enode[2*edgeIdx+1]] += 
+          edge_val[edgeIdx]*node_old[nnode*dim + enode[edgeIdx*2+0]];
+      #endif
       }
     }
     timer.timerStop();

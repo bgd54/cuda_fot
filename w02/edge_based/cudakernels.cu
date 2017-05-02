@@ -5,15 +5,20 @@
 
 __global__ void iter_calc(const float* old, float* val,const float* eval,
     const int* enode, const int* color_reord, const int offset, 
-    const int color_size, const int nedge, const int node_dim){
+    const int color_size, const int nedge, const int node_dim, const int nnode){
 
   int tid = blockDim.x*blockIdx.x+threadIdx.x;
   int reordIdx = tid + offset;
   if(reordIdx<nedge && tid < color_size){
     int edgeIdx=color_reord[reordIdx];
     for(int dim=0; dim<node_dim;dim++){ 
+#ifndef USE_SOA
       val[enode[2*edgeIdx+1]*node_dim+dim]+=
         eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
+#else
+      val[nnode*dim + enode[2*edgeIdx+1]] += 
+        eval[edgeIdx]*old[nnode*dim + enode[edgeIdx*2+0]];
+#endif
     }
   }
 }
@@ -36,7 +41,7 @@ void iter_calc(const int nedge, const int nnode, const int node_dim,
     timer.timerStart();
     iter_calc<<<(color_size-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d, 
         node_val_d, edge_val_d, enode_d, color_reord_d, color_offset,
-        color_size, nedge, node_dim);
+        color_size, nedge, node_dim, nnode);
     checkCudaErrors( cudaDeviceSynchronize() );
     timer.timerStop();
   }

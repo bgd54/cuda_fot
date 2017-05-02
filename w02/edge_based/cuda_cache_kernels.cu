@@ -4,11 +4,12 @@
 #include "ssol_cudakernel.cu"
 
 __global__ void iter_calc( const float* __restrict__  old, 
-    float* __restrict__ val, const int node_dim ,const float* __restrict__ eval,
-    const int nedge, const int* __restrict__ enode, 
-    const int* __restrict__ color_reord, const int* __restrict__ threadcolors,
-    const int* __restrict__ colornum, const int* __restrict__ blocksInColor,
-    const int color_start, const int* __restrict__ global_to_cache, 
+    float* __restrict__ val, const int node_dim, const int nnode,
+    const float* __restrict__ eval, const int nedge,
+    const int* __restrict__ enode, const int* __restrict__ color_reord,
+    const int* __restrict__ threadcolors, const int* __restrict__ colornum,
+    const int* __restrict__ blocksInColor, const int color_start,
+    const int* __restrict__ global_to_cache,
     const int* __restrict__ cacheOffsets,
     const int* __restrict__ global_read_to_cache,
     const int* __restrict__ cacheReadOffsets,
@@ -36,20 +37,35 @@ __global__ void iter_calc( const float* __restrict__  old,
   int read_cache_size = cacheReadOffsets[bIdx] - read_cache_offset;
   //set pointers to cache
   float* valC = shared;
-  float* oldC = shared + cache_size;
+  float* oldC = shared + cache_size*node_dim;
   //CACHE IN
   for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
-      for(int dim=0; dim<node_dim; dim++)
-        valC[(i + tid)*node_dim+dim] =
-            val[global_to_cache[cache_offset + i + tid]*node_dim+dim];
+      for(int dim=0; dim<node_dim; dim++){
+      #ifdef USE_SOA
+        int nodeind = global_to_cache[cache_offset + i + tid]+nnode*dim;
+        int cacheind = (i+tid)+cache_size*dim;
+      #else
+        int nodeind = global_to_cache[cache_offset + i + tid]*node_dim+dim;
+        int cacheind = (i+tid)*node_dim + dim;
+      #endif
+        valC[cacheind] = val[nodeind];
+
+      }
     }
   }
   for (int i = 0; i < read_cache_size; i += blockDim.x) {
     if (i + tid < read_cache_size) {
-      for(int dim=0; dim<node_dim; dim++)
-        oldC[(i + tid)*node_dim+dim] = old[
-              global_read_to_cache[read_cache_offset + i + tid]*node_dim+dim];
+      for(int dim=0; dim<node_dim; dim++){
+      #ifdef USE_SOA
+        int nodeind = global_read_to_cache[read_cache_offset + i + tid]+nnode*dim;
+        int cacheind = (i+tid)+read_cache_size*dim;
+      #else
+        int nodeind = global_read_to_cache[read_cache_offset + i + tid]*node_dim+dim;
+        int cacheind = (i+tid)*node_dim + dim;
+      #endif
+        oldC[cacheind] = old[nodeind];
+      }
     }
   }
  
@@ -63,7 +79,12 @@ __global__ void iter_calc( const float* __restrict__  old,
     edgeIdx=color_reord[reordIdx];
     mycolor = threadcolors[reordIdx];
     for(int dim=0; dim<node_dim;dim++){ 
-      increment[dim] = eval[edgeIdx]*oldC[ireadthisIdx*node_dim+dim];
+    #ifdef USE_SOA
+      int nodeind = ireadthisIdx + read_cache_size * dim;
+    #else
+      int nodeind = ireadthisIdx*node_dim + dim;
+    #endif
+      increment[dim] = eval[edgeIdx]*oldC[nodeind];
     }
   }
 
@@ -71,7 +92,12 @@ __global__ void iter_calc( const float* __restrict__  old,
   for(int col=0; col<colornum[bIdx];++col){
     if(reordIdx < nedge && col == mycolor){
       for(int dim=0; dim<node_dim;dim++){ 
-        valC[iwritethisIdx*node_dim+dim]+= increment[dim];
+        //val[enode[2*edgeIdx+1]*node_dim+dim] += increment[dim];
+      #ifdef USE_SOA
+        valC[iwritethisIdx+cache_size*dim] += increment[dim];
+      #else
+        valC[iwritethisIdx*node_dim+dim] += increment[dim];
+      #endif
       }
     }
     __syncthreads();
@@ -80,9 +106,16 @@ __global__ void iter_calc( const float* __restrict__  old,
   //CACHE BACK
   for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
-      for(int dim=0; dim<node_dim; dim++)
-        val[global_to_cache[cache_offset + i + tid]*node_dim+dim] = 
-          valC[(i + tid)*node_dim+dim];
+      for(int dim=0; dim<node_dim; dim++){
+      #ifdef USE_SOA
+        int nodeind = global_to_cache[cache_offset + i + tid]+nnode*dim;
+        int cacheind = (i+tid)+cache_size*dim;
+      #else
+        int nodeind = global_to_cache[cache_offset + i + tid]*node_dim+dim;
+        int cacheind = (i+tid)*node_dim + dim;
+      #endif
+        val[nodeind] = valC[cacheind];
+      }
     }
   }
  
@@ -110,7 +143,7 @@ void iter_calc(const int nedge, const int nnode, const int node_dim,
     timer.timerStart();
     //TODO shared memory calc.. 4*->worst case
     iter_calc<<<len,BLOCKSIZE,4*BLOCKSIZE*node_dim*sizeof(float)>>>(
-        node_old_d, node_val_d, node_dim, edge_val_d, nedge, enode_d,
+        node_old_d, node_val_d, node_dim, nnode, edge_val_d, nedge, enode_d,
         color_reord_d, color_d, colornum_d, block_reord_d, start,
         cm.globalToCacheMap_d, cm.blockOffsets_d,
         cm.globalReadToCacheMap_d, cm.blockReadOffsets_d,

@@ -4,18 +4,19 @@ cd ../w02/edge_based
 
 mkdir output
 
-make
+touch output/versions
 
-for ver in edge_cpu edge_coloring edge_omp edge_gpu edge_gpu_2l edge_gpu_cw edge_gpu_ca
+#make
+
+params="-bidir -dx 1600 -dy 1600"
+
+for ver in edge_omp edge_gpu edge_gpu_2l edge_gpu_cw edge_gpu_ca edge_gpu_2l_r edge_gpu_cw_r edge_gpu_ca_r edge_omp_soa edge_gpu_soa edge_gpu_2l_soa edge_gpu_cw_soa edge_gpu_ca_soa edge_gpu_2l_r_soa edge_gpu_cw_r_soa edge_gpu_ca_r_soa
 do
-  params=("-dx 256 -dy 257" "-dx 1000 -dy 2000")
-  names=(256 1000)
-  for i in 0 1
-  do 
-    for bidir in "" "-bidir"
-    do
-      echo "./$ver ${params[$i]} $bidir"
-      ./$ver ${params[$i]} $bidir > output/$ver${names[$i]}$bidir
-    done
+  mkdir output/${ver}
+  for dim in 1 2 4 8 16 24 26 28 30
+  do
+    echo "./$ver ${params} -ndim ${dim}"
+    ./$ver ${params} -ndim ${dim} | tee output/${ver}/${ver}_${dim}
+    echo "${ver}_${dim}" >> output/versions
   done
 done

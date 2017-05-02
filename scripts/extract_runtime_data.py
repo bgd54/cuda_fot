@@ -8,7 +8,7 @@ parser = argparse.ArgumentParser(description=\
 parser.add_argument('--version_file', '-f', default='versions',\
         help='name of the file containing version filenames' + \
             'which you want to process.')
-parser.add_argument('--path', '-p', default='',nargs=1,\
+parser.add_argument('--path', '-p', default='',\
         help='Path where test results placed.' )
 parser.add_argument('--print_bw', '--bw', action='store_true',default=False,\
         help='Print bandwith data.' ) #TODO inkabb ide is fajlt megadni?
@@ -89,30 +89,30 @@ def processkernels(fname="cuda-AOS-2.8m"):
     
     return kernels
 
-def printtoCSV(results):
-  with open("results.csv","w") as fout:
-    line = ";".join([ ver for ver in results.keys()])
+def printtoCSV(results, path=""):
+  with open(os.path.join(path,"results.csv"),"w") as fout:
+    line = ";".join([ ver[0] for ver in results])
     fout.write(";"+line+"\n")
-    kernel_names = [k.name for k in results[list(results.keys())[0]]]
+    kernel_names = [k.name for k in results[0][1]]
     for i in range(len(kernel_names)):
       line = kernel_names[i]
-      for ver in results.keys():
-        line += ";%5lf"%results[ver][i].getTotalTime()
+      for ver in results:
+        line += ";%5lf"%ver[1][i].getTotalTime()
       fout.write(line+"\n")
 
 def print_bw():
     print('TODO implement bw printing')
 
 def collecttestresults(tests="tests", path="", printbw=False): #TODO bandwithek kiszedese MPI time szamolas
-  results = dict()
+  results = []
   with open(tests, 'r') as fin:
     for test in fin:
         test = test.strip()
         testfilepath = os.path.join(path,test)
         print(testfilepath)
         currResults = processkernels(testfilepath)
-        results[test] = currResults
-  printtoCSV(results)
+        results.append([test , currResults])
+  printtoCSV(results,path)
 
 print(args)
 collecttestresults(args.version_file, args.path, args.print_bw)

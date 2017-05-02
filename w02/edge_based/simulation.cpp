@@ -28,7 +28,7 @@ Simulation::Simulation(std::vector<Kernel> _kernels, std::vector<timer> _timers)
         kernels(_kernels), timers(_timers){}
 Simulation::Simulation(size_t nedge, size_t nnode, int node_dim){
   kernels = {Kernel("ssoln", 2*nnode*node_dim*sizeof(float)),
-          Kernel("iter", (2*nnode+nedge)*sizeof(float)), 
+          Kernel("iter", (2*node_dim*nnode+nedge)*sizeof(float)), 
           Kernel("rms", 0)};
 }
 void Simulation::start(){

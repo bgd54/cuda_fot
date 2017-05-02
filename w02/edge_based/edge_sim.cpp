@@ -11,9 +11,6 @@
 
 using namespace std;
 
-#define BLOCKSIZE 128
-#define MAX_NODE_DIM 10
-
 ////////////////////////////////////////////////////////////////////////////////
 // CPU routines
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,6 +22,25 @@ void addTimers(Simulation &sim){
   sim.timers.push_back(timer("calc_cache"));
   #endif
 }
+
+void SOA(arg &arg_data){
+  float* data =(float*) arg_data.data; 
+#ifdef USE_SOA
+  printf("AOS/SOA conversion.\n");
+  float* tmp = 
+    (float*) malloc(arg_data.set_size*arg_data.set_dim*sizeof(float));
+  
+  for(int i=0; i<arg_data.set_size; ++i){
+    for(int j=0; j<arg_data.set_dim; ++j){
+      tmp[arg_data.set_size*j+i] = data[arg_data.set_dim*i+j]; 
+    } 
+  }
+
+  arg_data.set_data(arg_data.set_size,
+      arg_data.set_dim,arg_data.data_size,(char*)tmp);
+#endif
+}
+
 
 int main(int argc, char *argv[]){
   int niter=1000;
@@ -53,6 +69,12 @@ int main(int argc, char *argv[]){
   graph_generate(dx, dy, node_dim, edge_dim, bidir,
       arg_enode, arg_node_val, arg_node_old, arg_edge_val);
   int nnode = arg_node_val.set_size, nedge = arg_enode.set_size;
+
+  ///////////////////////////////////////////////////////////////////////
+  //                            AOS/SOA
+  ///////////////////////////////////////////////////////////////////////
+  SOA(arg_node_val); 
+  SOA(arg_node_old); 
 
   ///////////////////////////////////////////////////////////////////////
   //                            timer
