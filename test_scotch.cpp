@@ -32,6 +32,9 @@ void testReordering() {
 }
 
 int main() {
-  testReordering();
+  //testReordering();
+  Graph graph(513,513);
+  std::ofstream f ("grid_513x513_hardcoded");
+  graph.writeEdgeList(f);
   return 0;
 }

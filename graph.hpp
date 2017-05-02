@@ -26,7 +26,7 @@ public:
     num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
     edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
-    fillEdgeList2(N, M);
+    fillEdgeListBlock(N, M);
 
     // TODO
     // offsets = (MY_SIZE *)malloc(sizeof(MY_SIZE) * (N * M + 1));
@@ -119,6 +119,52 @@ public:
       edge_list[array_ind++] = upper_point_ind;
       ++upper_point_ind;
     }
+  }
+
+  /**
+   * Grid, hard coded block-indexing
+   * good for BLOCK_SIZE = 64
+   */
+  void fillEdgeListBlock (MY_SIZE N, MY_SIZE M) {
+    assert((N-1)%4 == 0);
+    assert((M-1)%4 == 0);
+    assert((2*(N-1) + 2*(M-1)) % 64 == 0);
+    MY_SIZE ind = 0;
+    for (MY_SIZE i = 0; i < (N-1) / 4; ++i) {
+      for (MY_SIZE j = 0; j < (M-1) / 4; ++j) {
+        for (MY_SIZE k = 0; k <= 3; ++k) {
+          for (MY_SIZE l = 0; l <= 3; ++l) {
+            // Down
+            edge_list[ind++] = (4*i + k) * M + (4*j + l);
+            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l);
+            // Right
+            edge_list[ind++] = (4*i + k) * M + (4*j + l);
+            edge_list[ind++] = (4*i + k) * M + (4*j + l + 1);
+            // Up
+            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l + 1);
+            edge_list[ind++] = (4*i + k) * M + (4*j + l + 1);
+            // Left
+            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l + 1);
+            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l);
+          }
+        }
+      }
+    }
+    for (MY_SIZE i = 0; i < N-1; ++i) {
+      // Left side, edges directed upwards
+      edge_list[ind++] = (i + 1) * M;
+      edge_list[ind++] = i * M;
+      // Right side, edges directed downwards
+      edge_list[ind++] = i * M + (M - 1);
+      edge_list[ind++] = (i + 1) * M + (M - 1);
+      // Top side, edges directed left
+      edge_list[ind++] = i + 1;
+      edge_list[ind++] = i;
+      // Down side, edges directed right
+      edge_list[ind++] = (N - 1) * M + i;
+      edge_list[ind++] = (N - 1) * M + i + 1;
+    }
+    assert(ind == 2*numEdges());
   }
 
   void fillPointList(MY_SIZE N, MY_SIZE M) {
