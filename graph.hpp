@@ -18,7 +18,7 @@ private:
 
 public:
   MY_SIZE *edge_list;
-  MY_SIZE *offsets, *point_list;
+  MY_SIZE *offsets = nullptr, *point_list = nullptr;
 
   /* Initialisation {{{1 */
   Graph(MY_SIZE N, MY_SIZE M, bool block = false) {
