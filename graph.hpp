@@ -21,12 +21,16 @@ public:
   MY_SIZE *offsets, *point_list;
 
   /* Initialisation {{{1 */
-  Graph(MY_SIZE N, MY_SIZE M) {
+  Graph(MY_SIZE N, MY_SIZE M, bool block = false) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
     edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
-    fillEdgeListBlock(N, M);
+    if (block) {
+      fillEdgeListBlock(N, M);
+    } else {
+      fillEdgeList2(N,M);
+    }
 
     // TODO
     // offsets = (MY_SIZE *)malloc(sizeof(MY_SIZE) * (N * M + 1));
@@ -129,6 +133,7 @@ public:
     assert((N-1)%4 == 0);
     assert((M-1)%4 == 0);
     assert((2*(N-1) + 2*(M-1)) % 64 == 0);
+    // TODO csucsokat atszamozni
     MY_SIZE ind = 0;
     for (MY_SIZE i = 0; i < (N-1) / 4; ++i) {
       for (MY_SIZE j = 0; j < (M-1) / 4; ++j) {
