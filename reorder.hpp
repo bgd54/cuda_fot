@@ -2,6 +2,7 @@
 #define REORDER_HPP_IGDYRZTN
 
 #include <algorithm>
+#include <cassert>
 #include <limits>
 #include <scotch.h>
 #include <vector>
@@ -25,40 +26,54 @@ template <class UnsignedType> struct GraphCSR {
                       std::size_t(std::numeric_limits<MY_SIZE>::max()),
                   "GraphCSR: UnsignedType too small.");
     point_indices = new UnsignedType[num_points + 1];
-    edge_endpoints = new UnsignedType[num_edges];
-    std::vector<std::pair<UnsignedType, UnsignedType>> edges;
-    for (UnsignedType i = 0; i < num_edges; ++i) {
-      edges.push_back(std::make_pair(edge_list[2 * i], edge_list[2 * i + 1]));
+    std::vector<std::pair<UnsignedType, UnsignedType>> incidence;
+    for (UnsignedType i = 0; i < 2 * num_edges; ++i) {
+      incidence.push_back(std::make_pair(edge_list[i], i / 2));
     }
-    std::sort(edges.begin(), edges.end());
+    std::sort(incidence.begin(), incidence.end());
     UnsignedType point_ind = 0;
     point_indices[0] = 0;
-    for (UnsignedType i = 0; i < num_edges; ++i) {
-      UnsignedType point = edges[i].first;
-      while (point != point_ind) {
-        point_indices[++point_ind] = i;
+    for (UnsignedType i = 0; i < 2 * num_edges; ++i) {
+      UnsignedType current_point = incidence[i].first;
+      UnsignedType current_edge = incidence[i].second;
+      while (current_point != point_ind) {
+        point_indices[++point_ind] = edge_endpoints.size();
       }
-      edge_endpoints[i] = edges[i].second;
+      assert(edge_list[2 * current_edge] != edge_list[2 * current_edge + 1]);
+      if (edge_list[2 * current_edge] != current_point) {
+        assert(edge_list[2 * current_edge + 1] == current_point);
+        UnsignedType other_point = edge_list[2 * current_edge];
+        if (std::find(edge_endpoints.begin() + point_indices[current_point],
+                      edge_endpoints.end(),
+                      other_point) == edge_endpoints.end()) {
+          edge_endpoints.push_back(other_point);
+        }
+      } else {
+        UnsignedType other_point = edge_list[2 * current_edge + 1];
+        if (std::find(edge_endpoints.begin() + point_indices[current_point],
+                      edge_endpoints.end(),
+                      other_point) == edge_endpoints.end()) {
+          edge_endpoints.push_back(other_point);
+        }
+      }
     }
     while (point_ind != num_points) {
       point_indices[++point_ind] = num_edges;
     }
   }
 
-  ~GraphCSR() {
-    delete[] point_indices;
-    delete[] edge_endpoints;
-  }
+  ~GraphCSR() { delete[] point_indices; }
 
   GraphCSR(const GraphCSR &other) = delete;
   GraphCSR &operator=(const GraphCSR &rhs) = delete;
 
   const UnsignedType *pointIndices() const { return point_indices; }
 
-  const UnsignedType *edgeEndpoints() const { return edge_endpoints; }
+  const UnsignedType *edgeEndpoints() const { return edge_endpoints.data(); }
 
 private:
-  UnsignedType *point_indices, *edge_endpoints;
+  UnsignedType *point_indices;
+  std::vector<UnsignedType> edge_endpoints;
 };
 /* 1}}} */
 
