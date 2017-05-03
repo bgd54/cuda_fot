@@ -3,9 +3,10 @@
 #include "kernels.hpp"
 #include "ssol_cudakernel.cu"
 
+template <int node_dim>
 __global__ void iter_calc(const float* old, float* val,const float* eval,
     const int* enode, const int* color_reord, const int offset, 
-    const int color_size, const int nedge, const int node_dim, const int nnode){
+    const int color_size, const int nedge, const int nnode){
 
   int tid = blockDim.x*blockIdx.x+threadIdx.x;
   int reordIdx = tid + offset;
@@ -39,9 +40,9 @@ void iter_calc(const int nedge, const int nnode, const int node_dim,
     int color_offset = col==0 ? 0 : c.color_offsets[col-1];
     int color_size = c.color_offsets[col] - color_offset;
     timer.timerStart();
-    iter_calc<<<(color_size-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d, 
+    iter_calc<NODE_DIM><<<(color_size-1)/BLOCKSIZE+1,BLOCKSIZE>>>(node_old_d, 
         node_val_d, edge_val_d, enode_d, color_reord_d, color_offset,
-        color_size, nedge, node_dim, nnode);
+        color_size, nedge, nnode);
     checkCudaErrors( cudaDeviceSynchronize() );
     timer.timerStop();
   }

@@ -46,7 +46,6 @@ int main(int argc, char *argv[]){
   int niter=1000;
   int dx = 1000, dy = 2000;
   bool bidir=false;
-  int node_dim = 1, edge_dim = 1;
   ///////////////////////////////////////////////////////////////////////
   //                            params
   ///////////////////////////////////////////////////////////////////////
@@ -55,7 +54,6 @@ int main(int argc, char *argv[]){
     else if (!strcmp(argv[i],"-dx")) dx=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-dy")) dy=atoi(argv[++i]);
     else if (!strcmp(argv[i],"-bidir")) bidir=true;
-    else if (!strcmp(argv[i],"-ndim")) node_dim=atoi(argv[++i]);
     else {
       fprintf(stderr,"Error: Command-line argument '%s' not recognized.\n",
           argv[i]);
@@ -66,14 +64,14 @@ int main(int argc, char *argv[]){
   //                            graph gen
   ///////////////////////////////////////////////////////////////////////
   arg arg_enode, arg_node_val, arg_node_old, arg_edge_val;
-  graph_generate(dx, dy, node_dim, edge_dim, bidir,
+  graph_generate(dx, dy, NODE_DIM, 1, bidir,
       arg_enode, arg_node_val, arg_node_old, arg_edge_val);
   int nnode = arg_node_val.set_size, nedge = arg_enode.set_size;
   
   ///////////////////////////////////////////////////////////////////////
   //                            timer
   ///////////////////////////////////////////////////////////////////////
-  Simulation sim(nedge, nnode, node_dim);
+  Simulation sim(nedge, nnode, NODE_DIM);
   addTimers(sim);
 
   /////////////////////////////////////////////////////////
@@ -83,13 +81,7 @@ int main(int argc, char *argv[]){
   TIMER_START(sim.timers[0])
   reorder( arg_enode, arg_edge_val, dx, dy, arg_node_val);
   TIMER_STOP(sim.timers[0])
-
-  ///////////////////////////////////////////////////////////////////////
-  //                            AOS/SOA
-  ///////////////////////////////////////////////////////////////////////
-  SOA(arg_node_val); 
-  SOA(arg_node_old); 
-
+  
   /////////////////////////////////////////////////////////
   //                        coloring
   /////////////////////////////////////////////////////////
@@ -97,8 +89,14 @@ int main(int argc, char *argv[]){
   Block_coloring bc;
   Coloring c;
   TIMER_START(sim.timers[1])
-  coloring(arg_enode, nedge, nnode, bc, c);
+  coloring(arg_enode, nedge, nnode, bc, c, arg_edge_val, arg_node_val);
   TIMER_STOP(sim.timers[1])
+
+  ///////////////////////////////////////////////////////////////////////
+  //                            AOS/SOA
+  ///////////////////////////////////////////////////////////////////////
+  SOA(arg_node_val); 
+  SOA(arg_node_old); 
 
   /////////////////////////////////////////////////////////
   //                        cache_calc
@@ -115,10 +113,10 @@ int main(int argc, char *argv[]){
   //______________________________main_loop_____________________________
   for(int i=0;i<=niter;++i){
     //save old
-    ssoln(nnode, node_dim, arg_node_val, arg_node_old, sim.kernels[0]);
+    ssoln(nnode, NODE_DIM, arg_node_val, arg_node_old, sim.kernels[0]);
 
     //calc next step
-    iter_calc(nedge, nnode, node_dim, bc, c, arg_enode, arg_edge_val, arg_node_val,
+    iter_calc(nedge, nnode, NODE_DIM, bc, c, arg_enode, arg_edge_val, arg_node_val,
         arg_node_old, cm, sim.kernels[1]);
 
     // rms
@@ -127,7 +125,7 @@ int main(int argc, char *argv[]){
       arg_node_old.update();
       arg_node_val.update();
       rms_calc((float*) arg_node_val.data, (float*) arg_node_old.data,
-          nnode, i, node_dim);
+          nnode, i, NODE_DIM);
       sim.kernels[2].timerStop();
     }
   }

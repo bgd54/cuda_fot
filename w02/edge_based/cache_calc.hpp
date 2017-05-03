@@ -24,6 +24,7 @@ struct cacheMap{
   int *globalToCacheMap_d, *blockOffsets_d;
   int *globalReadToCacheMap_d, *blockReadOffsets_d;
   MY_IDX_TYPE *readC_d, *writeC_d;
+  int maxc;
   #endif
   //Constructors
   cacheMap(int _numb, int* _globalToC, int* _blockOffs,  int* _globalRToC,

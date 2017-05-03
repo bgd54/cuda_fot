@@ -12,6 +12,12 @@ cacheMap::cacheMap(int _numb, int* _globalToC, int* _blockOffs,  int* _globalRTo
     readC_d = writeC_d = nullptr;
     return;
   }
+  maxc = 0;
+  for(int i=1;i<numblock;++i){
+    int c = blockOffsets[i]-blockOffsets[i-1] + blockReadOffsets[i]-blockReadOffsets[i-1];
+    maxc = maxc>c?maxc:c;
+  }
+
   checkCudaErrors( cudaMalloc((void**)&blockOffsets_d,
         numblock*sizeof(int)) );
   checkCudaErrors( cudaMalloc((void**)&globalToCacheMap_d,

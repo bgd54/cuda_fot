@@ -59,6 +59,6 @@ struct Block_coloring{
 
 Block_coloring block_coloring(int* enode, int nedge, int blockSize=128);
 
-void coloring(arg& arg_enode, int nedge, int nnode, Block_coloring& bc, Coloring& c);
+void coloring(arg& arg_enode, int nedge, int nnode, Block_coloring& bc, Coloring& c, arg& arg_eval, arg& arg_node_val);
 
 #endif

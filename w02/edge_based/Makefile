@@ -8,12 +8,12 @@ CPPFLAGS 	= $(CCFLAGS) -std=c++11
 OMPFLAGS 	= -I/home/ireguly/forge/clang_4/llvm/build/projects/openmp/runtime/src/ -fopenmp=libomp
 OMPOFFLOAD 	= -fopenmp-targets=nvptx64-nvidia-cuda -fopenmp-nonaliased-maps -ffp-contract=fast -Xclang -target-feature -Xclang +ptx35
 
-NVCCFLAGS	:= -lineinfo -arch=sm_35 --use_fast_math
+NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
 CFLAGS := -O3 -std=c++11 -Xcompiler -fopenmp
 
 BASECPP := arg.cpp edge_sim.cpp simulation.cpp coloring.cpp
 BASEHPP := arg.hpp simulation.hpp coloring.hpp kernels.hpp timer.hpp graph_gen.hpp rms.hpp graph_helper.hpp reordering.hpp 
-BASEDEF := -DBLOCKSIZE=128 -DMAX_NODE_DIM=32
+BASEDEF := -DBLOCKSIZE=128 -DNODE_DIM=${NDIM} -DUSE_SOA
 
 all: edge_omp edge_gpu edge_gpu_2l edge_gpu_ca edge_gpu_cw edge_gpu_2l_r edge_gpu_ca_r edge_gpu_cw_r
 
