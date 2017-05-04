@@ -43,14 +43,16 @@ template <class UnsignedType> struct GraphCSR {
       if (edge_list[2 * current_edge] != current_point) {
         assert(edge_list[2 * current_edge + 1] == current_point);
         UnsignedType other_point = edge_list[2 * current_edge];
-        if (std::find(edge_endpoints.begin() + point_indices[current_point],
+        if (point_indices[current_point] == edge_endpoints.size() ||
+            std::find(edge_endpoints.begin() + point_indices[current_point],
                       edge_endpoints.end(),
                       other_point) == edge_endpoints.end()) {
           edge_endpoints.push_back(other_point);
         }
       } else {
         UnsignedType other_point = edge_list[2 * current_edge + 1];
-        if (std::find(edge_endpoints.begin() + point_indices[current_point],
+        if (point_indices[current_point] == edge_endpoints.size() ||
+            std::find(edge_endpoints.begin() + point_indices[current_point],
                       edge_endpoints.end(),
                       other_point) == edge_endpoints.end()) {
           edge_endpoints.push_back(other_point);
@@ -58,7 +60,7 @@ template <class UnsignedType> struct GraphCSR {
       }
     }
     while (point_ind != num_points) {
-      point_indices[++point_ind] = num_edges;
+      point_indices[++point_ind] = edge_endpoints.size();
     }
   }
 
@@ -70,6 +72,8 @@ template <class UnsignedType> struct GraphCSR {
   const UnsignedType *pointIndices() const { return point_indices; }
 
   const UnsignedType *edgeEndpoints() const { return edge_endpoints.data(); }
+
+  UnsignedType numArcs () const { return edge_endpoints.size(); }
 
 private:
   UnsignedType *point_indices;

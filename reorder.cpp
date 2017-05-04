@@ -18,7 +18,7 @@ ScotchReorder::ScotchReorder(const Graph &_graph)
       csr(_graph.numPoints(), _graph.numEdges(), _graph.edge_list) {
   SCOTCH_THROW(SCOTCH_graphInit(&graph));
   SCOTCH_THROW(SCOTCH_graphBuild(&graph, 0, csr.num_points, csr.pointIndices(),
-                                 NULL, NULL, NULL, csr.num_edges,
+                                 NULL, NULL, NULL, csr.numArcs(),
                                  csr.edgeEndpoints(), NULL));
   SCOTCH_THROW(SCOTCH_graphCheck(&graph));
   try {
