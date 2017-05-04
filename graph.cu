@@ -674,7 +674,7 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
 /* 1}}} */
 
 void generateTimes(std::string in_file) {
-  constexpr MY_SIZE num = 99;
+  constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
             << "::::" << std::endl;
   std::function<void(implementation_algorithm_t)> run =
@@ -693,9 +693,21 @@ void generateTimes(std::string in_file) {
 
 int main(int argc, const char **argv) {
   findCudaDevice(argc, argv);
-  generateTimes("grid_513x513_default");
-  generateTimes("grid_513x513_rcm");
-  generateTimes("grid_513x513_hardcoded");
+  //generateTimes("grid_513x513_default");
+  //generateTimes("grid_513x513_rcm");
+  //generateTimes("grid_513x513_hardcoded");
+  /*generateTimes("rotor37_nonrenum");*/
+  /*generateTimes("rotor37_nonrenum.rcm");*/
+  /*generateTimes("rotor37_nonrenum.scotch");*/
+  /*generateTimes("grid_1025x1025_default");*/
+  /*generateTimes("grid_1025x1025_default.rcm");*/
+  /*generateTimes("grid_1025x1025_default.scotch");*/
+  /*generateTimes("grid_1025x1025_hardcoded");*/
+  /*generateTimes("grid_1025x1025_hardcoded2");*/
+  MY_SIZE num = 99;
+  MY_SIZE N = 1000, M = 2000;
+  MY_SIZE reset_every = 10;
+  testTwoImplementations(num,N,M,reset_every,&Problem::loopCPUEdgeCentred,&Problem::loopCPUEdgeCentredOMP);
   cudaDeviceReset();
 }
 

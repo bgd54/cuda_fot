@@ -6,7 +6,7 @@ HDR = $(wildcard *.hpp)
 TGT = $(patsubst %.cu,%,$(SRC))
 
 NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
-NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra
+NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 
 OPTIMIZATION_FLAGS := -g
 #OPTIMIZATION_FLAGS := -O3

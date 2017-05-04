@@ -103,6 +103,49 @@ struct Problem {
     free(temp);
   }
 
+  void stepCPUEdgeCentredOMP (const std::vector<MY_SIZE> &inds, float *out) {
+    #pragma omp parallel for
+    for (MY_SIZE i = 0; i < inds.size(); ++i) {
+      MY_SIZE ind = inds[i];
+      out[graph.edge_list[2 * ind + 1]] +=
+          edge_weights[ind] * point_weights[graph.edge_list[2 * ind]];
+    }
+  }
+
+  void loopCPUEdgeCentredOMP (MY_SIZE num, MY_SIZE reset_every = 0) {
+    float *temp = (float *)malloc(sizeof(float) * graph.numPoints());
+    std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
+    MY_SIZE num_of_colours = partition.size();
+    TIMER_START(t);
+    #pragma omp parallel for
+    for (MY_SIZE e = 0; e < graph.numPoints(); ++e) {
+      temp[e] = point_weights[e];
+    }
+    for (MY_SIZE i = 0; i < num; ++i) {
+      for (MY_SIZE c = 0; c < num_of_colours; ++c) {
+        stepCPUEdgeCentredOMP(partition[c],temp);
+      }
+      #pragma omp parallel for
+      for (MY_SIZE e = 0; e < graph.numPoints(); ++e) {
+        point_weights[e] = temp[e];
+      }
+      TIMER_TOGGLE(t);
+      if (reset_every && i % reset_every == reset_every - 1) {
+        reset();
+        #pragma omp parallel for
+        for (MY_SIZE e = 0; e < graph.numPoints(); ++e) {
+          temp[e] = point_weights[e];
+        }
+      }
+      TIMER_TOGGLE(t);
+    }
+    PRINT_BANDWIDTH(t, "loopCPUEdgeCentredOMP",
+        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num,
+        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num
+        );
+    free(temp);
+  }
+
   void reorder() { graph.reorder(edge_weights, point_weights); }
 };
 
