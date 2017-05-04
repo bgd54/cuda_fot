@@ -43,10 +43,14 @@ __global__ void iter_calc( const float* __restrict__  old,
   for (int i = 0; i < max_cacge_size; i += blockDim.x) {
     if (i + tid < cache_size) {
       for(int dim=0; dim<node_dim; dim++){
+        //Not sure what global_to_cache looks like. But it should be sorted for each
+        //block, so adjacent threads access adjacent values in memory. readC and
+        // writeC of course would have to change alongside.
       #ifdef USE_SOA
         int nodeind = global_to_cache[cache_offset + i + tid]+nnode*dim;
         int cacheind = (i+tid)+cache_size*dim;
       #else
+        //For AoS, adjacent threads should read the different dim positions
         int nodeind = global_to_cache[cache_offset + i + tid]*node_dim+dim;
         int cacheind = (i+tid)*node_dim + dim;
       #endif
@@ -54,6 +58,7 @@ __global__ void iter_calc( const float* __restrict__  old,
 
       }
     }
+
     if (i + tid < read_cache_size) {
       for(int dim=0; dim<node_dim; dim++){
       #ifdef USE_SOA
@@ -85,6 +90,8 @@ __global__ void iter_calc( const float* __restrict__  old,
     }
   }
 
+  //You can use about half as much shared memory, if you do not pre-load valC,
+  //but instead increment here. Perhaps an additional variant.
   //CALC VAL
   for(int col=0; col<colornum[bIdx];++col){
     if(col == mycolor){

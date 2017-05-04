@@ -35,6 +35,7 @@ __global__ void iter_calc( const float* __restrict__  old,
   for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
       for(int dim=0; dim<node_dim; dim++){
+        //Same comment here as for cuda_cache kernels
     #ifdef USE_SOA
       int nodeind = global_to_cache[cache_offset + i + tid]+nnode*dim;
       int cacheind = (i+tid)+cache_size*dim;
@@ -78,7 +79,7 @@ __global__ void iter_calc( const float* __restrict__  old,
     }
     __syncthreads();
   }
-
+  //Increment instead of preload? Perhaps an additional version.
   //CACHE BACK
   for (int i = 0; i < cache_size; i += blockDim.x) {
     if (i + tid < cache_size) {
