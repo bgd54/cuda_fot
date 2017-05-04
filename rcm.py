@@ -8,6 +8,9 @@ import argparse
 
 # get_ipython().magic('matplotlib')
 
+def array_sort (a):
+    return np.array(sorted([(i1,i2) for i1,i2 in a]))
+
 
 def transform (in_file, out_file, vis):
     el_in = np.array([[int(a) for a in line.lstrip().rstrip().split()] \
@@ -18,6 +21,7 @@ def transform (in_file, out_file, vis):
     p = scipy.sparse.csgraph.reverse_cuthill_mckee(A)
     p = np.argsort(p)
     el_out = p[el_in[1:,:]]
+    el_out = array_sort(el_out)
     bw_orig = np.max(np.abs(el_in[1:,0] - el_in[1:,1]))
     mbw_orig = np.mean(np.abs(el_in[1:,0] - el_in[1:,1]))
     bw_out = np.max(np.abs(el_out[:,0] - el_out[:,1]))
