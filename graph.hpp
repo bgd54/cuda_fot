@@ -29,7 +29,7 @@ public:
     if (block) {
       fillEdgeListBlock(N, M);
     } else {
-      fillEdgeList2(N,M);
+      fillEdgeList2(N, M);
     }
 
     // TODO
@@ -129,33 +129,32 @@ public:
    * Grid, hard coded block-indexing
    * good for BLOCK_SIZE = 64
    */
-  void fillEdgeListBlock (MY_SIZE N, MY_SIZE M) {
-    assert((N-1)%4 == 0);
-    assert((M-1)%4 == 0);
-    assert((2*(N-1) + 2*(M-1)) % 64 == 0);
-    // TODO csucsokat atszamozni
+  void fillEdgeListBlock(MY_SIZE N, MY_SIZE M) {
+    assert((N - 1) % 4 == 0);
+    assert((M - 1) % 4 == 0);
+    assert((2 * (N - 1) + 2 * (M - 1)) % 64 == 0);
     MY_SIZE ind = 0;
-    for (MY_SIZE i = 0; i < (N-1) / 4; ++i) {
-      for (MY_SIZE j = 0; j < (M-1) / 4; ++j) {
+    for (MY_SIZE i = 0; i < (N - 1) / 4; ++i) {
+      for (MY_SIZE j = 0; j < (M - 1) / 4; ++j) {
         for (MY_SIZE k = 0; k <= 3; ++k) {
           for (MY_SIZE l = 0; l <= 3; ++l) {
             // Down
-            edge_list[ind++] = (4*i + k) * M + (4*j + l);
-            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l);
+            edge_list[ind++] = (4 * i + k) * M + (4 * j + l);
+            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l);
             // Right
-            edge_list[ind++] = (4*i + k) * M + (4*j + l);
-            edge_list[ind++] = (4*i + k) * M + (4*j + l + 1);
+            edge_list[ind++] = (4 * i + k) * M + (4 * j + l);
+            edge_list[ind++] = (4 * i + k) * M + (4 * j + l + 1);
             // Up
-            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l + 1);
-            edge_list[ind++] = (4*i + k) * M + (4*j + l + 1);
+            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
+            edge_list[ind++] = (4 * i + k) * M + (4 * j + l + 1);
             // Left
-            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l + 1);
-            edge_list[ind++] = (4*i + k + 1) * M + (4*j + l);
+            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
+            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l);
           }
         }
       }
     }
-    for (MY_SIZE i = 0; i < N-1; ++i) {
+    for (MY_SIZE i = 0; i < N - 1; ++i) {
       // Left side, edges directed upwards
       edge_list[ind++] = (i + 1) * M;
       edge_list[ind++] = i * M;
@@ -169,7 +168,10 @@ public:
       edge_list[ind++] = (N - 1) * M + i;
       edge_list[ind++] = (N - 1) * M + i + 1;
     }
-    assert(ind == 2*numEdges());
+    std::vector<MY_SIZE> permutation = renumberPoints();
+    std::for_each(edge_list, edge_list + numEdges() * 2,
+                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
+    assert(ind == 2 * numEdges());
   }
 
   void fillPointList(MY_SIZE N, MY_SIZE M) {
@@ -209,7 +211,7 @@ public:
       to = numEdges();
     }
     // First fit
-    // TODO optimize so the sets have roughly equal sizes
+    // optimize so the sets have roughly equal sizes
     //      ^ do we really need that in hierarchical colouring?
     std::vector<std::vector<MY_SIZE>> edge_partitions;
     std::vector<std::uint8_t> point_colours(numPoints(), 0);
@@ -288,6 +290,21 @@ public:
         std::tie(edge_list[2 * i], edge_list[2 * i + 1]) = edge_tmp[i];
       }
     }
+  }
+
+  std::vector<MY_SIZE> renumberPoints() const {
+    std::vector<MY_SIZE> permutation(numPoints(), numPoints());
+    MY_SIZE new_ind = 0;
+    for (MY_SIZE i = 0; i < 2 * numEdges(); ++i) {
+      if (permutation[edge_list[i]] == numPoints()) {
+        permutation[edge_list[i]] = new_ind++;
+      }
+    }
+    // Currently not supporting isolated points
+    assert(std::all_of(
+        permutation.begin(), permutation.end(),
+        [&permutation](MY_SIZE a) { return a < permutation.size(); }));
+    return permutation;
   }
 };
 
