@@ -72,6 +72,12 @@ __global__ void iter_calc( const float* __restrict__  old,
       }
     }
   }
+/* Something like this for AoS have to double-check though
+  for (int i = threadIdx.x; i < cache_size*node_dim; i+=blockDim.x) {
+    int nodeind = global_to_cache[cache_offset + i/node_dim]*node_dim+dim%node_dim;
+    valC[i] = val[nodeind]
+  }
+  */
  
   __syncthreads();
 
