@@ -24,6 +24,42 @@ __global__ void iter_calc(const float* old, float* val,const float* eval,
   }
 }
 
+//Potential extra version, may help particularly for SoA:
+//SOA, NDIM=4 20% speedup
+//AOS, NDIM=4 10% speedup
+/*
+template <int node_dim>
+__global__ void iter_calc(const float* old, float* val,const float* eval,
+    const int* enode, const int* color_reord, const int offset, 
+    const int color_size, const int nedge, const int nnode){
+
+  int tid = blockDim.x*blockIdx.x+threadIdx.x;
+  int reordIdx = tid + offset;
+  float inc[node_dim];
+  if(reordIdx<nedge && tid < color_size){
+    int edgeIdx=color_reord[reordIdx];
+    #pragma unroll
+    for(int dim=0; dim<node_dim;dim++){ 
+#ifndef USE_SOA
+      inc[dim] = val[enode[2*edgeIdx+1]*node_dim+dim]+
+        eval[edgeIdx]*old[enode[edgeIdx*2+0]*node_dim+dim];
+#else
+      inc[dim] = val[nnode*dim + enode[2*edgeIdx+1]] + 
+        eval[edgeIdx]*old[nnode*dim + enode[edgeIdx*2+0]];
+#endif
+    }
+    #pragma unroll
+    for(int dim=0; dim<node_dim;dim++){ 
+#ifndef USE_SOA
+      val[enode[2*edgeIdx+1]*node_dim+dim] = inc[dim];
+#else
+      val[nnode*dim + enode[2*edgeIdx+1]] = inc[dim];
+#endif
+    }
+  }
+}
+*/
+
 void iter_calc(const int nedge, const int nnode, const int node_dim,
    const Block_coloring& bc, const Coloring& c, const arg& arg_enode,
    const arg& arg_edge_val, arg& arg_node_val, const arg& arg_node_old,
