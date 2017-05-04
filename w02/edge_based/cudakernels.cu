@@ -25,6 +25,8 @@ __global__ void iter_calc(const float* old, float* val,const float* eval,
 }
 
 //Potential extra version, may help particularly for SoA:
+//SOA, NDIM=4 20% speedup
+//AOS, NDIM=4 10% speedup
 /*
 template <int node_dim>
 __global__ void iter_calc(const float* old, float* val,const float* eval,

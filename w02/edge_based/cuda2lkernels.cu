@@ -42,7 +42,9 @@ __global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val
     __syncthreads();
   }
   //You can try overlapping loads. This should help with SoA
-/*
+  //SOA, NDIM=4 6%
+  //AOS, NDIM=4 0%
+  /*
   for(int col=0; col<colornum[bIdx];++col){
     if(tid < nedge && col == mycolor){
       #pragma unroll node_dim
@@ -65,8 +67,8 @@ __global__ void iter_calc(const float* __restrict__ old, float* __restrict__ val
       }
     }
     __syncthreads();
-  }
-*/
+  }*/
+
 }
 
 void iter_calc(const int nedge, const int nnode, const int node_dim,
