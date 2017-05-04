@@ -13,8 +13,8 @@ CFLAGS := -O3 -std=c++11 -Xcompiler -fopenmp
 
 BASECPP := arg.cpp edge_sim.cpp simulation.cpp coloring.cpp
 BASEHPP := arg.hpp simulation.hpp coloring.hpp kernels.hpp timer.hpp graph_gen.hpp rms.hpp graph_helper.hpp reordering.hpp 
-BASEDEF := -DBLOCKSIZE=128 -DNODE_DIM=${NDIM} -DUSE_SOA
-
+BASEDEF := -DBLOCKSIZE=128 -DNODE_DIM=${NDIM} ${AUTO_SOA}
+#-DUSE_SOA -DFILE_NAME=asd
 all: edge_omp edge_gpu edge_gpu_2l edge_gpu_ca edge_gpu_cw edge_gpu_2l_r edge_gpu_ca_r edge_gpu_cw_r
 
 edge_cpu: Makefile ${BASECPP} ${BASEHPP} dummy_reordering.cpp dummycoloring.cpp cache_calc.cpp\

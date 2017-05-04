@@ -1,7 +1,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "arg.hpp"
+#ifdef FILE_NAME
+#include "graph_read.hpp"
+#else
 #include "graph_gen.hpp"
+#endif
 #include "simulation.hpp"
 #include "coloring.hpp"
 #include "cache_calc.hpp"
@@ -64,8 +68,12 @@ int main(int argc, char *argv[]){
   //                            graph gen
   ///////////////////////////////////////////////////////////////////////
   arg arg_enode, arg_node_val, arg_node_old, arg_edge_val;
+#ifdef FILE_NAME
+  graph_generate<NODE_DIM>(arg_enode, arg_node_val, arg_node_old, arg_edge_val);
+#else
   graph_generate(dx, dy, NODE_DIM, 1, bidir,
       arg_enode, arg_node_val, arg_node_old, arg_edge_val);
+#endif
   int nnode = arg_node_val.set_size, nedge = arg_enode.set_size;
   
   ///////////////////////////////////////////////////////////////////////

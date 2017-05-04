@@ -4,7 +4,6 @@
 void graph_generate(const int dx, const int dy, const int node_dim,
     const int edge_dim, const bool bidir, arg& arg_enode, arg& arg_node_val, arg& arg_node_old,
     arg& arg_edge_val){
-
   int nnode, nedge;
   int* enode = bidir ? 
     generate_bidirected_graph(dx,dy,nedge,nnode) : 
