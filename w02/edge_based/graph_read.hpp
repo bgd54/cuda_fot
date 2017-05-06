@@ -8,11 +8,11 @@ void graph_generate(arg& arg_enode, arg& arg_node_val, arg& arg_node_old,
     arg& arg_edge_val){
 ///Kimenet: enode, nodeva, nodeold, edgeval
 // enode - fajlbol ennek ameretei meghatarozzak edgevalt es nnode-t -> pipa
-  std::ifstream fin("hydra.csv");
+  std::ifstream fin("hydra");
   Graph g(fin);
   fin.close();
 
-  arg_enode.set_data(g.numEdges(),2,sizeof(unsigned),(char*)g.edge_list);
+  arg_enode.set_data(g.numEdges(),2,sizeof(int),(char*)g.edge_list);
   g.edge_list = nullptr;
   
   float *node_val, *node_old, *edge_val;

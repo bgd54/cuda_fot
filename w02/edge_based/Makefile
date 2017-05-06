@@ -13,6 +13,8 @@ CFLAGS := -O3 -std=c++11 -Xcompiler -fopenmp
 
 BASECPP := arg.cpp edge_sim.cpp simulation.cpp coloring.cpp
 BASEHPP := arg.hpp simulation.hpp coloring.hpp kernels.hpp timer.hpp graph_gen.hpp rms.hpp graph_helper.hpp reordering.hpp 
+NDIM=4
+AUTO_SOA=-DUSE_SOA
 BASEDEF := -DBLOCKSIZE=128 -DNODE_DIM=${NDIM} ${AUTO_SOA}
 #-DUSE_SOA
 all: edge_omp edge_gpu edge_gpu_2l edge_gpu_ca edge_gpu_cw edge_gpu_2l_r edge_gpu_ca_r edge_gpu_cw_r
@@ -25,6 +27,11 @@ hydra_gpu: Makefile ${BASECPP} ${BASEHPP} dummy_reordering.cpp cache_calc.cpp gl
 	nvcc -DUSE_CUDA ${BASEDEF}  ${BASECPP} -DUSE_FILE dummy_reordering.cpp\
 		globalcoloring.cpp cudakernels.cu cache_calc.cpp -o hydra_gpu \
 		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB)
+
+hydra_gpu_ca: Makefile ${BASECPP} ${BASEHPP} dummy_reordering.cpp cache_calc.cpp two_level_coloring.cpp cuda_cache_kernels.cu
+	nvcc -DUSE_CUDA  ${BASEDEF} ${BASECPP} -DUSE_FILE dummy_reordering.cpp\
+		two_level_coloring.cpp cuda_cache_kernels.cu cache_calc.cpp -o hydra_gpu_ca \
+		$(INC) $(NVCCFLAGS)	$(CFLAGS) $(LIB) 
 
 edge_cpu: Makefile ${BASECPP} ${BASEHPP} dummy_reordering.cpp dummycoloring.cpp cache_calc.cpp\
 		seqkernels.cpp 

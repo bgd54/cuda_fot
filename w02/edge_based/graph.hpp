@@ -7,7 +7,7 @@
 #include <iostream>
 #include <vector>
 
-#define MY_SIZE unsigned int
+#define MY_SIZE int
 struct Graph {
 private:
   MY_SIZE num_points, num_edges;

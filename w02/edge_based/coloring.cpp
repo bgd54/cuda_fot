@@ -186,7 +186,7 @@ Coloring Block_coloring::color_blocks(int* enode, int nedge){
   
   vector<vector<int> > block_reord;
   vector<set<int> > col_write;
-  for(int bIdx=0;bIdx<numblock;++bIdx){
+  for(int bIdx=numblock-1;bIdx>=0;--bIdx){
     size_t col=0;
     vector<int> writeByBlock;
     int start=bs*bIdx;
@@ -220,6 +220,14 @@ Coloring Block_coloring::color_blocks(int* enode, int nedge){
     }
   }
   //printf("numb:%d, start calc offsets\n",numblock);
+  
+  // set last block to stay last -> currenly on 0,0 -> copy color 0 to end in reversed order then delete col 0
+  block_reord.push_back(vector<int>());
+  for(int i = block_reord[0].size()-1;i>=0;--i){
+    block_reord[block_reord.size()-1].push_back(block_reord[0][i]);
+  }
+  block_reord.erase(block_reord.begin());
+
   vector<int> offsets(block_reord.size(), block_reord[0].size());
   for(size_t i=1; i<block_reord.size();++i){
     offsets[i] = offsets[i-1]+block_reord[i].size();
