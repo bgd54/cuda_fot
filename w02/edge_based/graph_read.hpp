@@ -2,18 +2,21 @@
 #include "arg.hpp"
 #include "graph_helper.hpp"
 #include <iostream>
+#include <fstream>
 template<int node_dim>
 void graph_generate(arg& arg_enode, arg& arg_node_val, arg& arg_node_old,
     arg& arg_edge_val){
 ///Kimenet: enode, nodeva, nodeold, edgeval
 // enode - fajlbol ennek ameretei meghatarozzak edgevalt es nnode-t -> pipa
-  Graph g(std::istream(FILE_NAME));
+  std::ifstream fin("hydra.csv");
+  Graph g(fin);
+  fin.close();
 
-  arg_enode.set_data(g.numEdges(),2,sizeof(unsigned),g.edge_list);
+  arg_enode.set_data(g.numEdges(),2,sizeof(unsigned),(char*)g.edge_list);
   g.edge_list = nullptr;
   
   float *node_val, *node_old, *edge_val;
-  int nnode = g.numNodes();
+  int nnode = g.numPoints();
   int nedge = g.numEdges();
 
   node_val = genDataForNodes(nnode,node_dim);
@@ -21,7 +24,6 @@ void graph_generate(arg& arg_enode, arg& arg_node_val, arg& arg_node_old,
   
   node_old=(float*)malloc(nnode*node_dim*sizeof(float));
 
- arg_enode.set_data(nedge, 2, sizeof(int),(char*) enode);
  arg_node_val.set_data(nnode, node_dim, sizeof(float),
      (char*) node_val);
  arg_node_old.set_data(nnode, node_dim, sizeof(float),

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "arg.hpp"
-#ifdef FILE_NAME
+#ifdef USE_FILE
 #include "graph_read.hpp"
 #else
 #include "graph_gen.hpp"
@@ -68,7 +68,7 @@ int main(int argc, char *argv[]){
   //                            graph gen
   ///////////////////////////////////////////////////////////////////////
   arg arg_enode, arg_node_val, arg_node_old, arg_edge_val;
-#ifdef FILE_NAME
+#ifdef USE_FILE
   graph_generate<NODE_DIM>(arg_enode, arg_node_val, arg_node_old, arg_edge_val);
 #else
   graph_generate(dx, dy, NODE_DIM, 1, bidir,
