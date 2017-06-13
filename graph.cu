@@ -184,6 +184,7 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
                    sizeof(MY_SIZE) * graph.numEdges() * 2 + // d_edge_list
                    sizeof(MY_SIZE) * graph.numEdges() * 2   // d_partition
                    ) * num);
+  std::cout << " Needed " << num_of_colours << " colours" << std::endl;
   checkCudaErrors(cudaMemcpy(point_weights, d_weights1,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyDeviceToHost));
@@ -221,6 +222,7 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyHostToDevice));
   MY_SIZE total_cache_size = 0; // for bandwidth calculations
+  float avg_num_edge_colours = 0;
   for (const HierarchicalColourMemory::MemoryOfOneColour &memory_of_one_colour :
        memory.colours) {
     float *d_fptr;
@@ -325,6 +327,9 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
         d_uptr, memory_of_one_colour.num_edge_colours.data(),
         sizeof(std::uint8_t) * memory_of_one_colour.num_edge_colours.size(),
         cudaMemcpyHostToDevice));
+    avg_num_edge_colours +=
+        std::accumulate(memory_of_one_colour.num_edge_colours.begin(),
+                        memory_of_one_colour.num_edge_colours.end(),0.0f);
   }
   // -----------------------
   // -  Start computation  -
@@ -380,6 +385,10 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
              ));
   std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
+            << std::endl;
+  avg_num_edge_colours /=
+      std::ceil(static_cast<double>(graph.numEdges()) / BLOCK_SIZE);
+  std::cout << "  average number of colours used: " << avg_num_edge_colours
             << std::endl;
   // ---------------
   // -  Finish up  -
