@@ -50,7 +50,8 @@ data_t<T>::data_t(MY_SIZE set_s, MY_SIZE set_d):
 template <typename T>
 data_t<T>::~data_t(){ 
   delete[] data;
-  //checkCudaErrors( cudaFree(data_d) );
+  if(data_d)
+      checkCudaErrors( cudaFree(data_d) );
 }
 
 template <typename T>
@@ -68,8 +69,8 @@ template <typename T>
 void data_t<T>::flush_to_host(){
   assert(data_d != nullptr);
   MY_SIZE bytes = size * dim * sizeof(T);
-  //checkCudaErrors( 
-   //     cudaMemcpy(data, data_d, bytes,  cudaMemcpyDeviceToHost) );
+  checkCudaErrors( 
+        cudaMemcpy(data, data_d, bytes,  cudaMemcpyDeviceToHost) );
 
 }
 
@@ -77,8 +78,8 @@ template <typename T>
 void data_t<T>::flush_to_device(){
   assert(data_d != nullptr);
   MY_SIZE bytes = size * dim * sizeof(T);
-  //checkCudaErrors( 
- //       cudaMemcpy(data_d, data, bytes,  cudaMemcpyHostToDevice) );
+  checkCudaErrors( 
+        cudaMemcpy(data_d, data, bytes,  cudaMemcpyHostToDevice) );
 
 }
 
@@ -86,9 +87,9 @@ template <typename T>
 void data_t<T>::create_device_memory(){
   assert(data_d == nullptr);
   int bytes = size * dim * sizeof(T);
-  //checkCudaErrors( cudaMalloc((void**)&data_d, bytes) );
-  //checkCudaErrors(
-//      cudaMemcpy(data_d, data, bytes,  cudaMemcpyHostToDevice) );
+  checkCudaErrors( cudaMalloc((void**)&data_d, bytes) );
+  checkCudaErrors(
+      cudaMemcpy(data_d, data, bytes,  cudaMemcpyHostToDevice) );
 }
 
 template <typename T>
