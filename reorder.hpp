@@ -6,6 +6,7 @@
 #include <limits>
 #include <scotch.h>
 #include <vector>
+#include "data_t.hpp"
 
 struct ScotchError {
   int errorCode;
@@ -20,15 +21,18 @@ class Graph;
 template <class UnsignedType> struct GraphCSR {
   const UnsignedType num_points, num_edges;
 
-  explicit GraphCSR(MY_SIZE _num_points, MY_SIZE _num_edges, MY_SIZE *edge_list)
+  explicit GraphCSR(MY_SIZE _num_points, MY_SIZE _num_edges,
+                    const data_t<MY_SIZE> &edge_to_node)
       : num_points(_num_points), num_edges(_num_edges) {
     static_assert(std::size_t(std::numeric_limits<UnsignedType>::max()) <=
                       std::size_t(std::numeric_limits<MY_SIZE>::max()),
                   "GraphCSR: UnsignedType too small.");
+    assert(edge_to_node.getDim() == 2);
     point_indices = new UnsignedType[num_points + 1];
     std::vector<std::pair<UnsignedType, UnsignedType>> incidence;
-    for (UnsignedType i = 0; i < 2 * num_edges; ++i) {
-      incidence.push_back(std::make_pair(edge_list[i], i / 2));
+    for (UnsignedType i = 0; i < edge_to_node.getDim() * num_edges; ++i) {
+      incidence.push_back(
+          std::make_pair(edge_to_node[i], i / edge_to_node.getDim()));
     }
     std::sort(incidence.begin(), incidence.end());
     UnsignedType point_ind = 0;
@@ -39,10 +43,11 @@ template <class UnsignedType> struct GraphCSR {
       while (current_point != point_ind) {
         point_indices[++point_ind] = edge_endpoints.size();
       }
-      assert(edge_list[2 * current_edge] != edge_list[2 * current_edge + 1]);
-      if (edge_list[2 * current_edge] != current_point) {
-        assert(edge_list[2 * current_edge + 1] == current_point);
-        UnsignedType other_point = edge_list[2 * current_edge];
+      assert(edge_to_node[2 * current_edge] !=
+             edge_to_node[2 * current_edge + 1]);
+      if (edge_to_node[2 * current_edge] != current_point) {
+        assert(edge_to_node[2 * current_edge + 1] == current_point);
+        UnsignedType other_point = edge_to_node[2 * current_edge];
         if (point_indices[current_point] == edge_endpoints.size() ||
             std::find(edge_endpoints.begin() + point_indices[current_point],
                       edge_endpoints.end(),
@@ -50,7 +55,7 @@ template <class UnsignedType> struct GraphCSR {
           edge_endpoints.push_back(other_point);
         }
       } else {
-        UnsignedType other_point = edge_list[2 * current_edge + 1];
+        UnsignedType other_point = edge_to_node[2 * current_edge + 1];
         if (point_indices[current_point] == edge_endpoints.size() ||
             std::find(edge_endpoints.begin() + point_indices[current_point],
                       edge_endpoints.end(),
@@ -73,7 +78,7 @@ template <class UnsignedType> struct GraphCSR {
 
   const UnsignedType *edgeEndpoints() const { return edge_endpoints.data(); }
 
-  UnsignedType numArcs () const { return edge_endpoints.size(); }
+  UnsignedType numArcs() const { return edge_endpoints.size(); }
 
 private:
   UnsignedType *point_indices;

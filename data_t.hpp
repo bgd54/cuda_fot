@@ -32,8 +32,8 @@ public:
   void flushToDevice();
   void initDeviceMemory();
 
-  MY_SIZE getSize() { return size; }
-  MY_SIZE getDim() { return dim; }
+  MY_SIZE getSize() const { return size; }
+  MY_SIZE getDim() const { return dim; }
   T* getDeviceData() { return data_d; }
 
 

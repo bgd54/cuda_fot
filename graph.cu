@@ -123,7 +123,6 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   MY_SIZE num_blocks = static_cast<MY_SIZE>(
       std::ceil(double(max_thread_num) / static_cast<double>(BLOCK_SIZE)));
   float *d_weights1, *d_weights2, *d_edge_weights;
-  MY_SIZE *d_edge_list;
   std::vector<MY_SIZE *> d_partition;
   for (const std::vector<MY_SIZE> &colour : partition) {
     MY_SIZE *d_colour;
@@ -139,8 +138,6 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
       cudaMalloc((void **)&d_weights2, sizeof(float) * graph.numPoints()));
   checkCudaErrors(
       cudaMalloc((void **)&d_edge_weights, sizeof(float) * graph.numEdges()));
-  checkCudaErrors(cudaMalloc((void **)&d_edge_list,
-                             sizeof(MY_SIZE) * 2 * graph.numEdges()));
   checkCudaErrors(cudaMemcpy(d_weights1, point_weights,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyHostToDevice));
@@ -150,15 +147,13 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   checkCudaErrors(cudaMemcpy(d_edge_weights, edge_weights,
                              sizeof(float) * graph.numEdges(),
                              cudaMemcpyHostToDevice));
-  checkCudaErrors(cudaMemcpy(d_edge_list, graph.edge_list,
-                             sizeof(MY_SIZE) * 2 * graph.numEdges(),
-                             cudaMemcpyHostToDevice));
+  graph.edge_to_node.initDeviceMemory();
   // Timer t;
   TIMER_START(t);
   for (MY_SIZE i = 0; i < num; ++i) {
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
       problem_stepGPU<<<num_blocks, BLOCK_SIZE>>>(
-          d_weights1, d_edge_weights, d_edge_list, d_partition[c], d_weights2,
+          d_weights1, d_edge_weights, graph.edge_to_node.getDeviceData(), d_partition[c], d_weights2,
           partition[c].size());
       checkCudaErrors(cudaDeviceSynchronize());
     }
@@ -188,7 +183,6 @@ void Problem::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   checkCudaErrors(cudaMemcpy(point_weights, d_weights1,
                              sizeof(float) * graph.numPoints(),
                              cudaMemcpyDeviceToHost));
-  checkCudaErrors(cudaFree(d_edge_list));
   checkCudaErrors(cudaFree(d_edge_weights));
   checkCudaErrors(cudaFree(d_weights2));
   checkCudaErrors(cudaFree(d_weights1));
@@ -414,49 +408,49 @@ void Problem::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
 using implementation_algorithm_t = void (Problem::*)(MY_SIZE, MY_SIZE);
 
 /* tests {{{1 */
-void testTwoCPUImplementations(MY_SIZE num) {
-  // std::cout.precision(3);
-  std::cout << "CPU point vs CPU edge" << std::endl;
-  std::vector<float> result1;
-  MY_SIZE N = 1000;
-  MY_SIZE M = 2000;
-  MY_SIZE reset_every = 10;
-  {
-    srand(1);
-    Problem problem(N, M);
-    problem.loopCPUPointCentred(num, reset_every);
-    float mx = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      // std::cout << problem.point_weights[i] << " ";
-      result1.push_back(problem.point_weights[i]);
-      mx = std::max(mx, std::abs(problem.point_weights[i]));
-    }
-    std::cerr << "max: " << mx << std::endl;
-    // std::cout << std::endl;
-    // for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-    //  std::cout << problem.edge_weights[i] << " ";
-    //}
-    // std::cout << std::endl;
-  }
+/*void testTwoCPUImplementations(MY_SIZE num) {*/
+/*  // std::cout.precision(3);*/
+/*  std::cout << "CPU point vs CPU edge" << std::endl;*/
+/*  std::vector<float> result1;*/
+/*  MY_SIZE N = 1000;*/
+/*  MY_SIZE M = 2000;*/
+/*  MY_SIZE reset_every = 10;*/
+/*  {*/
+/*    srand(1);*/
+/*    Problem problem(N, M);*/
+/*    problem.loopCPUPointCentred(num, reset_every);*/
+/*    float mx = 0;*/
+/*    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {*/
+/*      // std::cout << problem.point_weights[i] << " ";*/
+/*      result1.push_back(problem.point_weights[i]);*/
+/*      mx = std::max(mx, std::abs(problem.point_weights[i]));*/
+/*    }*/
+/*    std::cerr << "max: " << mx << std::endl;*/
+/*    // std::cout << std::endl;*/
+/*    // for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {*/
+/*    //  std::cout << problem.edge_weights[i] << " ";*/
+/*    //}*/
+/*    // std::cout << std::endl;*/
+/*  }*/
 
-  double rms = 0;
-  {
-    srand(1);
-    Problem problem(N, M);
-    problem.loopCPUEdgeCentred(num, reset_every);
-    // for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-    //  std::cout << problem.edge_weights[i] << " ";
-    //}
-    // std::cout << std::endl;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      // std::cout << problem.point_weights[i] << " ";
-      rms += std::pow(problem.point_weights[i] - result1[i], 2);
-    }
-    // std::cout << std::endl;
-    rms = std::pow(rms / result1.size(), 0.5);
-    std::cout << "RMS: " << rms << std::endl;
-  }
-}
+/*  double rms = 0;*/
+/*  {*/
+/*    srand(1);*/
+/*    Problem problem(N, M);*/
+/*    problem.loopCPUEdgeCentred(num, reset_every);*/
+/*    // for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {*/
+/*    //  std::cout << problem.edge_weights[i] << " ";*/
+/*    //}*/
+/*    // std::cout << std::endl;*/
+/*    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {*/
+/*      // std::cout << problem.point_weights[i] << " ";*/
+/*      rms += std::pow(problem.point_weights[i] - result1[i], 2);*/
+/*    }*/
+/*    // std::cout << std::endl;*/
+/*    rms = std::pow(rms / result1.size(), 0.5);*/
+/*    std::cout << "RMS: " << rms << std::endl;*/
+/*  }*/
+/*}*/
 
 void testColours() {
   Graph graph(1000, 2000);
@@ -518,8 +512,8 @@ void testHierarchicalColouring() {
     }
     std::cout << std::endl << "Edge list: ";
     for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-      std::cout << problem.graph.edge_list[2 * i] << "->"
-                << problem.graph.edge_list[2 * i + 1] << std::endl;
+      std::cout << problem.graph.edge_to_node[2 * i] << "->"
+                << problem.graph.edge_to_node[2 * i + 1] << std::endl;
     }
     std::cout << std::endl;
   }
@@ -695,6 +689,7 @@ void generateTimes(std::string in_file) {
         std::cout << "--Problem finished." << std::endl;
       };
   run(&Problem::loopCPUEdgeCentred);
+  run(&Problem::loopCPUEdgeCentredOMP);
   run(&Problem::loopGPUEdgeCentred);
   run(&Problem::loopGPUHierarchical);
   std::cout << "Finished." << std::endl;
@@ -702,21 +697,22 @@ void generateTimes(std::string in_file) {
 
 int main(int argc, const char **argv) {
   findCudaDevice(argc, argv);
-  //generateTimes("grid_513x513_default");
-  //generateTimes("grid_513x513_rcm");
-  //generateTimes("grid_513x513_hardcoded");
+  /*generateTimes("grid_513x513_default");*/
+  /*generateTimes("grid_513x513_rcm");*/
+  /*generateTimes("grid_513x513_scotch");*/
+  /*generateTimes("grid_513x513_hardcoded2");*/
   /*generateTimes("rotor37_nonrenum");*/
   /*generateTimes("rotor37_nonrenum.rcm");*/
   /*generateTimes("rotor37_nonrenum.scotch");*/
   /*generateTimes("grid_1025x1025_default");*/
   /*generateTimes("grid_1025x1025_default.rcm");*/
   /*generateTimes("grid_1025x1025_default.scotch");*/
-  /*generateTimes("grid_1025x1025_hardcoded");*/
   /*generateTimes("grid_1025x1025_hardcoded2");*/
   MY_SIZE num = 99;
   MY_SIZE N = 1000, M = 2000;
   MY_SIZE reset_every = 10;
-  testTwoImplementations(num,N,M,reset_every,&Problem::loopCPUEdgeCentred,&Problem::loopCPUEdgeCentredOMP);
+  testTwoImplementations(num,N,M,reset_every,
+      &Problem::loopGPUEdgeCentred,&Problem::loopGPUHierarchical);
   cudaDeviceReset();
 }
 

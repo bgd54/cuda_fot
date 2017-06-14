@@ -52,13 +52,14 @@ struct HierarchicalColourMemory {
      *   - done
      */
     const Graph &graph = problem.graph;
+    assert(graph.edge_to_node.getDim() == 2);
     std::vector<colourset_t> point_colours(graph.numPoints(), 0);
     colourset_t used_colours;
     std::vector<unsigned long long> set_sizes;
     for (MY_SIZE block_from = 0; block_from < graph.numEdges();
          block_from += block_size) {
       MY_SIZE block_to = std::min(graph.numEdges(), block_from + block_size);
-      auto tmp = getPointsWrittenTo(graph.edge_list, block_from, block_to,
+      auto tmp = getPointsWrittenTo(graph.edge_to_node, block_from, block_to,
                                     point_colours);
       // std::vector<MY_SIZE> point_written_to = tmp.first;
       colourset_t occupied_colours = tmp.second;
@@ -84,12 +85,14 @@ struct HierarchicalColourMemory {
 
 private:
   static std::pair<std::vector<MY_SIZE>, colourset_t>
-  getPointsWrittenTo(const MY_SIZE *edge_list, MY_SIZE from, MY_SIZE to,
+  getPointsWrittenTo(const data_t<MY_SIZE> &edge_to_node, MY_SIZE from,
+                     MY_SIZE to,
                      const std::vector<colourset_t> &point_colours) {
     colourset_t result;
     std::vector<MY_SIZE> points;
+    // TODO handle more than one dimensions/data points written to
     for (MY_SIZE i = from; i < to; ++i) {
-      MY_SIZE point = edge_list[2 * i + 1];
+      MY_SIZE point = edge_to_node[2 * i + 1];
       result |= point_colours[point];
       points.push_back(point);
     }
@@ -120,15 +123,16 @@ private:
                    std::vector<colourset_t> &point_colours,
                    const Problem &problem,
                    std::vector<MemoryOfOneColour> &colours) {
+    // TODO handle more than one dimensions/data points written to
     const Graph &graph = problem.graph;
-    const MY_SIZE *edge_list = graph.edge_list;
+    const data_t<MY_SIZE> &edge_to_node = graph.edge_to_node;
     colourset_t colourset(1ull << colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
     std::map<MY_SIZE, std::vector<MY_SIZE>> read_points_to_edges;
     std::map<MY_SIZE, std::vector<MY_SIZE>> write_points_to_edges;
     for (MY_SIZE i = from; i < to; ++i) {
-      MY_SIZE point_to = edge_list[2 * i + 1];
-      MY_SIZE point_from = edge_list[2 * i];
+      MY_SIZE point_to = edge_to_node[2 * i + 1];
+      MY_SIZE point_from = edge_to_node[2 * i];
       point_colours[point_to] |= colourset;
       colour.edge_weights.push_back(problem.edge_weights[i]);
       write_points_to_edges[point_to].push_back(i);
@@ -175,7 +179,7 @@ private:
     std::vector<std::uint8_t> point_colours(graph.numPoints(), 0);
     std::uint8_t num_edge_colours = 0;
     for (MY_SIZE i = from; i < to; ++i) {
-      std::uint8_t colour = point_colours[graph.edge_list[2 * i + 1]]++;
+      std::uint8_t colour = point_colours[graph.edge_to_node[2 * i + 1]]++;
       num_edge_colours = std::max<std::uint8_t>(num_edge_colours, colour + 1);
       block.edge_colours.push_back(colour);
     }

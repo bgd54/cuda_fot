@@ -1,6 +1,7 @@
 #ifndef GRAPH_HPP_35BFQORK
 #define GRAPH_HPP_35BFQORK
 
+#include "data_t.hpp"
 #include "reorder.hpp"
 #include <algorithm>
 #include <cassert>
@@ -12,20 +13,23 @@
 #include <tuple>
 #include <vector>
 
+struct InvalidInputFile {
+  MY_SIZE line;
+};
+
 struct Graph {
 private:
   MY_SIZE num_points, num_edges;
 
 public:
-  MY_SIZE *edge_list;
-  MY_SIZE *offsets = nullptr, *point_list = nullptr;
+  data_t<MY_SIZE> edge_to_node;
 
   /* Initialisation {{{1 */
-  Graph(MY_SIZE N, MY_SIZE M, bool block = false) {
+  Graph(MY_SIZE N, MY_SIZE M, bool block = false)
+      : num_edges{2 * ((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges, 2) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
-    num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
+    // num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
-    edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
     if (block) {
       fillEdgeListBlock(N, M);
     } else {
@@ -36,7 +40,7 @@ public:
     // offsets = (MY_SIZE *)malloc(sizeof(MY_SIZE) * (N * M + 1));
     // point_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
     // fillPointList(N,M);
-    offsets = point_list = nullptr;
+    // offsets = point_list = nullptr;
   }
 
   /**
@@ -49,23 +53,19 @@ public:
    * If the reading is broken for some reason, the succesfully read edges are
    * kept and num_edges is set accordingly.
    */
-  Graph(std::istream &is) /*: N(0), M(0)*/ {
-    is >> num_points >> num_edges;
-    edge_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
+  Graph(std::istream &is)
+      : num_points{0}, num_edges{0},
+        edge_to_node((is >> num_points >> num_edges, num_edges), 2) {
+    // is >> num_points >> num_edges;
     for (MY_SIZE i = 0; i < num_edges; ++i) {
       if (!is) {
-        num_edges = i;
-        break;
+        throw InvalidInputFile{i};
       }
-      is >> edge_list[2 * i] >> edge_list[2 * i + 1];
+      is >> edge_to_node[2 * i] >> edge_to_node[2 * i + 1];
     }
   }
 
-  ~Graph() {
-    free(point_list);
-    free(offsets);
-    free(edge_list);
-  }
+  ~Graph() {}
 
   /**
    * Grid, unidirectional: right and down
@@ -74,18 +74,18 @@ public:
     MY_SIZE array_ind = 0, upper_point_ind = 0, lower_point_ind = M;
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
-        edge_list[array_ind++] = lower_point_ind;
-        edge_list[array_ind++] = upper_point_ind;
-        edge_list[array_ind++] = upper_point_ind;
-        edge_list[array_ind++] = ++upper_point_ind;
+        edge_to_node[array_ind++] = lower_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = ++upper_point_ind;
         ++lower_point_ind;
       }
-      edge_list[array_ind++] = lower_point_ind++;
-      edge_list[array_ind++] = upper_point_ind++;
+      edge_to_node[array_ind++] = lower_point_ind++;
+      edge_to_node[array_ind++] = upper_point_ind++;
     }
     for (MY_SIZE c = 0; c < M - 1; ++c) {
-      edge_list[array_ind++] = upper_point_ind;
-      edge_list[array_ind++] = ++upper_point_ind;
+      edge_to_node[array_ind++] = upper_point_ind;
+      edge_to_node[array_ind++] = ++upper_point_ind;
     }
   }
 
@@ -97,30 +97,30 @@ public:
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
         // up-down
-        edge_list[array_ind++] = lower_point_ind;
-        edge_list[array_ind++] = upper_point_ind;
-        edge_list[array_ind++] = upper_point_ind;
-        edge_list[array_ind++] = lower_point_ind;
+        edge_to_node[array_ind++] = lower_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = lower_point_ind;
         // right-left
-        edge_list[array_ind++] = upper_point_ind;
-        edge_list[array_ind++] = upper_point_ind + 1;
-        edge_list[array_ind++] = upper_point_ind + 1;
-        edge_list[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind + 1;
+        edge_to_node[array_ind++] = upper_point_ind + 1;
+        edge_to_node[array_ind++] = upper_point_ind;
         ++lower_point_ind;
         ++upper_point_ind;
       }
       // Last up-down
-      edge_list[array_ind++] = lower_point_ind;
-      edge_list[array_ind++] = upper_point_ind;
-      edge_list[array_ind++] = upper_point_ind++;
-      edge_list[array_ind++] = lower_point_ind++;
+      edge_to_node[array_ind++] = lower_point_ind;
+      edge_to_node[array_ind++] = upper_point_ind;
+      edge_to_node[array_ind++] = upper_point_ind++;
+      edge_to_node[array_ind++] = lower_point_ind++;
     }
     // Last horizontal
     for (MY_SIZE c = 0; c < M - 1; ++c) {
-      edge_list[array_ind++] = upper_point_ind;
-      edge_list[array_ind++] = upper_point_ind + 1;
-      edge_list[array_ind++] = upper_point_ind + 1;
-      edge_list[array_ind++] = upper_point_ind;
+      edge_to_node[array_ind++] = upper_point_ind;
+      edge_to_node[array_ind++] = upper_point_ind + 1;
+      edge_to_node[array_ind++] = upper_point_ind + 1;
+      edge_to_node[array_ind++] = upper_point_ind;
       ++upper_point_ind;
     }
   }
@@ -132,77 +132,77 @@ public:
   void fillEdgeListBlock(MY_SIZE N, MY_SIZE M) {
     assert((N - 1) % 4 == 0);
     assert((M - 1) % 4 == 0);
-    assert((2 * (N - 1) + 2 * (M - 1)) % 64 == 0);
+    // assert((2 * (N - 1) + 2 * (M - 1)) % 64 == 0);
     MY_SIZE ind = 0;
     for (MY_SIZE i = 0; i < (N - 1) / 4; ++i) {
       for (MY_SIZE j = 0; j < (M - 1) / 4; ++j) {
         for (MY_SIZE k = 0; k <= 3; ++k) {
           for (MY_SIZE l = 0; l <= 3; ++l) {
             // Down
-            edge_list[ind++] = (4 * i + k) * M + (4 * j + l);
-            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l);
+            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l);
+            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l);
             // Right
-            edge_list[ind++] = (4 * i + k) * M + (4 * j + l);
-            edge_list[ind++] = (4 * i + k) * M + (4 * j + l + 1);
+            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l);
+            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l + 1);
             // Up
-            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
-            edge_list[ind++] = (4 * i + k) * M + (4 * j + l + 1);
+            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
+            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l + 1);
             // Left
-            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
-            edge_list[ind++] = (4 * i + k + 1) * M + (4 * j + l);
+            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
+            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l);
           }
         }
       }
     }
     for (MY_SIZE i = 0; i < N - 1; ++i) {
       // Left side, edges directed upwards
-      edge_list[ind++] = (i + 1) * M;
-      edge_list[ind++] = i * M;
+      edge_to_node[ind++] = (i + 1) * M;
+      edge_to_node[ind++] = i * M;
       // Right side, edges directed downwards
-      edge_list[ind++] = i * M + (M - 1);
-      edge_list[ind++] = (i + 1) * M + (M - 1);
+      edge_to_node[ind++] = i * M + (M - 1);
+      edge_to_node[ind++] = (i + 1) * M + (M - 1);
       // Top side, edges directed left
-      edge_list[ind++] = i + 1;
-      edge_list[ind++] = i;
+      edge_to_node[ind++] = i + 1;
+      edge_to_node[ind++] = i;
       // Down side, edges directed right
-      edge_list[ind++] = (N - 1) * M + i;
-      edge_list[ind++] = (N - 1) * M + i + 1;
+      edge_to_node[ind++] = (N - 1) * M + i;
+      edge_to_node[ind++] = (N - 1) * M + i + 1;
     }
     std::vector<MY_SIZE> permutation = renumberPoints();
-    std::for_each(edge_list, edge_list + numEdges() * 2,
+    std::for_each(edge_to_node.begin(), edge_to_node.end() + numEdges() * 2,
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     assert(ind == 2 * numEdges());
   }
 
-  void fillPointList(MY_SIZE N, MY_SIZE M) {
-    MY_SIZE point_ind = 0, list_ind = 0, edge_ind = 0;
-    MY_SIZE prev_degree = 0;
-    for (MY_SIZE r = 0; r < N - 1; ++r) {
-      offsets[point_ind] = prev_degree;
-      ++prev_degree;
-      point_list[list_ind++] = edge_ind++;
-      point_list[list_ind++] = point_ind + M;
-      ++point_ind;
-      for (MY_SIZE c = 0; c < M - 1; ++c) {
-        offsets[point_ind] = prev_degree;
-        prev_degree += 2;
-        point_list[list_ind++] = edge_ind++;
-        point_list[list_ind++] = point_ind - 1;
-        point_list[list_ind++] = edge_ind++;
-        point_list[list_ind++] = point_ind + M;
-        ++point_ind;
-      }
-    }
-    offsets[point_ind++] = prev_degree;
-    for (MY_SIZE c = 0; c < M - 1; ++c) {
-      offsets[point_ind] = prev_degree;
-      ++prev_degree;
-      point_list[list_ind++] = edge_ind++;
-      point_list[list_ind++] = point_ind - 1;
-      ++point_ind;
-    }
-    offsets[point_ind] = prev_degree; // should be end of point_list
-  }
+  // void fillPointList(MY_SIZE N, MY_SIZE M) {
+  //  MY_SIZE point_ind = 0, list_ind = 0, edge_ind = 0;
+  //  MY_SIZE prev_degree = 0;
+  //  for (MY_SIZE r = 0; r < N - 1; ++r) {
+  //    offsets[point_ind] = prev_degree;
+  //    ++prev_degree;
+  //    point_list[list_ind++] = edge_ind++;
+  //    point_list[list_ind++] = point_ind + M;
+  //    ++point_ind;
+  //    for (MY_SIZE c = 0; c < M - 1; ++c) {
+  //      offsets[point_ind] = prev_degree;
+  //      prev_degree += 2;
+  //      point_list[list_ind++] = edge_ind++;
+  //      point_list[list_ind++] = point_ind - 1;
+  //      point_list[list_ind++] = edge_ind++;
+  //      point_list[list_ind++] = point_ind + M;
+  //      ++point_ind;
+  //    }
+  //  }
+  //  offsets[point_ind++] = prev_degree;
+  //  for (MY_SIZE c = 0; c < M - 1; ++c) {
+  //    offsets[point_ind] = prev_degree;
+  //    ++prev_degree;
+  //    point_list[list_ind++] = edge_ind++;
+  //    point_list[list_ind++] = point_ind - 1;
+  //    ++point_ind;
+  //  }
+  //  offsets[point_ind] = prev_degree; // should be end of point_list
+  //}
   /* 1}}} */
 
   std::vector<std::vector<MY_SIZE>>
@@ -213,10 +213,12 @@ public:
     // First fit
     // optimize so the sets have roughly equal sizes
     //      ^ do we really need that in hierarchical colouring?
+    // TODO handle more than one dimensions/data points written to
+    assert(edge_to_node.getDim() == 2);
     std::vector<std::vector<MY_SIZE>> edge_partitions;
     std::vector<std::uint8_t> point_colours(numPoints(), 0);
     for (MY_SIZE i = from; i < to; ++i) {
-      std::uint8_t colour = point_colours[edge_list[2 * i + 1]]++;
+      std::uint8_t colour = point_colours[edge_to_node[2 * i + 1]]++;
       if (colour == edge_partitions.size()) {
         edge_partitions.push_back({i});
       } else if (colour < edge_partitions.size()) {
@@ -245,7 +247,7 @@ public:
   void writeEdgeList(std::ostream &os) const {
     os << numPoints() << " " << numEdges() << std::endl;
     for (std::size_t i = 0; i < numEdges(); ++i) {
-      os << edge_list[2 * i] << " " << edge_list[2 * i + 1] << std::endl;
+      os << edge_to_node[2 * i] << " " << edge_to_node[2 * i + 1] << std::endl;
     }
   }
 
@@ -266,28 +268,32 @@ public:
       }
       std::copy(point_tmp.begin(), point_tmp.end(), point_data);
     }
-    // Permute edge_list
-    std::for_each(edge_list, edge_list + numEdges() * 2,
+    // Permute edge_to_node
+    std::for_each(edge_to_node.begin(), edge_to_node.end() + numEdges() * 2,
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     if (edge_data) {
       std::vector<std::tuple<MY_SIZE, MY_SIZE, float>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp[i] = std::make_tuple(edge_list[2 * i], edge_list[2 * i + 1],
+        edge_tmp[i] = std::make_tuple(edge_to_node[edge_to_node.getDim() * i],
+                                      edge_to_node[edge_to_node.getDim() * i + 1],
                                       edge_data[i]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        std::tie(edge_list[2 * i], edge_list[2 * i + 1], edge_data[i]) =
+        std::tie(edge_to_node[edge_to_node.getDim() * i],
+                 edge_to_node[edge_to_node.getDim() * i + 1], edge_data[i]) =
             edge_tmp[i];
       }
     } else {
       std::vector<std::tuple<MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp[i] = std::make_tuple(edge_list[2 * i], edge_list[2 * i + 1]);
+        edge_tmp[i] = std::make_tuple(edge_to_node[edge_to_node.getDim() * i],
+                                      edge_to_node[edge_to_node.getDim() * i + 1]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        std::tie(edge_list[2 * i], edge_list[2 * i + 1]) = edge_tmp[i];
+        std::tie(edge_to_node[edge_to_node.getDim() * i],
+                 edge_to_node[edge_to_node.getDim() * i + 1]) = edge_tmp[i];
       }
     }
   }
@@ -296,8 +302,8 @@ public:
     std::vector<MY_SIZE> permutation(numPoints(), numPoints());
     MY_SIZE new_ind = 0;
     for (MY_SIZE i = 0; i < 2 * numEdges(); ++i) {
-      if (permutation[edge_list[i]] == numPoints()) {
-        permutation[edge_list[i]] = new_ind++;
+      if (permutation[edge_to_node[i]] == numPoints()) {
+        permutation[edge_to_node[i]] = new_ind++;
       }
     }
     // Currently not supporting isolated points
