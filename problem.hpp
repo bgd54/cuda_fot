@@ -21,6 +21,7 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     edge_weights = (float *)malloc(sizeof(float) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
+      edge_weights[i] *= 0.0001; 
     }
     reset();
   }
@@ -29,6 +30,7 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     edge_weights = (float *)malloc(sizeof(float) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
+      edge_weights[i] *= 0.0001; 
     }
     reset();
   }
@@ -36,6 +38,7 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
   void reset() {
     for (float &w : point_weights) {
       w = float(rand() % 10000) / 5000.f - 1.0f;
+      w *= 0.0001; 
     }
   }
 
