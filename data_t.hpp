@@ -28,13 +28,13 @@ public:
   T* end();
 
   //functions to manage state between host and device memory
-  void flush_to_host();
-  void flush_to_device();
-  void create_device_memory();
+  void flushToHost();
+  void flushToDevice();
+  void initDeviceMemory();
 
-  MY_SIZE getSize();
-  MY_SIZE getDim();
-  T* getData_d();
+  MY_SIZE getSize() { return size; }
+  MY_SIZE getDim() { return dim; }
+  T* getDeviceData() { return data_d; }
 
 
   //dtor
@@ -66,7 +66,7 @@ const T& data_t<T>::operator[](MY_SIZE ind)const{
 
 
 template <typename T>
-void data_t<T>::flush_to_host(){
+void data_t<T>::flushToHost(){
   assert(data_d != nullptr);
   MY_SIZE bytes = size * dim * sizeof(T);
   checkCudaErrors( 
@@ -75,7 +75,7 @@ void data_t<T>::flush_to_host(){
 }
 
 template <typename T>
-void data_t<T>::flush_to_device(){
+void data_t<T>::flushToDevice(){
   assert(data_d != nullptr);
   MY_SIZE bytes = size * dim * sizeof(T);
   checkCudaErrors( 
@@ -84,22 +84,13 @@ void data_t<T>::flush_to_device(){
 }
 
 template <typename T>
-void data_t<T>::create_device_memory(){
+void data_t<T>::initDeviceMemory(){
   assert(data_d == nullptr);
   int bytes = size * dim * sizeof(T);
   checkCudaErrors( cudaMalloc((void**)&data_d, bytes) );
   checkCudaErrors(
       cudaMemcpy(data_d, data, bytes,  cudaMemcpyHostToDevice) );
 }
-
-template <typename T>
-MY_SIZE data_t<T>::getSize() { return size; }
-
-template <typename T>
-MY_SIZE data_t<T>::getDim() { return dim; }
-
-template <typename T>
-T* data_t<T>::getData_d() { return data_d; }
 
 template <typename T>
 T* data_t<T>::begin() { return data; }
