@@ -257,16 +257,16 @@ public:
    * Also reorders the edge and point data in the arguments. These must be of
    * length `numEdges()` and `numPoints()`, respectively.
    */
-  void reorder(float *edge_data = nullptr, float *point_data = nullptr) {
+  void reorder(float *edge_data = nullptr, data_t<float> *point_data = nullptr) {
     ScotchReorder reorder(*this);
     std::vector<SCOTCH_Num> permutation = reorder.reorder();
     // Permute points
     if (point_data) {
       std::vector<float> point_tmp(numPoints());
       for (MY_SIZE i = 0; i < numPoints(); ++i) {
-        point_tmp[permutation[i]] = point_data[i];
+        point_tmp[permutation[i]] = (*point_data)[i];
       }
-      std::copy(point_tmp.begin(), point_tmp.end(), point_data);
+      std::copy(point_tmp.begin(), point_tmp.end(), point_data->begin());
     }
     // Permute edge_to_node
     std::for_each(edge_to_node.begin(), edge_to_node.end() + numEdges() * 2,

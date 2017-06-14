@@ -11,7 +11,7 @@
 
 #include "problem.hpp"
 
-struct HierarchicalColourMemory {
+template <unsigned Dim = 1, bool SOA = false> struct HierarchicalColourMemory {
   // I assume 64 colour is enough
   typedef std::bitset<64> colourset_t;
   struct MemoryOfOneColour {
@@ -35,7 +35,8 @@ struct HierarchicalColourMemory {
   };
   std::vector<MemoryOfOneColour> colours;
 
-  HierarchicalColourMemory(MY_SIZE block_size, const Problem &problem) {
+  HierarchicalColourMemory(MY_SIZE block_size,
+                           const Problem<Dim, SOA> &problem) {
     /* Algorithm:
      *   - loop through `block_size` blocks
      *     - determine the points written to (not the same as points used)
@@ -121,7 +122,7 @@ private:
    */
   void colourBlock(MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
                    std::vector<colourset_t> &point_colours,
-                   const Problem &problem,
+                   const Problem<Dim, SOA> &problem,
                    std::vector<MemoryOfOneColour> &colours) {
     // TODO handle more than one dimensions/data points written to
     const Graph &graph = problem.graph;
