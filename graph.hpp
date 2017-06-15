@@ -149,6 +149,8 @@ public:
       // Right side, edges directed downwards
       edge_to_node[ind++] = i * M + (M - 1);
       edge_to_node[ind++] = (i + 1) * M + (M - 1);
+    }
+    for (MY_SIZE i = 0; i < M - 1; ++i) {
       // Down side, edges directed right
       edge_to_node[ind++] = (N - 1) * M + i;
       edge_to_node[ind++] = (N - 1) * M + i + 1;
