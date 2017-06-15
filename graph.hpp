@@ -29,21 +29,15 @@ public:
 
   /* Initialisation {{{1 */
   Graph(MY_SIZE N, MY_SIZE M, bool block = false)
-      : num_edges{2 * ((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges, 2) {
+      : num_edges{((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges, 2) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     // num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
     if (block) {
       fillEdgeListBlock(N, M);
     } else {
-      fillEdgeList2(N, M);
+      fillEdgeList(N, M);
     }
-
-    // TODO
-    // offsets = (MY_SIZE *)malloc(sizeof(MY_SIZE) * (N * M + 1));
-    // point_list = (MY_SIZE *)malloc(sizeof(MY_SIZE) * 2 * numEdges());
-    // fillPointList(N,M);
-    // offsets = point_list = nullptr;
   }
 
   /**
@@ -147,26 +141,14 @@ public:
             // Right
             edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l);
             edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l + 1);
-            // Up
-            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
-            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l + 1);
-            // Left
-            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l + 1);
-            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l);
           }
         }
       }
     }
     for (MY_SIZE i = 0; i < N - 1; ++i) {
-      // Left side, edges directed upwards
-      edge_to_node[ind++] = (i + 1) * M;
-      edge_to_node[ind++] = i * M;
       // Right side, edges directed downwards
       edge_to_node[ind++] = i * M + (M - 1);
       edge_to_node[ind++] = (i + 1) * M + (M - 1);
-      // Top side, edges directed left
-      edge_to_node[ind++] = i + 1;
-      edge_to_node[ind++] = i;
       // Down side, edges directed right
       edge_to_node[ind++] = (N - 1) * M + i;
       edge_to_node[ind++] = (N - 1) * M + i + 1;
