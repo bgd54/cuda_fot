@@ -154,7 +154,7 @@ public:
       edge_to_node[ind++] = (N - 1) * M + i + 1;
     }
     std::vector<MY_SIZE> permutation = renumberPoints();
-    std::for_each(edge_to_node.begin(), edge_to_node.end() + numEdges() * 2,
+    std::for_each(edge_to_node.begin(), edge_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     assert(ind == 2 * numEdges());
   }
