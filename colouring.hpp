@@ -6,7 +6,9 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
+#include <iterator>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "problem.hpp"
@@ -162,6 +164,53 @@ private:
       ++set_sizes[colour];
     }
     block.num_edge_colours.push_back(num_edge_colours);
+  }
+
+public:
+  /*******************
+  *  Device layout  *
+  *******************/
+  struct DeviceMemoryOfOneColour {
+    device_data_t<float> edge_weights;
+    device_data_t<MY_SIZE> points_to_be_cached, points_to_be_cached_offsets;
+    device_data_t<MY_SIZE> edge_list;
+    device_data_t<std::uint8_t> edge_colours;
+    device_data_t<std::uint8_t> num_edge_colours;
+    MY_SIZE shared_size;
+
+    DeviceMemoryOfOneColour(const MemoryOfOneColour &memory)
+        : edge_weights(memory.edge_weights),
+          points_to_be_cached(memory.points_to_be_cached),
+          points_to_be_cached_offsets(memory.points_to_be_cached_offsets),
+          edge_list(memory.edge_list), edge_colours(memory.edge_colours),
+          num_edge_colours(memory.num_edge_colours) {
+      shared_size = 0;
+      for (MY_SIZE i = 1; i < memory.points_to_be_cached_offsets.size(); ++i) {
+        shared_size =
+            std::max<MY_SIZE>(shared_size,
+                              memory.points_to_be_cached_offsets[i] -
+                                  memory.points_to_be_cached_offsets[i - 1]);
+      }
+    }
+
+    DeviceMemoryOfOneColour(const DeviceMemoryOfOneColour &other) = delete;
+    DeviceMemoryOfOneColour &
+    operator=(const DeviceMemoryOfOneColour &rhs) = delete;
+
+    DeviceMemoryOfOneColour(DeviceMemoryOfOneColour &&) = default;
+    DeviceMemoryOfOneColour &operator=(DeviceMemoryOfOneColour &&) = default;
+
+    ~DeviceMemoryOfOneColour() {}
+  };
+
+  std::vector<DeviceMemoryOfOneColour> getDeviceMemoryOfOneColour() const {
+    std::vector<DeviceMemoryOfOneColour> result;
+    std::transform(colours.begin(), colours.end(),
+                   std::inserter(result, result.end()),
+                   [](const MemoryOfOneColour &memory) {
+                     return DeviceMemoryOfOneColour(memory);
+                   });
+    return result;
   }
 };
 
