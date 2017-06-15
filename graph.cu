@@ -245,13 +245,6 @@ template <unsigned Dim, bool SOA>
 void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   HierarchicalColourMemory<Dim, SOA> memory(BLOCK_SIZE, *this);
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
-  /*std::vector<float *> d_edge_weights;*/
-  /*std::vector<MY_SIZE *> d_points_to_be_cached;*/
-  /*std::vector<MY_SIZE *> d_points_to_be_cached_offsets;*/
-  /*std::vector<MY_SIZE *> d_edge_list;*/
-  /*std::vector<std::uint8_t *> d_edge_colours;*/
-  /*std::vector<std::uint8_t *> d_num_edge_colours;*/
-  /*std::vector<MY_SIZE> shared_sizes;*/
   data_t<float> point_weights_out(point_weights.getSize(),
                                   point_weights.getDim());
   std::copy(point_weights.begin(), point_weights.end(),
@@ -262,78 +255,7 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   float avg_num_edge_colours = 0;
   for (const typename HierarchicalColourMemory<Dim, SOA>::MemoryOfOneColour
            &memory_of_one_colour : memory.colours) {
-    /*float *d_fptr;*/
-    /*MY_SIZE *d_sptr;*/
-    /*std::uint8_t *d_uptr;*/
-    /*// Edge weights*/
-    /*checkCudaErrors(*/
-        /*cudaMalloc((void **)&d_fptr,*/
-                   /*sizeof(float) * memory_of_one_colour.edge_weights.size()));*/
-    /*d_edge_weights.push_back(d_fptr);*/
-    /*checkCudaErrors(*/
-        /*cudaMemcpy(d_fptr, memory_of_one_colour.edge_weights.data(),*/
-                   /*sizeof(float) * memory_of_one_colour.edge_weights.size(),*/
-                   /*cudaMemcpyHostToDevice));*/
-    /*// Read points to be cached*/
-    /*checkCudaErrors(*/
-        /*cudaMalloc((void **)&d_sptr,*/
-                   /*sizeof(MY_SIZE) **/
-                       /*memory_of_one_colour.points_to_be_cached.size()));*/
-    /*d_points_to_be_cached.push_back(d_sptr);*/
-    /*checkCudaErrors(cudaMemcpy(*/
-        /*d_sptr, memory_of_one_colour.points_to_be_cached.data(),*/
-        /*sizeof(MY_SIZE) * memory_of_one_colour.points_to_be_cached.size(),*/
-        /*cudaMemcpyHostToDevice));*/
-    /*// Read points to be cached: offsets*/
-    /*checkCudaErrors(cudaMalloc(*/
-        /*(void **)&d_sptr,*/
-        /*sizeof(MY_SIZE) **/
-            /*memory_of_one_colour.points_to_be_cached_offsets.size()));*/
-    /*d_points_to_be_cached_offsets.push_back(d_sptr);*/
-    /*checkCudaErrors(cudaMemcpy(*/
-        /*d_sptr, memory_of_one_colour.points_to_be_cached_offsets.data(),*/
-        /*sizeof(MY_SIZE) **/
-            /*memory_of_one_colour.points_to_be_cached_offsets.size(),*/
-        /*cudaMemcpyHostToDevice));*/
-    /*// Shared memory sizes*/
-    /*MY_SIZE shared_size = 0;*/
-    /*for (MY_SIZE i = 1;*/
-    /*     i < memory_of_one_colour.points_to_be_cached_offsets.size();*/
-    /*     ++i) {*/
-    /*  shared_size = std::max<MY_SIZE>(*/
-    /*      shared_size,*/
-    /*      memory_of_one_colour.points_to_be_cached_offsets[i] -*/
-    /*          memory_of_one_colour.points_to_be_cached_offsets[i - 1]);*/
-    /*}*/
-    /*shared_sizes.push_back(2*shared_size);*/
     total_cache_size += memory_of_one_colour.points_to_be_cached.size();
-    /*// Edge list*/
-    /*checkCudaErrors(*/
-    /*    cudaMalloc((void **)&d_sptr,*/
-    /*               sizeof(MY_SIZE) * memory_of_one_colour.edge_list.size()));*/
-    /*d_edge_list.push_back(d_sptr);*/
-    /*checkCudaErrors(*/
-    /*    cudaMemcpy(d_sptr, memory_of_one_colour.edge_list.data(),*/
-    /*               sizeof(MY_SIZE) * memory_of_one_colour.edge_list.size(),*/
-    /*               cudaMemcpyHostToDevice));*/
-    /*// Edge colours*/
-    /*checkCudaErrors(cudaMalloc((void **)&d_uptr,*/
-    /*                           sizeof(std::uint8_t) **/
-    /*                               memory_of_one_colour.edge_colours.size()));*/
-    /*d_edge_colours.push_back(d_uptr);*/
-    /*checkCudaErrors(cudaMemcpy(d_uptr, memory_of_one_colour.edge_colours.data(),*/
-    /*                           sizeof(std::uint8_t) **/
-    /*                               memory_of_one_colour.edge_colours.size(),*/
-    /*                           cudaMemcpyHostToDevice));*/
-    /*// Num edge colours*/
-    /*checkCudaErrors(cudaMalloc(*/
-    /*    (void **)&d_uptr,*/
-    /*    sizeof(std::uint8_t) * memory_of_one_colour.num_edge_colours.size()));*/
-    /*d_num_edge_colours.push_back(d_uptr);*/
-    /*checkCudaErrors(cudaMemcpy(*/
-    /*    d_uptr, memory_of_one_colour.num_edge_colours.data(),*/
-    /*    sizeof(std::uint8_t) * memory_of_one_colour.num_edge_colours.size(),*/
-    /*    cudaMemcpyHostToDevice));*/
     avg_num_edge_colours +=
         std::accumulate(memory_of_one_colour.num_edge_colours.begin(),
                         memory_of_one_colour.num_edge_colours.end(), 0.0f);
@@ -351,16 +273,7 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
       MY_SIZE num_blocks = static_cast<MY_SIZE>(
           std::ceil(static_cast<double>(num_threads) / BLOCK_SIZE));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
-      /*MY_SIZE cache_size = sizeof(float) * 2 * shared_sizes[colour_ind];*/
       MY_SIZE cache_size = sizeof(float) * 2 * d_memory[colour_ind].shared_size;
-      /*problem_stepGPUHierarchical<Dim, SOA>*/
-      /*    <<<num_blocks, BLOCK_SIZE, cache_size>>>(*/
-      /*        d_edge_list[colour_ind], point_weights.getDeviceData(),*/
-      /*        point_weights_out.getDeviceData(), d_edge_weights[colour_ind],*/
-      /*        d_points_to_be_cached[colour_ind],*/
-      /*        d_points_to_be_cached_offsets[colour_ind],*/
-      /*        d_edge_colours[colour_ind], d_num_edge_colours[colour_ind],*/
-      /*        num_threads, graph.numPoints());*/
       problem_stepGPUHierarchical<Dim, SOA>
           <<<num_blocks, BLOCK_SIZE, cache_size>>>(
               (MY_SIZE*)d_memory[colour_ind].edge_list, point_weights.getDeviceData(),
@@ -408,14 +321,6 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   // -  Finish up  -
   // ---------------
   point_weights.flushToHost();
-  /*for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {*/
-  /*  checkCudaErrors(cudaFree(d_num_edge_colours[i]));*/
-  /*  checkCudaErrors(cudaFree(d_edge_colours[i]));*/
-  /*  checkCudaErrors(cudaFree(d_edge_list[i]));*/
-  /*  checkCudaErrors(cudaFree(d_points_to_be_cached_offsets[i]));*/
-  /*  checkCudaErrors(cudaFree(d_points_to_be_cached[i]));*/
-  /*  checkCudaErrors(cudaFree(d_edge_weights[i]));*/
-  /*}*/
 }
 /* 1}}} */
 
