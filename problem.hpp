@@ -52,14 +52,14 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     std::copy(point_weights.begin(), point_weights.end(), temp);
     for (MY_SIZE edge_ind = 0; edge_ind < graph.numEdges(); ++edge_ind) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE w_ind_from =
+        MY_SIZE w_ind_left =
             SOA
                 ? d * graph.numPoints() +
                       graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind]
                 : graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind] *
                           Dim +
                       d;
-        MY_SIZE w_ind_to =
+        MY_SIZE w_ind_right =
             SOA
                 ? d * graph.numPoints() +
                       graph
@@ -69,10 +69,10 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
                                      1] *
                           Dim +
                       d;
-        temp[w_ind_to] += edge_weights[edge_ind] * point_weights[w_ind_from];
+        point_weights[w_ind_right] += edge_weights[edge_ind] * temp[w_ind_left];
+        point_weights[w_ind_left] += edge_weights[edge_ind] * temp[w_ind_right];
       }
     }
-    std::copy(temp, temp + graph.numPoints(), point_weights.begin());
   }
 
   void loopCPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0) {
@@ -97,20 +97,21 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE ind = inds[i];
-        MY_SIZE w_ind_from =
+        MY_SIZE w_ind_left =
             SOA
                 ? d * graph.numPoints() +
                       graph.edge_to_node[graph.edge_to_node.getDim() * ind]
                 : graph.edge_to_node[graph.edge_to_node.getDim() * ind] * Dim +
                       d;
-        MY_SIZE w_ind_to =
+        MY_SIZE w_ind_right =
             SOA
                 ? d * graph.numPoints() +
                       graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1]
                 : graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1] *
                           Dim +
                       d;
-        out[w_ind_to] += edge_weights[ind] * point_weights[w_ind_from];
+        out[w_ind_right] += edge_weights[ind] * point_weights[w_ind_left];
+        out[w_ind_left] += edge_weights[ind] * point_weights[w_ind_right];
       }
     }
   }
