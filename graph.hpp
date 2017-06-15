@@ -161,35 +161,6 @@ public:
     assert(ind == 2 * numEdges());
   }
 
-  // void fillPointList(MY_SIZE N, MY_SIZE M) {
-  //  MY_SIZE point_ind = 0, list_ind = 0, edge_ind = 0;
-  //  MY_SIZE prev_degree = 0;
-  //  for (MY_SIZE r = 0; r < N - 1; ++r) {
-  //    offsets[point_ind] = prev_degree;
-  //    ++prev_degree;
-  //    point_list[list_ind++] = edge_ind++;
-  //    point_list[list_ind++] = point_ind + M;
-  //    ++point_ind;
-  //    for (MY_SIZE c = 0; c < M - 1; ++c) {
-  //      offsets[point_ind] = prev_degree;
-  //      prev_degree += 2;
-  //      point_list[list_ind++] = edge_ind++;
-  //      point_list[list_ind++] = point_ind - 1;
-  //      point_list[list_ind++] = edge_ind++;
-  //      point_list[list_ind++] = point_ind + M;
-  //      ++point_ind;
-  //    }
-  //  }
-  //  offsets[point_ind++] = prev_degree;
-  //  for (MY_SIZE c = 0; c < M - 1; ++c) {
-  //    offsets[point_ind] = prev_degree;
-  //    ++prev_degree;
-  //    point_list[list_ind++] = edge_ind++;
-  //    point_list[list_ind++] = point_ind - 1;
-  //    ++point_ind;
-  //  }
-  //  offsets[point_ind] = prev_degree; // should be end of point_list
-  //}
   /* 1}}} */
 
   std::vector<std::vector<MY_SIZE>>
@@ -259,7 +230,7 @@ public:
       std::copy(point_tmp.begin(), point_tmp.end(), point_data->begin());
     }
     // Permute edge_to_node
-    std::for_each(edge_to_node.begin(), edge_to_node.end() + numEdges() * 2,
+    std::for_each(edge_to_node.begin(), edge_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     if (edge_data) {
       std::vector<std::tuple<MY_SIZE, MY_SIZE, float>> edge_tmp(numEdges());
