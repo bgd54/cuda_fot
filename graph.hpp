@@ -4,6 +4,7 @@
 #include "data_t.hpp"
 #include "reorder.hpp"
 #include <algorithm>
+#include <bitset>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -18,6 +19,8 @@ struct InvalidInputFile {
 };
 
 struct Graph {
+  using colourset_t = std::bitset<64>;
+
 private:
   MY_SIZE num_points, num_edges;
 
@@ -213,22 +216,24 @@ public:
     // First fit
     // optimize so the sets have roughly equal sizes
     //      ^ do we really need that in hierarchical colouring?
-    // TODO handle more than one dimensions/data points written to
     assert(edge_to_node.getDim() == 2);
     std::vector<std::vector<MY_SIZE>> edge_partitions;
-    std::vector<std::uint8_t> point_colours(numPoints(), 0);
+    std::vector<colourset_t> point_colours(numPoints(), 0);
+    std::vector<MY_SIZE> set_sizes(64, 0);
+    colourset_t used_colours;
     for (MY_SIZE i = from; i < to; ++i) {
-      std::uint8_t colour = point_colours[edge_to_node[2 * i + 1]]++;
-      if (colour == edge_partitions.size()) {
-        edge_partitions.push_back({i});
-      } else if (colour < edge_partitions.size()) {
-        edge_partitions[colour].push_back(i);
-      } else {
-        // Wreak havoc
-        std::cerr << "Something is wrong in the first fit algorithm in line "
-                  << __LINE__ << std::endl;
-        std::terminate();
+      colourset_t occupied_colours = point_colours[edge_to_node[2 * i + 0]] |
+                                     point_colours[edge_to_node[2 * i + 1]];
+      colourset_t available_colours = ~occupied_colours & used_colours;
+      if (available_colours.none()) {
+        used_colours <<= 1;
+        used_colours.set(0);
+        edge_partitions.emplace_back();
+        available_colours = ~occupied_colours & used_colours;
       }
+      std::uint8_t colour = getAvailableColour(available_colours, set_sizes);
+      edge_partitions[colour].push_back(i);
+      ++set_sizes[colour];
     }
     return edge_partitions;
   }
@@ -257,7 +262,8 @@ public:
    * Also reorders the edge and point data in the arguments. These must be of
    * length `numEdges()` and `numPoints()`, respectively.
    */
-  void reorder(float *edge_data = nullptr, data_t<float> *point_data = nullptr) {
+  void reorder(float *edge_data = nullptr,
+               data_t<float> *point_data = nullptr) {
     ScotchReorder reorder(*this);
     std::vector<SCOTCH_Num> permutation = reorder.reorder();
     // Permute points
@@ -274,9 +280,9 @@ public:
     if (edge_data) {
       std::vector<std::tuple<MY_SIZE, MY_SIZE, float>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp[i] = std::make_tuple(edge_to_node[edge_to_node.getDim() * i],
-                                      edge_to_node[edge_to_node.getDim() * i + 1],
-                                      edge_data[i]);
+        edge_tmp[i] = std::make_tuple(
+            edge_to_node[edge_to_node.getDim() * i],
+            edge_to_node[edge_to_node.getDim() * i + 1], edge_data[i]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
@@ -287,8 +293,9 @@ public:
     } else {
       std::vector<std::tuple<MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp[i] = std::make_tuple(edge_to_node[edge_to_node.getDim() * i],
-                                      edge_to_node[edge_to_node.getDim() * i + 1]);
+        edge_tmp[i] =
+            std::make_tuple(edge_to_node[edge_to_node.getDim() * i],
+                            edge_to_node[edge_to_node.getDim() * i + 1]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
@@ -311,6 +318,21 @@ public:
         permutation.begin(), permutation.end(),
         [&permutation](MY_SIZE a) { return a < permutation.size(); }));
     return permutation;
+  }
+
+  static MY_SIZE getAvailableColour(colourset_t available_colours,
+                                    const std::vector<MY_SIZE> &set_sizes) {
+    assert(set_sizes.size() > 0);
+    MY_SIZE colour = set_sizes.size();
+    for (MY_SIZE i = 0; i < set_sizes.size(); ++i) {
+      if (available_colours[i]) {
+        if (colour >= set_sizes.size() || set_sizes[colour] > set_sizes[i]) {
+          colour = i;
+        }
+      }
+    }
+    assert(colour < set_sizes.size());
+    return colour;
   }
 };
 
