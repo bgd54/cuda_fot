@@ -283,9 +283,10 @@ static const char *_cudaGetErrorEnum(cudaError_t error)
         /* Put in here by sulan to avoid warnings. */
         case cudaErrorNvlinkUncorrectable:
             return "cudaErrorNvlinkUncorrectable";
+        default:
+            return "<unknown>";
     }
 
-    return "<unknown>";
 }
 #endif
 
@@ -435,9 +436,10 @@ static const char *_cudaGetErrorEnum(CUresult error)
 
         case CUDA_ERROR_UNKNOWN:
             return "CUDA_ERROR_UNKNOWN";
+        default:
+            return "<unknown>";
     }
 
-    return "<unknown>";
 }
 #endif
 
