@@ -3,7 +3,7 @@
 #include "helper_cuda.h"
 #include <cassert>
 #include <cuda.h>
-#include <cuda_runtime_api.h>
+#include <vector>
 
 template <typename T> struct data_t {
 private:
