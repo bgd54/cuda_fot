@@ -922,6 +922,8 @@ inline void __getLastCudaError(const char *errorMessage, const char *file, const
         exit(EXIT_FAILURE);
     }
 }
+#else // __DRIVER_TYPES_H__
+#define checkCudaErrors(val)
 #endif
 
 #ifndef MAX
