@@ -17,13 +17,13 @@ SCOTCH_FLAGS += -L/home/software/scotch_5.1.12/lib/
 all: $(TGT)
 
 graph: graph.cu $(HDR) reorder.cu Makefile
-	nvcc graph.cu reorder.cpp -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t"
+	nvcc graph.cu reorder.cu -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t"
 
 test_scotch: $(HDR) reorder.cu  Makefile test_scotch.cu
-	nvcc test_scotch.cu reorder.cpp -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="unsigned int"
+	nvcc test_scotch.cu reorder.cu -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="unsigned int"
 
 apply_reorder: apply_reorder.cu $(HDR) reorder.cu Makefile
-	nvcc apply_reorder.cu reorder.cpp -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="unsigned int"
+	nvcc apply_reorder.cu reorder.cu -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="unsigned int"
 
 %: %.cu Makefile $(HDR)
 		nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIBS) $(OPTIMIZATION_FLAGS)
