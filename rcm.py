@@ -1,4 +1,5 @@
-import matplotlib.pyplot as plt
+from __future__ import print_function,division,with_statement,nested_scopes
+
 import numpy as np
 import scipy.sparse
 import scipy.sparse.csgraph
@@ -35,6 +36,7 @@ def transform (in_file, out_file, vis):
         f.write('\n'.join([' '.join(map(str,a)) for a in el_out]))
         f.flush()
     if vis:
+        import matplotlib.pyplot as plt
         B = scipy.sparse.csr_matrix((np.ones((el_in[0,1],)),\
                 (el_out[:,0],el_out[:,1])),\
                 shape=(el_in[0,0],el_in[0,0]))
