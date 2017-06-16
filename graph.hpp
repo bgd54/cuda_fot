@@ -53,12 +53,14 @@ public:
   Graph(std::istream &is)
       : num_points{0}, num_edges{0},
         edge_to_node((is >> num_points >> num_edges, num_edges), 2) {
-    // is >> num_points >> num_edges;
+    if (!is) {
+      throw InvalidInputFile{i};
+    }
     for (MY_SIZE i = 0; i < num_edges; ++i) {
+      is >> edge_to_node[2 * i] >> edge_to_node[2 * i + 1];
       if (!is) {
         throw InvalidInputFile{i};
       }
-      is >> edge_to_node[2 * i] >> edge_to_node[2 * i + 1];
     }
   }
 
@@ -168,9 +170,6 @@ public:
     if (to > numEdges()) {
       to = numEdges();
     }
-    // First fit
-    // optimize so the sets have roughly equal sizes
-    //      ^ do we really need that in hierarchical colouring?
     assert(edge_to_node.getDim() == 2);
     std::vector<std::vector<MY_SIZE>> edge_partitions;
     std::vector<colourset_t> point_colours(numPoints(), 0);
