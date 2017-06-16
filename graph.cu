@@ -170,6 +170,7 @@ template <unsigned Dim, bool SOA>
 void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
   MY_SIZE num_of_colours = partition.size();
+  assert(num_of_colours > 0);
   MY_SIZE max_thread_num = std::max_element(partition.begin(), partition.end(),
                                             [](const std::vector<MY_SIZE> &a,
                                                const std::vector<MY_SIZE> &b) {
