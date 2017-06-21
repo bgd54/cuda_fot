@@ -76,7 +76,8 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
   }
 
   void loopCPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0) {
-    float *temp = (float *)malloc(sizeof(float) * graph.numPoints());
+    float *temp = (float *)malloc(sizeof(float) * graph.numPoints() *
+                                  point_weights.getDim());
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       stepCPUEdgeCentred(temp);
