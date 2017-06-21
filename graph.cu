@@ -546,27 +546,33 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
 }
 /* 1}}} */
 
+template <unsigned Dim =1,bool SOA=false>
 void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
             << "::::" << std::endl;
-  std::function<void(implementation_algorithm_t<>)> run =
-      [&in_file](implementation_algorithm_t<> algo) {
+  std::function<void(implementation_algorithm_t<Dim, SOA>)> run =
+      [&in_file](implementation_algorithm_t<Dim, SOA> algo) {
         std::ifstream f(in_file);
-        Problem<> problem(f);
+        Problem<Dim, SOA> problem(f);
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<>::loopCPUEdgeCentred);
-  run(&Problem<>::loopCPUEdgeCentredOMP);
-  run(&Problem<>::loopGPUEdgeCentred);
-  run(&Problem<>::loopGPUHierarchical);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentred);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP);
+  run(&Problem<Dim, SOA>::loopGPUEdgeCentred);
+  run(&Problem<Dim, SOA>::loopGPUHierarchical);
   std::cout << "Finished." << std::endl;
 }
 
 int main(int argc, const char **argv) {
-  findCudaDevice(argc, argv);
+  assert(argc>1);
+  //findCudaDevice(argc, argv);
+  generateTimes<1,true>(argv[1]);
+  generateTimes<4,true>(argv[1]);
+  generateTimes<8,true>(argv[1]);
+  generateTimes<16,true>(argv[1]);
   /*generateTimes("grid_513x513_default");*/
   /*generateTimes("grid_513x513_rcm");*/
   /*generateTimes("grid_513x513_scotch");*/
@@ -578,13 +584,13 @@ int main(int argc, const char **argv) {
   /*generateTimes("grid_1025x1025_default.rcm");*/
   /*generateTimes("grid_1025x1025_default.scotch");*/
   /*generateTimes("grid_1025x1025_hardcoded2");*/
-  MY_SIZE num = 9;
+  /*MY_SIZE num = 9;
   MY_SIZE N = 100, M = 200;
   MY_SIZE reset_every = 0;
   testTwoImplementations(num, N, M, reset_every,
                          &Problem<>::loopCPUEdgeCentredOMP,
                          &Problem<>::loopGPUHierarchical);
-  cudaDeviceReset();
+  cudaDeviceReset();*/
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
