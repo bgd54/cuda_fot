@@ -546,11 +546,13 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
 }
 /* 1}}} */
 
-template <unsigned Dim =1,bool SOA=false>
+template <unsigned Dim = 1, bool SOA = false>
 void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
-            << "::::" << std::endl;
+            << "::::" << std::endl
+            << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
+            << std::endl;
   std::function<void(implementation_algorithm_t<Dim, SOA>)> run =
       [&in_file](implementation_algorithm_t<Dim, SOA> algo) {
         std::ifstream f(in_file);
