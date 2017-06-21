@@ -17,7 +17,7 @@ SCOTCH_FLAGS += -L/home/software/scotch_5.1.12/lib/
 all: $(TGT)
 
 testVTK: testVTK.cu $(HDR) Makefile
-		nvcc testVTK.cu -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) -DMY_SIZE="unsigned int"
+		nvcc testVTK.cu -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) -DMY_SIZE="unsigned int" $(SCOTCH_FLAGS)
 
 
 %: %.cu Makefile $(HDR)

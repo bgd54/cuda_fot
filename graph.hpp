@@ -165,7 +165,9 @@ public:
 
   /* 1}}} */
 
-  std::vector<std::vector<MY_SIZE>>
+  template <bool VTK = false>
+  typename choose_t<VTK, std::vector<std::uint16_t>,
+                    std::vector<std::vector<MY_SIZE>>>::type
   colourEdges(MY_SIZE from = 0, MY_SIZE to = static_cast<MY_SIZE>(-1)) const {
     if (to > numEdges()) {
       to = numEdges();
@@ -174,6 +176,7 @@ public:
     std::vector<std::vector<MY_SIZE>> edge_partitions;
     std::vector<colourset_t> point_colours(numPoints(), 0);
     std::vector<MY_SIZE> set_sizes(64, 0);
+    std::vector<std::uint16_t> edge_colours(numEdges());
     colourset_t used_colours;
     for (MY_SIZE i = from; i < to; ++i) {
       colourset_t occupied_colours = point_colours[edge_to_node[2 * i + 0]] |
@@ -182,17 +185,27 @@ public:
       if (available_colours.none()) {
         used_colours <<= 1;
         used_colours.set(0);
-        edge_partitions.emplace_back();
+        if (!VTK) {
+          edge_partitions.emplace_back();
+        }
         available_colours = ~occupied_colours & used_colours;
       }
       std::uint8_t colour = getAvailableColour(available_colours, set_sizes);
-      edge_partitions[colour].push_back(i);
+      if (VTK) {
+        edge_colours[i] = colour;
+      } else {
+        edge_partitions[colour].push_back(i);
+      }
       colourset_t colourset(1ull << colour);
       point_colours[edge_to_node[2 * i + 0]] |= colourset;
       point_colours[edge_to_node[2 * i + 1]] |= colourset;
       ++set_sizes[colour];
     }
-    return edge_partitions;
+    return choose_t<
+        VTK, std::vector<std::uint16_t>,
+        std::vector<std::vector<MY_SIZE>>>::ret_value(std::move(edge_colours),
+                                                      std::move(
+                                                          edge_partitions));
   }
 
   MY_SIZE numEdges() const { return num_edges; }

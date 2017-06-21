@@ -5,11 +5,13 @@
 #include <cstdlib>
 #include "data_t.hpp"
 #include <vector>
+
+const size_t VTK_IND_THR_COL = 0;
+const size_t VTK_IND_BLK_ID  = 1;
+const size_t VTK_IND_BLK_COL = 2;
+
 void writeGraphToVTKAscii(std::string filename, const data_t<float> &point_coords,
-    const data_t<MY_SIZE> &edge_list, const std::vector<std::vector<std::uint8_t>> &edge_colors){
-  const size_t THR_COL = 0;
-  const size_t BLK_ID  = 1;
-  const size_t BLK_COL = 2;
+    const data_t<MY_SIZE> &edge_list, const std::vector<std::vector<std::uint16_t>> &edge_colors){
 
   std::ofstream fout(filename);
   if(!fout.good()){
@@ -36,30 +38,30 @@ void writeGraphToVTKAscii(std::string filename, const data_t<float> &point_coord
   }
   fout << "\n";
   
-  if((edge_colors.size() > THR_COL && edge_colors[THR_COL].size() > 0)
-      ||(edge_colors.size() > BLK_ID && edge_colors[BLK_ID].size() > 0)
-      ||(edge_colors.size() > BLK_COL && edge_colors[BLK_COL].size() > 0)){
+  if((edge_colors.size() > VTK_IND_THR_COL && edge_colors[VTK_IND_THR_COL].size() > 0)
+      ||(edge_colors.size() > VTK_IND_BLK_ID && edge_colors[VTK_IND_BLK_ID].size() > 0)
+      ||(edge_colors.size() > VTK_IND_BLK_COL && edge_colors[VTK_IND_BLK_COL].size() > 0)){
     fout << "CELL_DATA " << edge_list.getSize() << "\n";
   }
   
-  if(edge_colors.size() > THR_COL && edge_colors[THR_COL].size() > 0){
-    fout << "SCALARS THR_COL int 1\nLOOKUP_TABLE default\n";
-    for(size_t i=0; i<edge_colors[THR_COL].size(); ++i){
-      fout << static_cast<int>(edge_colors[THR_COL][i])<<"\n";
+  if(edge_colors.size() > VTK_IND_THR_COL && edge_colors[VTK_IND_THR_COL].size() > 0){
+    fout << "SCALARS VTK_IND_THR_COL int 1\nLOOKUP_TABLE default\n";
+    for(size_t i=0; i<edge_colors[VTK_IND_THR_COL].size(); ++i){
+      fout << static_cast<int>(edge_colors[VTK_IND_THR_COL][i])<<"\n";
     }
   }
   fout << "\n";
-  if(edge_colors.size() > BLK_ID && edge_colors[BLK_ID].size() > 0){
-    fout << "SCALARS BLK_ID int 1\nLOOKUP_TABLE default\n";
-    for(size_t i=0; i<edge_colors[BLK_ID].size(); ++i){
-      fout << static_cast<int>(edge_colors[BLK_ID][i])<<"\n";
+  if(edge_colors.size() > VTK_IND_BLK_ID && edge_colors[VTK_IND_BLK_ID].size() > 0){
+    fout << "SCALARS VTK_IND_BLK_ID int 1\nLOOKUP_TABLE default\n";
+    for(size_t i=0; i<edge_colors[VTK_IND_BLK_ID].size(); ++i){
+      fout << static_cast<int>(edge_colors[VTK_IND_BLK_ID][i])<<"\n";
     }
   }
   fout << "\n";
-  if(edge_colors.size() > BLK_COL && edge_colors[BLK_COL].size() > 0){
-    fout << "SCALARS BLK_COL int 1\nLOOKUP_TABLE default\n";
-    for(size_t i=0; i<edge_colors[BLK_COL].size(); ++i){
-      fout << static_cast<int>(edge_colors[BLK_COL][i])<<"\n";
+  if(edge_colors.size() > VTK_IND_BLK_COL && edge_colors[VTK_IND_BLK_COL].size() > 0){
+    fout << "SCALARS VTK_IND_BLK_COL int 1\nLOOKUP_TABLE default\n";
+    for(size_t i=0; i<edge_colors[VTK_IND_BLK_COL].size(); ++i){
+      fout << static_cast<int>(edge_colors[VTK_IND_BLK_COL][i])<<"\n";
     }
   }
   fout.close();
