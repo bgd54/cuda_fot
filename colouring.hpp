@@ -162,6 +162,9 @@ private:
           Graph::getAvailableColour(available_colours, set_sizes);
       block.edge_colours.push_back(colour);
       ++set_sizes[colour];
+      colourset_t colourset (1ull << colour);
+      point_colours[graph.edge_to_node[2*i+0]] |= colourset;
+      point_colours[graph.edge_to_node[2*i+1]] |= colourset;
     }
     block.num_edge_colours.push_back(num_edge_colours);
   }

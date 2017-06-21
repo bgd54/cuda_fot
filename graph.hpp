@@ -187,6 +187,9 @@ public:
       }
       std::uint8_t colour = getAvailableColour(available_colours, set_sizes);
       edge_partitions[colour].push_back(i);
+      colourset_t colourset(1ull << colour);
+      point_colours[edge_to_node[2 * i + 0]] |= colourset;
+      point_colours[edge_to_node[2 * i + 1]] |= colourset;
       ++set_sizes[colour];
     }
     return edge_partitions;
