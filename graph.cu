@@ -274,7 +274,7 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
       MY_SIZE num_blocks = static_cast<MY_SIZE>(
           std::ceil(static_cast<double>(num_threads) / BLOCK_SIZE));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
-      MY_SIZE cache_size = sizeof(float) * 2 * d_memory[colour_ind].shared_size;
+      MY_SIZE cache_size = sizeof(float) * 2 * d_memory[colour_ind].shared_size * Dim;
       problem_stepGPUHierarchical<Dim, SOA>
           <<<num_blocks, BLOCK_SIZE, cache_size>>>(
               (MY_SIZE*)d_memory[colour_ind].edge_list, point_weights.getDeviceData(),
