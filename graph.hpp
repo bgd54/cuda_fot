@@ -54,7 +54,7 @@ public:
       : num_points{0}, num_edges{0},
         edge_to_node((is >> num_points >> num_edges, num_edges), 2) {
     if (!is) {
-      throw InvalidInputFile{i};
+      throw InvalidInputFile{0};
     }
     for (MY_SIZE i = 0; i < num_edges; ++i) {
       is >> edge_to_node[2 * i] >> edge_to_node[2 * i + 1];
