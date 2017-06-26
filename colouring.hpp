@@ -114,6 +114,7 @@ private:
       MY_SIZE point_right = edge_to_node[2 * i + 1];
       MY_SIZE point_left = edge_to_node[2 * i];
       point_colours[point_right] |= colourset;
+      point_colours[point_left] |= colourset;
       colour.edge_weights.push_back(problem.edge_weights[i]);
       points_to_edges[point_right].emplace_back(i, 1);
       points_to_edges[point_left].emplace_back(i, 0);
