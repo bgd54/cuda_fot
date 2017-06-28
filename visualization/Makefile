@@ -14,10 +14,13 @@ OPTIMIZATION_FLAGS := -g
 SCOTCH_FLAGS := -lscotch -lscotcherr -lm -I/home/software/scotch_5.1.12/include/
 SCOTCH_FLAGS += -L/home/software/scotch_5.1.12/lib/
 
+METIS_FLAGS := -I/home/software/parmetis-gnu/include/
+METIS_FLAGS += -lmetis -L/home/software/parmetis-gnu/lib/
+
 all: $(TGT)
 
 %: %.cu Makefile $(HDR)
-	nvcc $< -o $@ $(INC) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t"
+	nvcc $< -o $@ $(INC) $(METIS_FLAGS) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS)  -DMY_SIZE="std::uint32_t"
 
 clean:
 		rm -f $(TGT)

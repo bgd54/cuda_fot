@@ -1,8 +1,10 @@
 #include "colouring.hpp"
 #include "data_t.hpp"
 #include "graph_write_VTK.hpp"
+#include "partition.hpp"
 #include <iostream>
 #include <vector>
+
 
 using namespace std;
 
@@ -67,16 +69,34 @@ void writeHierarchicalColouringVTK(const std::string &filename,
   writeGraphToVTKAscii(filename, point_coords, edge_list, data);
 }
 
-int main() {
-  data_t<float> points(16, 2);
-  for (size_t i = 0; i < points.getSize(); ++i) {
-    points[points.getDim() * i + 0] = i / 4;
-    points[points.getDim() * i + 1] = i % 4;
+void writePartitionVTK (const std::string &filename, 
+    const data_t<float> &point_coords, const Graph &graph,
+    MY_SIZE block_size) {
+  std::vector<std::vector<std::uint16_t>> data (3);
+  std::vector<idx_t> partition = partitionMetis(graph, block_size);
+  data[VTK_IND_BLK_ID].resize(graph.numEdges());
+  for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
+    std::uint16_t left_colour = partition[graph.edge_to_node[2 * i]];
+    std::uint16_t right_colour = partition[graph.edge_to_node[2 * i + 1]];
+    data[VTK_IND_BLK_ID][i] = left_colour + right_colour;
   }
-  Problem<> problem(4, 4);
+  data[VTK_IND_THR_COL].resize(graph.numEdges());
+  std::vector<idx_t> edge_partition = partitionMetis(graph.getLineGraph(), block_size);
+  std::copy(edge_partition.begin(),edge_partition.end(),data[VTK_IND_THR_COL].begin());
+  writeGraphToVTKAscii(filename, point_coords, graph.edge_to_node, data);
+}
 
-  writeGlobalColouringVTK("graph_global.vtk", points, problem.graph, 4);
-  writeHierarchicalColouringVTK("graph_hier.vtk", points, problem, 4);
+int main() {
+  data_t<float> points(256, 2);
+  for (size_t i = 0; i < points.getSize(); ++i) {
+    points[points.getDim() * i + 0] = i / 16;
+    points[points.getDim() * i + 1] = i % 16;
+  }
+  Problem<> problem(16, 16);
+
+  writeGlobalColouringVTK("graph_global.vtk", points, problem.graph, 16);
+  writeHierarchicalColouringVTK("graph_hier.vtk", points, problem, 16);
+  writePartitionVTK("graph_part.vtk", points, problem.graph, 16);
 
   return 0;
 }
