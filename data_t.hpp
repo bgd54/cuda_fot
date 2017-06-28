@@ -20,6 +20,8 @@ public:
 
   data_t(const data_t &) = delete;
   data_t operator=(const data_t &) = delete;
+  data_t(data_t<T> &&);
+  data_t &operator=(data_t<T> &&);
 
   T &operator[](MY_SIZE ind);
   const T &operator[](MY_SIZE ind) const;
@@ -79,6 +81,18 @@ template <typename T> data_t<T>::~data_t() {
   if (data_d) {
     checkCudaErrors(cudaFree(data_d));
   }
+}
+
+template <typename T>
+data_t<T>::data_t(data_t<T> &&other) {
+  data_d = other.data_d;
+  other.data_d = nullptr;
+}
+
+template <typename T>
+data_t<T> &data_t<T>::operator=(data_t<T> &&rhs) {
+  std::swap(data_d, rhs.data_d);
+  return *this;
 }
 
 template <typename T> T &data_t<T>::operator[](MY_SIZE ind) {

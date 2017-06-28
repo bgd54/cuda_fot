@@ -28,6 +28,15 @@ public:
   data_t<MY_SIZE> edge_to_node;
 
   /* Initialisation {{{1 */
+private:
+  Graph(MY_SIZE _num_points, MY_SIZE _num_edges, const MY_SIZE *_edge_to_node)
+      : num_points{_num_points}, num_edges{_num_edges},
+        edge_to_node(num_edges, 2) {
+    std::copy(_edge_to_node, _edge_to_node + 2 * num_edges,
+              edge_to_node.begin());
+  }
+
+public:
   Graph(MY_SIZE N, MY_SIZE M, bool block = false)
       : num_edges{((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges, 2) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
@@ -65,6 +74,23 @@ public:
   }
 
   ~Graph() {}
+
+  Graph(const Graph &) = delete;
+  Graph &operator=(const Graph &) = delete;
+
+  Graph(Graph &&other)
+      : num_points{other.num_points}, num_edges{other.num_edges},
+        edge_to_node{std::move(other.edge_to_node)} {
+    other.num_points = 0;
+    other.num_edges = 0;
+  }
+
+  Graph &operator=(Graph &&rhs) {
+    std::swap(num_points, rhs.num_points);
+    std::swap(num_edges, rhs.num_edges);
+    std::swap(edge_to_node, rhs.edge_to_node);
+    return *this;
+  }
 
   /**
    * Grid, unidirectional: right and down
@@ -303,6 +329,28 @@ public:
     }
     assert(colour < set_sizes.size());
     return colour;
+  }
+
+  Graph getLineGraph() const {
+    const std::multimap<MY_SIZE, MY_SIZE> point_to_edge =
+        GraphCSR<MY_SIZE>::getPointToEdge(edge_to_node);
+    // TODO optimise
+    std::vector<MY_SIZE> new_edge_to_point;
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      for (MY_SIZE offset = 0; offset < 2; ++offset) {
+        MY_SIZE point = edge_to_node[2 * i + offset];
+        const auto edge_range = point_to_edge.equal_range(point);
+        for (auto it = edge_range.first; it != edge_range.second; ++it) {
+          MY_SIZE other_edge = it->second;
+          if (other_edge > i) {
+            new_edge_to_point.push_back(i);
+            new_edge_to_point.push_back(other_edge);
+          }
+        }
+      }
+    }
+    return Graph(numEdges(), new_edge_to_point.size() / 2,
+                 new_edge_to_point.data());
   }
 };
 

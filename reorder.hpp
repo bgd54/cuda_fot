@@ -1,18 +1,20 @@
 #ifndef REORDER_HPP_IGDYRZTN
 #define REORDER_HPP_IGDYRZTN
 
+#include "data_t.hpp"
 #include <algorithm>
 #include <cassert>
+#include <iterator>
 #include <limits>
+#include <map>
 #include <scotch.h>
 #include <vector>
-#include "data_t.hpp"
 
 struct ScotchError {
   int errorCode;
 };
 
-class Graph;
+struct Graph;
 
 /**
  * A graph in compressed sparse row format
@@ -29,17 +31,13 @@ template <class UnsignedType> struct GraphCSR {
                   "GraphCSR: UnsignedType too small.");
     assert(edge_to_node.getDim() == 2);
     point_indices = new UnsignedType[num_points + 1];
-    std::vector<std::pair<UnsignedType, UnsignedType>> incidence;
-    for (UnsignedType i = 0; i < edge_to_node.getDim() * num_edges; ++i) {
-      incidence.push_back(
-          std::make_pair(edge_to_node[i], i / edge_to_node.getDim()));
-    }
-    std::sort(incidence.begin(), incidence.end());
     UnsignedType point_ind = 0;
     point_indices[0] = 0;
-    for (UnsignedType i = 0; i < 2 * num_edges; ++i) {
-      UnsignedType current_point = incidence[i].first;
-      UnsignedType current_edge = incidence[i].second;
+    std::multimap<UnsignedType,UnsignedType> incidence =
+        getPointToEdge(edge_to_node);
+    for (const auto incidence_pair : incidence) {
+      UnsignedType current_point = incidence_pair.first;
+      UnsignedType current_edge = incidence_pair.second;
       while (current_point != point_ind) {
         point_indices[++point_ind] = edge_endpoints.size();
       }
@@ -75,10 +73,27 @@ template <class UnsignedType> struct GraphCSR {
   GraphCSR &operator=(const GraphCSR &rhs) = delete;
 
   const UnsignedType *pointIndices() const { return point_indices; }
+  UnsignedType *pointIndices() { return point_indices; }
 
   const UnsignedType *edgeEndpoints() const { return edge_endpoints.data(); }
+  UnsignedType *edgeEndpoints() { return edge_endpoints.data(); }
 
   UnsignedType numArcs() const { return edge_endpoints.size(); }
+
+  /**
+   * returns vector or map
+   */
+  template <class T>
+  static std::multimap<UnsignedType, UnsignedType>
+  getPointToEdge(const data_t<T> &edge_to_node) {
+    std::multimap<UnsignedType, UnsignedType> point_to_edge;
+    for (UnsignedType i = 0; i < edge_to_node.getDim() * edge_to_node.getSize();
+         ++i) {
+      point_to_edge.insert(
+          std::make_pair(edge_to_node[i], i / edge_to_node.getDim()));
+    }
+    return point_to_edge;
+  }
 
 private:
   UnsignedType *point_indices;
