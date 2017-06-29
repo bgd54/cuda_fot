@@ -6,9 +6,6 @@
 #include <iostream>
 #include <vector>
 
-//#define MY_SIZE int
-// using MY_SIZE = std::uint32_t;
-
 #include "colouring.hpp"
 #include "helper_cuda.h"
 #include "problem.hpp"
@@ -81,7 +78,6 @@ __global__ void problem_stepGPUHierarchical(
 
   extern __shared__ float shared[];
   float *point_cache = shared;
-  float *point_cache_out = shared + num_cached_point;
 
   MY_SIZE left_ind, right_ind;
 
@@ -106,7 +102,6 @@ __global__ void problem_stepGPUHierarchical(
           c_ind = (i + tid) * Dim + d;
         }
         point_cache[c_ind] = point_weights[g_ind];
-        point_cache_out[c_ind] = point_weights_out[g_ind];
       }
     }
   }
@@ -129,11 +124,31 @@ __global__ void problem_stepGPUHierarchical(
     }
   }
 
+  __syncthreads();
+
+  // Clear cache
+  for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
+    if (i + tid < num_cached_point) {
+      for (MY_SIZE d = 0; d < Dim; ++d) {
+        MY_SIZE c_ind;
+        if (SOA) {
+          c_ind = d * num_cached_point + (i + tid);
+        } else {
+          c_ind = (i + tid) * Dim + d;
+        }
+        point_cache[c_ind] = 0;
+      }
+    }
+  }
+
+  __syncthreads();
+
+  // Accumulate increment
   for (MY_SIZE i = 0; i < num_edge_colours[bid]; ++i) {
     if (our_colour == i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        point_cache_out[right_ind] += increment[d];
-        point_cache_out[left_ind] += increment[d + Dim];
+        point_cache[right_ind] += increment[d];
+        point_cache[left_ind] += increment[d + Dim];
       }
     }
     __syncthreads();
@@ -156,7 +171,7 @@ __global__ void problem_stepGPUHierarchical(
               points_to_be_cached[cache_points_offset + i + tid] * Dim + d;
           write_c_ind = (i + tid) * Dim + d;
         }
-        point_weights_out[write_g_ind] = point_cache_out[write_c_ind];
+        point_weights_out[write_g_ind] += point_cache[write_c_ind];
       }
     }
   }
@@ -273,16 +288,16 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
           std::ceil(static_cast<double>(num_threads) / BLOCK_SIZE));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
       MY_SIZE cache_size =
-          sizeof(float) * 2 * d_memory[colour_ind].shared_size * Dim;
+          sizeof(float) * d_memory[colour_ind].shared_size * Dim;
       problem_stepGPUHierarchical<Dim, SOA>
           <<<num_blocks, BLOCK_SIZE, cache_size>>>(
-              (MY_SIZE *)d_memory[colour_ind].edge_list,
+              static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
-              (float *)d_memory[colour_ind].edge_weights,
-              (MY_SIZE *)d_memory[colour_ind].points_to_be_cached,
-              (MY_SIZE *)d_memory[colour_ind].points_to_be_cached_offsets,
-              (std::uint8_t *)d_memory[colour_ind].edge_colours,
-              (std::uint8_t *)d_memory[colour_ind].num_edge_colours,
+              static_cast<float *>(d_memory[colour_ind].edge_weights),
+              static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached),
+              static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached_offsets),
+              static_cast<std::uint8_t *>(d_memory[colour_ind].edge_colours),
+              static_cast<std::uint8_t *>(d_memory[colour_ind].num_edge_colours),
               num_threads, graph.numPoints());
       checkCudaErrors(cudaDeviceSynchronize());
       total_num_blocks += num_blocks;
