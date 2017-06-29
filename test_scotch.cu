@@ -5,12 +5,12 @@
 #include <fstream>
 
 void testReordering() {
-  Problem problem(2,4);
+  Problem<> problem(2,4);
   std::cout << "Before reordering" << std::endl;
   std::cout << "Edges:" << std::endl;
   for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-    std::cout << problem.graph.edge_list[2 * i] << "->"
-              << problem.graph.edge_list[2 * i + 1] << "\t"
+    std::cout << problem.graph.edge_to_node[2 * i] << "->"
+              << problem.graph.edge_to_node[2 * i + 1] << "\t"
               << problem.edge_weights[i] << std::endl;
   }
   std::cout << "Points:" << std::endl;
@@ -21,8 +21,8 @@ void testReordering() {
   std::cout << "After reordering" << std::endl;
   std::cout << "Edges:" << std::endl;
   for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-    std::cout << problem.graph.edge_list[2 * i] << "->"
-              << problem.graph.edge_list[2 * i + 1] << "\t"
+    std::cout << problem.graph.edge_to_node[2 * i] << "->"
+              << problem.graph.edge_to_node[2 * i + 1] << "\t"
               << problem.edge_weights[i] << std::endl;
   }
   std::cout << "Points:" << std::endl;
@@ -33,8 +33,6 @@ void testReordering() {
 
 int main() {
   //testReordering();
-  Graph graph(513,513);
-  std::ofstream f ("grid_513x513_hardcoded");
-  graph.writeEdgeList(f);
+  Graph graph(2049,1025,true);
   return 0;
 }
