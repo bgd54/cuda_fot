@@ -87,8 +87,10 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     }
     PRINT_BANDWIDTH(
         t, "loopCPUEdgeCentred",
-        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num,
-        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num);
+        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+            num,
+        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+            num);
     free(temp);
   }
 
@@ -146,8 +148,10 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     }
     PRINT_BANDWIDTH(
         t, "loopCPUEdgeCentredOMP",
-        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num,
-        sizeof(float) * (2 * graph.numPoints() + graph.numEdges()) * num);
+        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+            num,
+        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+            num);
   }
 
   void reorder() { graph.reorder(edge_weights, &point_weights); }
