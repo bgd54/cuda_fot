@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <numeric>
 
 #include "problem.hpp"
 
@@ -72,9 +73,6 @@ template <unsigned Dim = 1, bool SOA = false> struct HierarchicalColourMemory {
         colours.emplace_back();
       }
       MY_SIZE colour = Graph::getAvailableColour(available_colours, set_sizes);
-      // std::cerr<< "Allocated: " << block_from << "-" << block_to << ": " <<
-      // colour
-      //    <<std::endl;
       ++set_sizes[colour];
       colourBlock(block_from, block_to, colour, point_colours, problem,
                   colours);
@@ -138,20 +136,21 @@ private:
                                       points_to_be_cached.end());
     colour.points_to_be_cached_offsets.push_back(
         colour.points_to_be_cached.size());
-    colourEdges(from, to, problem.graph, colour);
+    colourEdges(to - from, colour, c_edge_list, points_to_be_cached.size());
   }
 
-  void colourEdges(MY_SIZE from, MY_SIZE to, const Graph &graph,
-                   MemoryOfOneColour &block) {
-    assert(graph.edge_to_node.getDim() == 2);
-    std::vector<colourset_t> point_colours(graph.numPoints(), 0);
+  void colourEdges(MY_SIZE block_size, MemoryOfOneColour &block,
+                   const std::vector<MY_SIZE> &edge_list, MY_SIZE num_point) {
+    static std::vector<colourset_t> point_colours;
+    point_colours.resize(num_point);
+    memset(point_colours.data(), 0, sizeof(colourset_t) * point_colours.size());
     std::uint8_t num_edge_colours = 0;
     std::vector<MY_SIZE> set_sizes(64, 0);
     colourset_t used_colours;
-    for (MY_SIZE i = from; i < to; ++i) {
+    for (MY_SIZE i = 0; i < block_size; ++i) {
       colourset_t occupied_colours;
-      occupied_colours |= point_colours[graph.edge_to_node[2 * i + 0]];
-      occupied_colours |= point_colours[graph.edge_to_node[2 * i + 1]];
+      occupied_colours |= point_colours[edge_list[2 * i + 0]];
+      occupied_colours |= point_colours[edge_list[2 * i + 1]];
       colourset_t available_colours = ~occupied_colours & used_colours;
       if (available_colours.none()) {
         ++num_edge_colours;
@@ -164,8 +163,8 @@ private:
       block.edge_colours.push_back(colour);
       ++set_sizes[colour];
       colourset_t colourset (1ull << colour);
-      point_colours[graph.edge_to_node[2*i+0]] |= colourset;
-      point_colours[graph.edge_to_node[2*i+1]] |= colourset;
+      point_colours[edge_list[2 * i + 0]] |= colourset;
+      point_colours[edge_list[2 * i + 1]] |= colourset;
     }
     block.num_edge_colours.push_back(num_edge_colours);
   }
