@@ -257,7 +257,9 @@ void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
 /* loopGPUHierarchical {{{1 */
 template <unsigned Dim, bool SOA>
 void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
+  TIMER_START(t_colouring);
   HierarchicalColourMemory<Dim, SOA> memory(BLOCK_SIZE, *this);
+  TIMER_PRINT(t_colouring,"Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
   data_t<float> point_weights_out(point_weights.getSize(),
                                   point_weights.getDim());
