@@ -565,53 +565,41 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
 }
 /* 1}}} */
 
-template <unsigned Dim = 1, bool SOA = false>
+template <unsigned Dim = 1, bool SOA = false, bool RunSerial = true>
 void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
             << "::::" << std::endl
             << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
             << std::endl;
-  std::function<void(implementation_algorithm_t<Dim, SOA>)> run =
-      [&in_file](implementation_algorithm_t<Dim, SOA> algo) {
+  std::function<void(implementation_algorithm_t<Dim, SOA>, MY_SIZE)> run =
+      [&in_file](implementation_algorithm_t<Dim, SOA> algo, MY_SIZE num) {
         std::ifstream f(in_file);
         Problem<Dim, SOA> problem(f);
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentred);
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP);
-  run(&Problem<Dim, SOA>::loopGPUEdgeCentred);
-  run(&Problem<Dim, SOA>::loopGPUHierarchical);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentred, RunSerial ? num : 1);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP,num);
+  run(&Problem<Dim, SOA>::loopGPUEdgeCentred,num);
+  run(&Problem<Dim, SOA>::loopGPUHierarchical,num);
   std::cout << "Finished." << std::endl;
 }
 
 int main(int argc, const char **argv) {
-  /*assert(argc > 1);*/
-  // findCudaDevice(argc, argv);
-  /*generateTimes<1, true>(argv[1]);*/
-  /*generateTimes<4, true>(argv[1]);*/
-  /*generateTimes<8, true>(argv[1]);*/
-  /*generateTimes<16, true>(argv[1]);*/
-  /*generateTimes("grid_513x513_default");*/
-  /*generateTimes("grid_513x513_rcm");*/
-  /*generateTimes("grid_513x513_scotch");*/
-  /*generateTimes("grid_513x513_hardcoded2");*/
-  /*generateTimes("rotor37_nonrenum");*/
-  /*generateTimes("rotor37_nonrenum.rcm");*/
-  /*generateTimes("rotor37_nonrenum.scotch");*/
-  /*generateTimes("grid_1025x1025_default");*/
-  /*generateTimes("grid_1025x1025_default.rcm");*/
-  /*generateTimes("grid_1025x1025_default.scotch");*/
-  /*generateTimes("grid_1025x1025_hardcoded2");*/
-  MY_SIZE num = 500;
-  MY_SIZE N = 1000, M = 2000;
-  MY_SIZE reset_every = 0;
-  testTwoImplementations<>(num, N, M, reset_every,
-                         &Problem<>::loopGPUEdgeCentred,
-                         &Problem<>::loopGPUHierarchical);
-  cudaDeviceReset();
+  assert(argc > 1);
+  generateTimes<1, true, false>(argv[1]);
+  generateTimes<4, true, false>(argv[1]);
+  generateTimes<8, true, false>(argv[1]);
+  generateTimes<16, true, false>(argv[1]);
+  /*MY_SIZE num = 500;*/
+  /*MY_SIZE N = 1000, M = 2000;*/
+  /*MY_SIZE reset_every = 0;*/
+  /*testTwoImplementations<>(num, N, M, reset_every,*/
+  /*                       &Problem<>::loopGPUEdgeCentred,*/
+  /*                       &Problem<>::loopGPUHierarchical);*/
+  /*cudaDeviceReset();*/
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
