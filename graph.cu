@@ -489,15 +489,16 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
   }
 }
 
+template<unsigned Dim = 1, bool SOA = false>
 void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
                             MY_SIZE reset_every,
-                            implementation_algorithm_t<> algorithm1,
-                            implementation_algorithm_t<> algorithm2) {
+                            implementation_algorithm_t<Dim,SOA> algorithm1,
+                            implementation_algorithm_t<Dim,SOA> algorithm2) {
   std::vector<float> result1;
   double rms = 0;
   {
     srand(1);
-    Problem<> problem(N, M);
+    Problem<Dim,SOA> problem(N, M);
     (problem.*algorithm1)(num, reset_every);
     float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
@@ -509,7 +510,7 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
 
   {
     srand(1);
-    Problem<> problem(N, M);
+    Problem<Dim,SOA> problem(N, M);
     (problem.*algorithm2)(num, reset_every);
     float abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
@@ -587,12 +588,12 @@ void generateTimes(std::string in_file) {
 }
 
 int main(int argc, const char **argv) {
-  assert(argc > 1);
+  /*assert(argc > 1);*/
   // findCudaDevice(argc, argv);
-  generateTimes<1, true>(argv[1]);
-  generateTimes<4, true>(argv[1]);
-  generateTimes<8, true>(argv[1]);
-  generateTimes<16, true>(argv[1]);
+  /*generateTimes<1, true>(argv[1]);*/
+  /*generateTimes<4, true>(argv[1]);*/
+  /*generateTimes<8, true>(argv[1]);*/
+  /*generateTimes<16, true>(argv[1]);*/
   /*generateTimes("grid_513x513_default");*/
   /*generateTimes("grid_513x513_rcm");*/
   /*generateTimes("grid_513x513_scotch");*/
@@ -604,13 +605,13 @@ int main(int argc, const char **argv) {
   /*generateTimes("grid_1025x1025_default.rcm");*/
   /*generateTimes("grid_1025x1025_default.scotch");*/
   /*generateTimes("grid_1025x1025_hardcoded2");*/
-  /*MY_SIZE num = 9;
-  MY_SIZE N = 100, M = 200;
+  MY_SIZE num = 500;
+  MY_SIZE N = 1000, M = 2000;
   MY_SIZE reset_every = 0;
-  testTwoImplementations(num, N, M, reset_every,
-                         &Problem<>::loopCPUEdgeCentredOMP,
+  testTwoImplementations<>(num, N, M, reset_every,
+                         &Problem<>::loopGPUEdgeCentred,
                          &Problem<>::loopGPUHierarchical);
-  cudaDeviceReset();*/
+  cudaDeviceReset();
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
