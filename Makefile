@@ -10,7 +10,8 @@ NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
 NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 
 OPTIMIZATION_FLAGS := -g
-#OPTIMIZATION_FLAGS := -O3
+#OPTIMIZATION_FLAGS := -g -pg -Xcompiler=-fno-inline
+#OPTIMIZATION_FLAGS := -O3 -DNDEBUG
 
 SCOTCH_FLAGS := -lscotch -lscotcherr -lm -I/home/software/scotch_5.1.12/include/
 SCOTCH_FLAGS += -L/home/software/scotch_5.1.12/lib/

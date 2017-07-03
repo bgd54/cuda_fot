@@ -603,7 +603,10 @@ void generateTimes(std::string in_file) {
 }
 
 int main(int argc, const char **argv) {
-  /*assert(argc > 1);
+  /*if (argc <= 1) {
+    std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;
+    return 1;
+  }
   generateTimes<1, true, false>(argv[1]);
   generateTimes<4, true, false>(argv[1]);
   generateTimes<8, true, false>(argv[1]);
