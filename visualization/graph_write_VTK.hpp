@@ -5,10 +5,18 @@
 #include <cstdlib>
 #include "data_t.hpp"
 #include <vector>
+#include <random>
 
 const size_t VTK_IND_THR_COL = 0;
 const size_t VTK_IND_BLK_ID  = 1;
 const size_t VTK_IND_BLK_COL = 2;
+
+inline std::uint16_t mixValue (std::uint16_t value) {
+  std::minstd_rand rd;
+  rd.seed(value);
+  rd.discard(10);
+  return rd() % (1ul<<16);
+}
 
 void writeGraphToVTKAscii(std::string filename, const data_t<float> &point_coords,
     const data_t<MY_SIZE> &edge_list, const std::vector<std::vector<std::uint16_t>> &edge_colors){
@@ -47,23 +55,23 @@ void writeGraphToVTKAscii(std::string filename, const data_t<float> &point_coord
   if(edge_colors.size() > VTK_IND_THR_COL && edge_colors[VTK_IND_THR_COL].size() > 0){
     fout << "SCALARS VTK_IND_THR_COL int 1\nLOOKUP_TABLE default\n";
     for(size_t i=0; i<edge_colors[VTK_IND_THR_COL].size(); ++i){
-      fout << static_cast<int>(edge_colors[VTK_IND_THR_COL][i])<<"\n";
+      fout << static_cast<int>(mixValue(edge_colors[VTK_IND_THR_COL][i]))<<"\n";
     }
   }
   fout << "\n";
   if(edge_colors.size() > VTK_IND_BLK_ID && edge_colors[VTK_IND_BLK_ID].size() > 0){
     fout << "SCALARS VTK_IND_BLK_ID int 1\nLOOKUP_TABLE default\n";
     for(size_t i=0; i<edge_colors[VTK_IND_BLK_ID].size(); ++i){
-      fout << static_cast<int>(edge_colors[VTK_IND_BLK_ID][i])<<"\n";
+      fout << static_cast<int>(mixValue(edge_colors[VTK_IND_BLK_ID][i]))<<"\n";
     }
   }
   fout << "\n";
   if(edge_colors.size() > VTK_IND_BLK_COL && edge_colors[VTK_IND_BLK_COL].size() > 0){
     fout << "SCALARS VTK_IND_BLK_COL int 1\nLOOKUP_TABLE default\n";
     for(size_t i=0; i<edge_colors[VTK_IND_BLK_COL].size(); ++i){
-      fout << static_cast<int>(edge_colors[VTK_IND_BLK_COL][i])<<"\n";
+      fout << static_cast<int>(mixValue(edge_colors[VTK_IND_BLK_COL][i]))<<"\n";
     }
   }
   fout.close();
 }
-#endif /* end of include gurad: GRAPH_WRITE_VTK*/
+#endif /* end of include guard: GRAPH_WRITE_VTK*/
