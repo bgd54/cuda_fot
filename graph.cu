@@ -154,9 +154,6 @@ __global__ void problem_stepGPUHierarchical(
     __syncthreads();
   }
 
-  // TODO:
-  // You can use about half as much shared memory, if you do not pre-load valC,
-  // but instead increment here. Perhaps an additional variant.
   // Cache out
   for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
     if (i + tid < num_cached_point) {
