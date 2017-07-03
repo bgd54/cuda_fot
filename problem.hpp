@@ -49,7 +49,6 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
   void loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every = 0);
 
   void stepCPUEdgeCentred(float *temp) {
-    std::copy(point_weights.begin(), point_weights.end(), temp);
     for (MY_SIZE edge_ind = 0; edge_ind < graph.numEdges(); ++edge_ind) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE w_ind_left =
@@ -80,9 +79,14 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
                                   point_weights.getDim());
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
+      TIMER_TOGGLE(t);
+      std::copy(point_weights.begin(), point_weights.end(), temp);
+      TIMER_TOGGLE(t);
       stepCPUEdgeCentred(temp);
       if (reset_every && i % reset_every == reset_every - 1) {
+        TIMER_TOGGLE(t);
         reset();
+        TIMER_TOGGLE(t);
       }
     }
     PRINT_BANDWIDTH(
@@ -123,24 +127,27 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     data_t<float> temp(point_weights.getSize(), point_weights.getDim());
     std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
     MY_SIZE num_of_colours = partition.size();
-    TIMER_START(t);
     #pragma omp parallel for
-    for (MY_SIZE e = 0; e < point_weights.getSize(); ++e) {
+    for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.getDim();
+         ++e) {
       temp[e] = point_weights[e];
     }
+    TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       for (MY_SIZE c = 0; c < num_of_colours; ++c) {
         stepCPUEdgeCentredOMP(partition[c], temp);
       }
+      TIMER_TOGGLE(t);
       #pragma omp parallel for
-      for (MY_SIZE e = 0; e < point_weights.getSize(); ++e) {
+      for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.getDim();
+           ++e) {
         point_weights[e] = temp[e];
       }
-      TIMER_TOGGLE(t);
       if (reset_every && i % reset_every == reset_every - 1) {
         reset();
         #pragma omp parallel for
-        for (MY_SIZE e = 0; e < point_weights.getSize(); ++e) {
+        for (MY_SIZE e = 0;
+             e < point_weights.getSize() * point_weights.getDim(); ++e) {
           temp[e] = point_weights[e];
         }
       }

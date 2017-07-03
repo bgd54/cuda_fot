@@ -229,10 +229,10 @@ void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
                 point_weights2.begin());
       point_weights2.flushToDevice();
     }
-    TIMER_TOGGLE(t);
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights2.getDeviceData(),
         sizeof(float) * graph.numPoints(), cudaMemcpyDeviceToDevice));
+    TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
       t, "loopGPUEdgeCentred",
@@ -301,18 +301,18 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
       checkCudaErrors(cudaDeviceSynchronize());
       total_num_blocks += num_blocks;
     }
+    TIMER_TOGGLE(t);
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights_out.getDeviceData(),
         sizeof(float) * graph.numPoints(), cudaMemcpyDeviceToDevice));
     if (reset_every && iteration % reset_every == reset_every - 1) {
-      TIMER_TOGGLE(t);
       reset();
       point_weights.flushToDevice();
       std::copy(point_weights.begin(), point_weights.end(),
                 point_weights_out.begin());
       point_weights_out.flushToDevice();
-      TIMER_TOGGLE(t);
     }
+    TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
       t, "GPU HierarchicalColouring",
