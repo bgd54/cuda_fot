@@ -157,18 +157,31 @@ __global__ void problem_stepGPUHierarchical(
   // Cache out
   for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
     if (i + tid < num_cached_point) {
+      MY_SIZE g_point_to_be_cached =
+        points_to_be_cached[cache_points_offset + i + tid];
+      // TODO split into two (read write), and pragma unroll
+      float result [Dim];
+#pragma unroll
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE write_c_ind, write_g_ind;
         if (SOA) {
-          write_g_ind = d * num_points +
-                        points_to_be_cached[cache_points_offset + i + tid];
+          write_g_ind = d * num_points + g_point_to_be_cached;
           write_c_ind = d * num_cached_point + (i + tid);
         } else {
-          write_g_ind =
-              points_to_be_cached[cache_points_offset + i + tid] * Dim + d;
+          write_g_ind = g_point_to_be_cached * Dim + d;
           write_c_ind = (i + tid) * Dim + d;
         }
-        point_weights_out[write_g_ind] += point_cache[write_c_ind];
+        result[d] = point_weights_out[write_g_ind] + point_cache[write_c_ind];
+      }
+#pragma unroll
+      for (MY_SIZE d = 0; d < Dim; ++d) {
+        MY_SIZE write_g_ind;
+        if (SOA) {
+          write_g_ind = d * num_points + g_point_to_be_cached;
+        } else {
+          write_g_ind = g_point_to_be_cached * Dim + d;
+        }
+        point_weights_out[write_g_ind] = result[d];
       }
     }
   }
