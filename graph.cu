@@ -492,15 +492,21 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
                             implementation_algorithm_t<Dim,SOA> algorithm1,
                             implementation_algorithm_t<Dim,SOA> algorithm2) {
   std::vector<float> result1;
-  double rms = 0;
+  float maxdiff = 0;
   {
     srand(1);
     Problem<Dim,SOA> problem(N, M);
     (problem.*algorithm1)(num, reset_every);
     float abs_max = 0;
+    result1.resize(problem.graph.numPoints()* Dim);
+    #pragma omp parallel for collapse(2) reduction(max:abs_max)
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      result1.push_back(problem.point_weights[i]);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
+      for(MY_SIZE d =0; d < Dim; ++d){
+        result1[i * Dim + d] = problem.point_weights[i * Dim + d];
+        if( abs_max < problem.point_weights[i * Dim + d]){
+          abs_max = problem.point_weights[i * Dim + d]; 
+        }
+      }
     }
     std::cout << "Abs max: " << abs_max << std::endl;
   }
@@ -510,13 +516,25 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
     Problem<Dim,SOA> problem(N, M);
     (problem.*algorithm2)(num, reset_every);
     float abs_max = 0;
+    #pragma omp parallel for collapse(2) reduction(max:abs_max, maxdiff)
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      rms += std::pow(problem.point_weights[i] - result1[i], 2);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
+      for(MY_SIZE d =0; d < Dim; ++d){
+        MY_SIZE ind = i * Dim + d;
+        float diff  = std::abs(problem.point_weights[ind] - result1[ind]) /
+          std::min(result1[ind], problem.point_weights[ind]);
+        if(diff>maxdiff){
+          maxdiff = diff;
+        }
+        if( abs_max < problem.point_weights[ind] ){
+          abs_max = problem.point_weights[ind]; 
+        }
+      }
     }
     std::cout << "Abs max: " << abs_max << std::endl;
-    rms = std::pow(rms / result1.size(), 0.5);
-    std::cout << "RMS: " << rms << std::endl;
+    std::cout << "MAX DIFF: " << maxdiff << std::endl;
+    std::cout << "Test considered " 
+              << (maxdiff < 0.004 ? "PASSED" : "FAILED")
+              << std::endl;
   }
 }
 
@@ -585,17 +603,17 @@ void generateTimes(std::string in_file) {
 }
 
 int main(int argc, const char **argv) {
-  assert(argc > 1);
+  /*assert(argc > 1);
   generateTimes<1, true, false>(argv[1]);
   generateTimes<4, true, false>(argv[1]);
   generateTimes<8, true, false>(argv[1]);
-  generateTimes<16, true, false>(argv[1]);
-  /*MY_SIZE num = 500;*/
-  /*MY_SIZE N = 1000, M = 2000;*/
-  /*MY_SIZE reset_every = 0;*/
-  /*testTwoImplementations<>(num, N, M, reset_every,*/
-  /*                       &Problem<>::loopGPUEdgeCentred,*/
-  /*                       &Problem<>::loopGPUHierarchical);*/
+  generateTimes<16, true, false>(argv[1]);*/
+  MY_SIZE num = 500;
+  MY_SIZE N = 1000, M = 2000;
+  MY_SIZE reset_every = 0;
+  testTwoImplementations<>(num, N, M, reset_every,
+                         &Problem<>::loopCPUEdgeCentred,
+                         &Problem<>::loopCPUEdgeCentredOMP);
   /*cudaDeviceReset();*/
 }
 
