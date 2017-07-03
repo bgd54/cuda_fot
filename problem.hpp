@@ -50,31 +50,25 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
 
   void stepCPUEdgeCentred(float *temp) {
     for (MY_SIZE edge_ind = 0; edge_ind < graph.numEdges(); ++edge_ind) {
+      MY_SIZE ind_left_base = graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind];
+      MY_SIZE ind_right_base = graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind +
+                                     1];
+      MY_SIZE w_ind_left = 0, w_ind_right = 0;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE w_ind_left =
-            SOA
-                ? d * graph.numPoints() +
-                      graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind]
-                : graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind] *
-                          Dim +
-                      d;
-        MY_SIZE w_ind_right =
-            SOA
-                ? d * graph.numPoints() +
-                      graph
-                          .edge_to_node[graph.edge_to_node.getDim() * edge_ind +
-                                        1]
-                : graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind +
-                                     1] *
-                          Dim +
-                      d;
+        if(SOA){
+          w_ind_left = d * graph.numPoints() + ind_left_base;
+          w_ind_right = d * graph.numPoints() + ind_right_base;
+        } else {
+          w_ind_left =  ind_left_base * Dim + d;
+          w_ind_right = ind_right_base * Dim + d; 
+        }
         point_weights[w_ind_right] += edge_weights[edge_ind] * temp[w_ind_left];
         point_weights[w_ind_left] += edge_weights[edge_ind] * temp[w_ind_right];
       }
     }
   }
 
-  void loopCPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0) {
+  void loopCPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0) {/*{{{*/
     float *temp = (float *)malloc(sizeof(float) * graph.numPoints() *
                                   point_weights.getDim());
     TIMER_START(t);
@@ -96,27 +90,25 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
         sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
             num);
     free(temp);
-  }
+  }/*}}}*/
 
   void stepCPUEdgeCentredOMP(const std::vector<MY_SIZE> &inds,
                              data_t<float> &out) {
-    #pragma omp parallel for collapse(2)
+    #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
+      MY_SIZE ind = inds[i];
+      MY_SIZE ind_left_base = graph.edge_to_node[graph.edge_to_node.getDim() * ind];
+      MY_SIZE ind_right_base = graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1];
+
+      MY_SIZE w_ind_left = 0, w_ind_right = 0;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = inds[i];
-        MY_SIZE w_ind_left =
-            SOA
-                ? d * graph.numPoints() +
-                      graph.edge_to_node[graph.edge_to_node.getDim() * ind]
-                : graph.edge_to_node[graph.edge_to_node.getDim() * ind] * Dim +
-                      d;
-        MY_SIZE w_ind_right =
-            SOA
-                ? d * graph.numPoints() +
-                      graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1]
-                : graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1] *
-                          Dim +
-                      d;
+        if(SOA){
+          w_ind_left  = d * graph.numPoints() + ind_left_base;
+          w_ind_right = d * graph.numPoints() + ind_right_base;
+        } else {
+          w_ind_left  = d + Dim * ind_left_base;
+          w_ind_right = d + Dim * ind_right_base; 
+        }
         out[w_ind_right] += edge_weights[ind] * point_weights[w_ind_left];
         out[w_ind_left] += edge_weights[ind] * point_weights[w_ind_right];
       }
