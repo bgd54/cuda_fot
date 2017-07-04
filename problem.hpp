@@ -21,8 +21,8 @@ struct Problem {
   Problem(MY_SIZE N, MY_SIZE M) : graph(N, M), point_weights(N * M, Dim) {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = DataType(rand() % 10000) / 5000.0 - 1.0;
-      edge_weights[i] *= 0.0001;
+      edge_weights[i] = DataType(rand() % 10000+1) / 5000.0;
+      edge_weights[i] *= 0.001;
     }
     reset();
   }
@@ -30,16 +30,16 @@ struct Problem {
   Problem(std::istream &is) : graph(is), point_weights(graph.numPoints(), Dim) {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = DataType(rand() % 10000) / 5000.0 - 1.0;
-      edge_weights[i] *= 0.0001;
+      edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
+      edge_weights[i] *= 0.001;
     }
     reset();
   }
 
   void reset() {
     for (DataType &w : point_weights) {
-      w = DataType(rand() % 10000) / 5000.f - 1.0f;
-      w *= 0.0001;
+      w = DataType(rand() % 10000) / 5000.f;
+      w *= 0.001;
     }
   }
 

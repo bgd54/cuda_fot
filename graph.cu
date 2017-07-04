@@ -371,6 +371,15 @@ void testTwoImplementations(
     MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
     implementation_algorithm_t<Dim, SOA, DataType> algorithm1,
     implementation_algorithm_t<Dim, SOA, DataType> algorithm2) {
+  std::cout << "========================================" << std:: endl;
+  std::cout << "Two implementation test" << std::endl;
+  std::cout << "Dim: " << Dim << ( SOA ? ", SOA": ", AOS" ) 
+            << ", Precision: ";
+  std::cout << ( sizeof(DataType) == sizeof(float) ? "float" : "double" );
+  std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
+  std::cout << " reset: " << reset_every << std::endl;
+  std::cout << "========================================" << std::endl;
+
   std::vector<DataType> result1;
   DataType maxdiff = 0;
   MY_SIZE ind_max = 0;
@@ -501,11 +510,17 @@ int main(int argc, const char **argv) {
   /*generateTimes<8, true, false>(argv[1]);*/
   /*generateTimes<16, true, false>(argv[1]);*/
   MY_SIZE num = 500;
-  MY_SIZE N = 1000, M = 2000;
+  MY_SIZE N = 1000, M = 1000;
   MY_SIZE reset_every = 0;
-  testTwoImplementations<1, false, float>(
-      num, N, M, reset_every, &Problem<1, false, float>::loopGPUEdgeCentred,
-      &Problem<1, false, float>::loopGPUHierarchical);
+#define TEST_DIM 2
+  num = 1;
+  testTwoImplementations<TEST_DIM, false, float>(
+      num, N, M, reset_every, &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred,
+      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP);
+  //testTwoImplementations<TEST_DIM, false, double>(
+  //    num, N, M, reset_every, &Problem<TEST_DIM, false, double>::loopGPUEdgeCentred,
+  //    &Problem<TEST_DIM, false, double>::loopCPUEdgeCentredOMP);
+
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
