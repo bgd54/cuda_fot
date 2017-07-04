@@ -37,13 +37,13 @@ private:
   }
 
 public:
-  Graph(MY_SIZE N, MY_SIZE M, bool block = false)
+  Graph(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE,MY_SIZE> block_sizes = {0,0})
       : num_edges{((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges, 2) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     // num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
-    if (block) {
-      fillEdgeListBlock(N, M);
+    if (block_sizes.first != 0) {
+      fillEdgeListBlock(N, M, block_sizes.first, block_sizes.second);
     } else {
       fillEdgeList(N, M);
     }
@@ -152,23 +152,21 @@ public:
 
   /**
    * Grid, hard coded block-indexing
-   * good for BLOCK_SIZE = 64
    */
-  void fillEdgeListBlock(MY_SIZE N, MY_SIZE M) {
-    assert((N - 1) % 4 == 0);
-    assert((M - 1) % 4 == 0);
-    // assert((2 * (N - 1) + 2 * (M - 1)) % 64 == 0);
+  void fillEdgeListBlock(MY_SIZE N, MY_SIZE M, MY_SIZE block_h, MY_SIZE block_w) {
+    assert((N - 1) % block_h == 0);
+    assert((M - 1) % block_w == 0);
     MY_SIZE ind = 0;
-    for (MY_SIZE i = 0; i < (N - 1) / 4; ++i) {
-      for (MY_SIZE j = 0; j < (M - 1) / 4; ++j) {
-        for (MY_SIZE k = 0; k <= 3; ++k) {
-          for (MY_SIZE l = 0; l <= 3; ++l) {
+    for (MY_SIZE i = 0; i < (N - 1) / block_h; ++i) {
+      for (MY_SIZE j = 0; j < (M - 1) / block_w; ++j) {
+        for (MY_SIZE k = 0; k < block_h; ++k) {
+          for (MY_SIZE l = 0; l < block_w; ++l) {
             // Down
-            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l);
-            edge_to_node[ind++] = (4 * i + k + 1) * M + (4 * j + l);
+            edge_to_node[ind++] = (block_h * i + k) * M + (block_w * j + l);
+            edge_to_node[ind++] = (block_h * i + k + 1) * M + (block_w * j + l);
             // Right
-            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l);
-            edge_to_node[ind++] = (4 * i + k) * M + (4 * j + l + 1);
+            edge_to_node[ind++] = (block_h * i + k) * M + (block_w * j + l);
+            edge_to_node[ind++] = (block_h * i + k) * M + (block_w * j + l + 1);
           }
         }
       }
