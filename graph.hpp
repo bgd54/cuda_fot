@@ -265,11 +265,12 @@ public:
     std::vector<SCOTCH_Num> permutation = reorder.reorder();
     // Permute points
     if (point_data) {
-      std::vector<DataType> point_tmp(numPoints());
-      for (MY_SIZE i = 0; i < numPoints(); ++i) {
-        point_tmp[permutation[i]] = (*point_data)[i];
-      }
-      std::copy(point_tmp.begin(), point_tmp.end(), point_data->begin());
+      assert(false);   // Currently not implemented
+      //std::vector<DataType> point_tmp(numPoints());
+      //for (MY_SIZE i = 0; i < numPoints(); ++i) {
+      //  point_tmp[permutation[i]] = (*point_data)[i];
+      //}
+      //std::copy(point_tmp.begin(), point_tmp.end(), point_data->begin());
     }
     // Permute edge_to_node
     std::for_each(edge_to_node.begin(), edge_to_node.end(),
