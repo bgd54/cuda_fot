@@ -27,6 +27,8 @@ public:
   const T &operator[](MY_SIZE ind) const;
   T *begin();
   T *end();
+  const T * cbegin() const;
+  const T * cend() const;
 
   // functions to manage state between host and device memory
   void flushToHost();
@@ -125,6 +127,10 @@ template <typename T> void data_t<T>::initDeviceMemory() {
 template <typename T> T *data_t<T>::begin() { return data; }
 
 template <typename T> T *data_t<T>::end() { return data + (size * dim); }
+
+template <typename T> const T *data_t<T>::cbegin() const { return data; }
+
+template <typename T> const T *data_t<T>::cend() const { return data + (size * dim); }
 
 template <typename T>
 device_data_t<T>::device_data_t(const std::vector<T> &host_buffer)
