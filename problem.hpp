@@ -11,33 +11,34 @@
 #include "graph.hpp"
 #include "timer.hpp"
 
-template <unsigned Dim = 1, bool SOA = false> struct Problem {
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+struct Problem {
   Graph graph;
-  float *edge_weights;
-  data_t<float> point_weights;
+  DataType *edge_weights;
+  data_t<DataType> point_weights;
 
   /* ctor/dtor {{{1 */
   Problem(MY_SIZE N, MY_SIZE M) : graph(N, M), point_weights(N * M, Dim) {
-    edge_weights = (float *)malloc(sizeof(float) * graph.numEdges());
+    edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
+      edge_weights[i] = DataType(rand() % 10000) / 5000.0 - 1.0;
       edge_weights[i] *= 0.0001;
     }
     reset();
   }
 
   Problem(std::istream &is) : graph(is), point_weights(graph.numPoints(), Dim) {
-    edge_weights = (float *)malloc(sizeof(float) * graph.numEdges());
+    edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = float(rand() % 10000) / 5000.f - 1.0f;
+      edge_weights[i] = DataType(rand() % 10000) / 5000.0 - 1.0;
       edge_weights[i] *= 0.0001;
     }
     reset();
   }
 
   void reset() {
-    for (float &w : point_weights) {
-      w = float(rand() % 10000) / 5000.f - 1.0f;
+    for (DataType &w : point_weights) {
+      w = DataType(rand() % 10000) / 5000.f - 1.0f;
       w *= 0.0001;
     }
   }
@@ -48,19 +49,20 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
   void loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0);
   void loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every = 0);
 
-  void stepCPUEdgeCentred(float *temp) {
+  void stepCPUEdgeCentred(DataType *temp) {
     for (MY_SIZE edge_ind = 0; edge_ind < graph.numEdges(); ++edge_ind) {
-      MY_SIZE ind_left_base = graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind];
-      MY_SIZE ind_right_base = graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind +
-                                     1];
+      MY_SIZE ind_left_base =
+          graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind];
+      MY_SIZE ind_right_base =
+          graph.edge_to_node[graph.edge_to_node.getDim() * edge_ind + 1];
       MY_SIZE w_ind_left = 0, w_ind_right = 0;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        if(SOA){
+        if (SOA) {
           w_ind_left = d * graph.numPoints() + ind_left_base;
           w_ind_right = d * graph.numPoints() + ind_right_base;
         } else {
-          w_ind_left =  ind_left_base * Dim + d;
-          w_ind_right = ind_right_base * Dim + d; 
+          w_ind_left = ind_left_base * Dim + d;
+          w_ind_right = ind_right_base * Dim + d;
         }
         point_weights[w_ind_right] += edge_weights[edge_ind] * temp[w_ind_left];
         point_weights[w_ind_left] += edge_weights[edge_ind] * temp[w_ind_right];
@@ -68,9 +70,9 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     }
   }
 
-  void loopCPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0) {/*{{{*/
-    float *temp = (float *)malloc(sizeof(float) * graph.numPoints() *
-                                  point_weights.getDim());
+  void loopCPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0) { /*{{{*/
+    DataType *temp = (DataType *)malloc(sizeof(DataType) * graph.numPoints() *
+                                        point_weights.getDim());
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
@@ -85,29 +87,31 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     }
     PRINT_BANDWIDTH(
         t, "loopCPUEdgeCentred",
-        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
             num,
-        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
             num);
     free(temp);
-  }/*}}}*/
+  } /*}}}*/
 
   void stepCPUEdgeCentredOMP(const std::vector<MY_SIZE> &inds,
-                             data_t<float> &out) {
+                             data_t<DataType> &out) {
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
-      MY_SIZE ind_left_base = graph.edge_to_node[graph.edge_to_node.getDim() * ind];
-      MY_SIZE ind_right_base = graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1];
+      MY_SIZE ind_left_base =
+          graph.edge_to_node[graph.edge_to_node.getDim() * ind];
+      MY_SIZE ind_right_base =
+          graph.edge_to_node[graph.edge_to_node.getDim() * ind + 1];
 
       MY_SIZE w_ind_left = 0, w_ind_right = 0;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        if(SOA){
-          w_ind_left  = d * graph.numPoints() + ind_left_base;
+        if (SOA) {
+          w_ind_left = d * graph.numPoints() + ind_left_base;
           w_ind_right = d * graph.numPoints() + ind_right_base;
         } else {
-          w_ind_left  = d + Dim * ind_left_base;
-          w_ind_right = d + Dim * ind_right_base; 
+          w_ind_left = d + Dim * ind_left_base;
+          w_ind_right = d + Dim * ind_right_base;
         }
         out[w_ind_right] += edge_weights[ind] * point_weights[w_ind_left];
         out[w_ind_left] += edge_weights[ind] * point_weights[w_ind_right];
@@ -116,7 +120,7 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
   }
 
   void loopCPUEdgeCentredOMP(MY_SIZE num, MY_SIZE reset_every = 0) {
-    data_t<float> temp(point_weights.getSize(), point_weights.getDim());
+    data_t<DataType> temp(point_weights.getSize(), point_weights.getDim());
     std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
     MY_SIZE num_of_colours = partition.size();
     #pragma omp parallel for
@@ -147,9 +151,9 @@ template <unsigned Dim = 1, bool SOA = false> struct Problem {
     }
     PRINT_BANDWIDTH(
         t, "loopCPUEdgeCentredOMP",
-        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
             num,
-        sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
             num);
   }
 

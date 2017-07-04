@@ -13,15 +13,16 @@
 constexpr MY_SIZE BLOCK_SIZE = 128;
 
 /* problem_stepGPU {{{1 */
-template <unsigned Dim = 1, bool SOA = false>
-__global__ void problem_stepGPU(const float *__restrict__ point_weights,
-                                const float *__restrict__ edge_weights,
+template <unsigned Dim = 1, bool SOA = false, typename DataType>
+__global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
+                                const DataType *__restrict__ edge_weights,
                                 const MY_SIZE *__restrict__ edge_list,
                                 const MY_SIZE *__restrict__ edge_inds,
-                                float *__restrict__ out, const MY_SIZE edge_num,
+                                DataType *__restrict__ out,
+                                const MY_SIZE edge_num,
                                 const MY_SIZE point_num) {
   MY_SIZE id = blockIdx.x * blockDim.x + threadIdx.x;
-  float inc[2 * Dim];
+  DataType inc[2 * Dim];
   if (id < edge_num) {
     MY_SIZE edge_ind = edge_inds[id];
 #pragma unroll
@@ -57,12 +58,12 @@ __global__ void problem_stepGPU(const float *__restrict__ point_weights,
 /* 1}}} */
 
 /* problem_stepGPUHierarchical {{{1 */
-template <unsigned Dim = 1, bool SOA = false>
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ edge_list,
-    const float *__restrict__ point_weights,
-    float *__restrict__ point_weights_out,
-    const float *__restrict__ edge_weights,
+    const DataType *__restrict__ point_weights,
+    DataType *__restrict__ point_weights_out,
+    const DataType *__restrict__ edge_weights,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
     const std::uint8_t *__restrict__ edge_colours,
@@ -76,8 +77,8 @@ __global__ void problem_stepGPUHierarchical(
   MY_SIZE num_cached_point =
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
 
-  extern __shared__ float shared[];
-  float *point_cache = shared;
+  extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
+  DataType *point_cache = reinterpret_cast<DataType *>(shared);
 
   MY_SIZE left_ind, right_ind;
 
@@ -109,7 +110,7 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads();
 
   // Computation
-  float increment[Dim * 2];
+  DataType increment[Dim * 2];
   if (thread_ind < num_threads) {
     for (MY_SIZE d = 0; d < Dim; ++d) {
       if (SOA) {
@@ -158,9 +159,8 @@ __global__ void problem_stepGPUHierarchical(
   for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
     if (i + tid < num_cached_point) {
       MY_SIZE g_point_to_be_cached =
-        points_to_be_cached[cache_points_offset + i + tid];
-      // TODO split into two (read write), and pragma unroll
-      float result [Dim];
+          points_to_be_cached[cache_points_offset + i + tid];
+      DataType result[Dim];
 #pragma unroll
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE write_c_ind, write_g_ind;
@@ -189,8 +189,9 @@ __global__ void problem_stepGPUHierarchical(
 /* 1}}} */
 
 /* loopGPUEdgeCentred {{{1 */
-template <unsigned Dim, bool SOA>
-void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
+template <unsigned Dim, bool SOA, typename DataType>
+void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
+                                                     MY_SIZE reset_every) {
   std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
   MY_SIZE num_of_colours = partition.size();
   assert(num_of_colours > 0);
@@ -202,8 +203,9 @@ void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
                                ->size();
   MY_SIZE num_blocks = static_cast<MY_SIZE>(
       std::ceil(double(max_thread_num) / static_cast<double>(BLOCK_SIZE)));
-  float *d_edge_weights;
-  data_t<float> point_weights2(point_weights.getSize(), point_weights.getDim());
+  DataType *d_edge_weights;
+  data_t<DataType> point_weights2(point_weights.getSize(),
+                                  point_weights.getDim());
   std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
   std::vector<MY_SIZE *> d_partition;
   for (const std::vector<MY_SIZE> &colour : partition) {
@@ -216,10 +218,10 @@ void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
   }
   point_weights.initDeviceMemory();
   point_weights2.initDeviceMemory();
-  checkCudaErrors(
-      cudaMalloc((void **)&d_edge_weights, sizeof(float) * graph.numEdges()));
+  checkCudaErrors(cudaMalloc((void **)&d_edge_weights,
+                             sizeof(DataType) * graph.numEdges()));
   checkCudaErrors(cudaMemcpy(d_edge_weights, edge_weights,
-                             sizeof(float) * graph.numEdges(),
+                             sizeof(DataType) * graph.numEdges(),
                              cudaMemcpyHostToDevice));
   graph.edge_to_node.initDeviceMemory();
   // Timer t;
@@ -244,16 +246,17 @@ void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
     }
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights2.getDeviceData(),
-        sizeof(float) * graph.numPoints(), cudaMemcpyDeviceToDevice));
+        sizeof(DataType) * graph.numPoints(), cudaMemcpyDeviceToDevice));
     TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
       t, "loopGPUEdgeCentred",
-      sizeof(float) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) * num,
-      (sizeof(float) * graph.numPoints() * Dim * 2.0 + // point_weights
-       sizeof(float) * graph.numEdges() * 1.0 +        // d_edge_weights
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +      // d_edge_list
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0        // d_partition
+      sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+          num,
+      (sizeof(DataType) * graph.numPoints() * Dim * 2.0 + // point_weights
+       sizeof(DataType) * graph.numEdges() * 1.0 +        // d_edge_weights
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +         // d_edge_list
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0           // d_partition
        ) * num);
   std::cout << " Needed " << num_of_colours << " colours" << std::endl;
   point_weights.flushToHost();
@@ -265,22 +268,24 @@ void Problem<Dim, SOA>::loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every) {
 /* 1}}} */
 
 /* loopGPUHierarchical {{{1 */
-template <unsigned Dim, bool SOA>
-void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
+template <unsigned Dim, bool SOA, typename DataType>
+void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
+                                                      MY_SIZE reset_every) {
   TIMER_START(t_colouring);
-  HierarchicalColourMemory<Dim, SOA> memory(BLOCK_SIZE, *this);
-  TIMER_PRINT(t_colouring,"Hierarchical colouring: colouring");
+  HierarchicalColourMemory<Dim, SOA, DataType> memory(BLOCK_SIZE, *this);
+  TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
-  data_t<float> point_weights_out(point_weights.getSize(),
-                                  point_weights.getDim());
+  data_t<DataType> point_weights_out(point_weights.getSize(),
+                                     point_weights.getDim());
   std::copy(point_weights.begin(), point_weights.end(),
             point_weights_out.begin());
   point_weights.initDeviceMemory();
   point_weights_out.initDeviceMemory();
   MY_SIZE total_cache_size = 0; // for bandwidth calculations
-  float avg_num_edge_colours = 0;
-  for (const typename HierarchicalColourMemory<Dim, SOA>::MemoryOfOneColour
-           &memory_of_one_colour : memory.colours) {
+  DataType avg_num_edge_colours = 0;
+  for (const typename HierarchicalColourMemory<
+           Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour :
+       memory.colours) {
     total_cache_size += memory_of_one_colour.points_to_be_cached.size();
     avg_num_edge_colours +=
         std::accumulate(memory_of_one_colour.num_edge_colours.begin(),
@@ -300,16 +305,18 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
           std::ceil(static_cast<double>(num_threads) / BLOCK_SIZE));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
       MY_SIZE cache_size =
-          sizeof(float) * d_memory[colour_ind].shared_size * Dim;
+          sizeof(DataType) * d_memory[colour_ind].shared_size * Dim;
       problem_stepGPUHierarchical<Dim, SOA>
           <<<num_blocks, BLOCK_SIZE, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
-              static_cast<float *>(d_memory[colour_ind].edge_weights),
+              static_cast<DataType *>(d_memory[colour_ind].edge_weights),
               static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached),
-              static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached_offsets),
+              static_cast<MY_SIZE *>(
+                  d_memory[colour_ind].points_to_be_cached_offsets),
               static_cast<std::uint8_t *>(d_memory[colour_ind].edge_colours),
-              static_cast<std::uint8_t *>(d_memory[colour_ind].num_edge_colours),
+              static_cast<std::uint8_t *>(
+                  d_memory[colour_ind].num_edge_colours),
               num_threads, graph.numPoints());
       checkCudaErrors(cudaDeviceSynchronize());
       total_num_blocks += num_blocks;
@@ -317,7 +324,7 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
     TIMER_TOGGLE(t);
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights_out.getDeviceData(),
-        sizeof(float) * graph.numPoints(), cudaMemcpyDeviceToDevice));
+        sizeof(DataType) * graph.numPoints(), cudaMemcpyDeviceToDevice));
     if (reset_every && iteration % reset_every == reset_every - 1) {
       reset();
       point_weights.flushToDevice();
@@ -329,10 +336,11 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
   }
   PRINT_BANDWIDTH(
       t, "GPU HierarchicalColouring",
-      num * (2.0 * Dim * graph.numPoints() + graph.numEdges()) * sizeof(float),
-      num * (sizeof(float) * graph.numPoints() * Dim * 2.0 + // point_weights
-             sizeof(float) * graph.numEdges() * 1.0 +        // edge_weights
-             sizeof(MY_SIZE) * graph.numEdges() * 2.0 +      // edge_list
+      num * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+          sizeof(DataType),
+      num * (sizeof(DataType) * graph.numPoints() * Dim * 2.0 + // point_weights
+             sizeof(DataType) * graph.numEdges() * 1.0 +        // edge_weights
+             sizeof(MY_SIZE) * graph.numEdges() * 2.0 +         // edge_list
              sizeof(MY_SIZE) * total_cache_size * 1.0 +
              sizeof(MY_SIZE) *
                  (total_num_blocks * 1.0 +
@@ -353,9 +361,9 @@ void Problem<Dim, SOA>::loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every) {
 }
 /* 1}}} */
 
-template <unsigned Dim = 1, bool SOA = false>
-using implementation_algorithm_t = void (Problem<Dim, SOA>::*)(MY_SIZE,
-                                                               MY_SIZE);
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+using implementation_algorithm_t =
+    void (Problem<Dim, SOA, DataType>::*)(MY_SIZE, MY_SIZE);
 
 /* tests {{{1 */
 void testColours() {
@@ -499,25 +507,25 @@ void testGPUHierarchicalSolution(MY_SIZE num) {
   }
 }
 
-template<unsigned Dim = 1, bool SOA = false>
-void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
-                            MY_SIZE reset_every,
-                            implementation_algorithm_t<Dim,SOA> algorithm1,
-                            implementation_algorithm_t<Dim,SOA> algorithm2) {
-  std::vector<float> result1;
-  float maxdiff = 0;
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+void testTwoImplementations(
+    MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
+    implementation_algorithm_t<Dim, SOA, DataType> algorithm1,
+    implementation_algorithm_t<Dim, SOA, DataType> algorithm2) {
+  std::vector<DataType> result1;
+  DataType maxdiff = 0;
   {
     srand(1);
-    Problem<Dim,SOA> problem(N, M);
+    Problem<Dim, SOA, DataType> problem(N, M);
     (problem.*algorithm1)(num, reset_every);
-    float abs_max = 0;
-    result1.resize(problem.graph.numPoints()* Dim);
-    #pragma omp parallel for collapse(2) reduction(max:abs_max)
+    DataType abs_max = 0;
+    result1.resize(problem.graph.numPoints() * Dim);
+    #pragma omp parallel for collapse(2) reduction(max : abs_max)
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      for(MY_SIZE d =0; d < Dim; ++d){
+      for (MY_SIZE d = 0; d < Dim; ++d) {
         result1[i * Dim + d] = problem.point_weights[i * Dim + d];
-        if( abs_max < problem.point_weights[i * Dim + d]){
-          abs_max = problem.point_weights[i * Dim + d]; 
+        if (abs_max < problem.point_weights[i * Dim + d]) {
+          abs_max = problem.point_weights[i * Dim + d];
         }
       }
     }
@@ -526,27 +534,26 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
 
   {
     srand(1);
-    Problem<Dim,SOA> problem(N, M);
+    Problem<Dim, SOA, DataType> problem(N, M);
     (problem.*algorithm2)(num, reset_every);
-    float abs_max = 0;
-    #pragma omp parallel for collapse(2) reduction(max:abs_max, maxdiff)
+    DataType abs_max = 0;
+    #pragma omp parallel for collapse(2) reduction(max : abs_max, maxdiff)
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      for(MY_SIZE d =0; d < Dim; ++d){
+      for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE ind = i * Dim + d;
-        float diff  = std::abs(problem.point_weights[ind] - result1[ind]) /
-          std::min(result1[ind], problem.point_weights[ind]);
-        if(diff>maxdiff){
+        DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
+                        std::min(result1[ind], problem.point_weights[ind]);
+        if (diff > maxdiff) {
           maxdiff = diff;
         }
-        if( abs_max < problem.point_weights[ind] ){
-          abs_max = problem.point_weights[ind]; 
+        if (abs_max < problem.point_weights[ind]) {
+          abs_max = problem.point_weights[ind];
         }
       }
     }
     std::cout << "Abs max: " << abs_max << std::endl;
     std::cout << "MAX DIFF: " << maxdiff << std::endl;
-    std::cout << "Test considered " 
-              << (maxdiff < 0.004 ? "PASSED" : "FAILED")
+    std::cout << "Test considered " << (maxdiff < 0.004 ? "PASSED" : "FAILED")
               << std::endl;
   }
 }
@@ -593,7 +600,8 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
 }
 /* 1}}} */
 
-template <unsigned Dim = 1, bool SOA = false, bool RunSerial = true>
+template <unsigned Dim = 1, bool SOA = false, bool RunSerial = true,
+          typename DataType = float>
 void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
@@ -609,28 +617,28 @@ void generateTimes(std::string in_file) {
         std::cout << "--Problem finished." << std::endl;
       };
   run(&Problem<Dim, SOA>::loopCPUEdgeCentred, RunSerial ? num : 1);
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP,num);
-  run(&Problem<Dim, SOA>::loopGPUEdgeCentred,num);
-  run(&Problem<Dim, SOA>::loopGPUHierarchical,num);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP, num);
+  run(&Problem<Dim, SOA>::loopGPUEdgeCentred, num);
+  run(&Problem<Dim, SOA>::loopGPUHierarchical, num);
   std::cout << "Finished." << std::endl;
 }
 
 int main(int argc, const char **argv) {
-  /*if (argc <= 1) {
-    std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;
-    return 1;
-  }
-  generateTimes<1, true, false>(argv[1]);
-  generateTimes<4, true, false>(argv[1]);
-  generateTimes<8, true, false>(argv[1]);
-  generateTimes<16, true, false>(argv[1]);*/
+  /*if (argc <= 1) {*/
+  /*  std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;*/
+  /*  return 1;*/
+  /*}*/
+  /*generateTimes<1, true, false>(argv[1]);*/
+  /*generateTimes<4, true, false>(argv[1]);*/
+  /*generateTimes<8, true, false>(argv[1]);*/
+  /*generateTimes<16, true, false>(argv[1]);*/
   MY_SIZE num = 500;
   MY_SIZE N = 1000, M = 2000;
   MY_SIZE reset_every = 0;
-  testTwoImplementations<>(num, N, M, reset_every,
-                         &Problem<>::loopCPUEdgeCentred,
-                         &Problem<>::loopCPUEdgeCentredOMP);
-  /*cudaDeviceReset();*/
+  testTwoImplementations<1, false, float>(
+      num, N, M, reset_every, &Problem<1, false, float>::loopGPUEdgeCentred,
+      &Problem<1, false, float>::loopGPUHierarchical);
+  cudaDeviceReset();
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:

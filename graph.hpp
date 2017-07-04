@@ -258,13 +258,14 @@ public:
    * Also reorders the edge and point data in the arguments. These must be of
    * length `numEdges()` and `numPoints()`, respectively.
    */
-  void reorder(float *edge_data = nullptr,
-               data_t<float> *point_data = nullptr) {
+  template <typename DataType = float>
+  void reorder(DataType *edge_data = nullptr,
+               data_t<DataType> *point_data = nullptr) {
     ScotchReorder reorder(*this);
     std::vector<SCOTCH_Num> permutation = reorder.reorder();
     // Permute points
     if (point_data) {
-      std::vector<float> point_tmp(numPoints());
+      std::vector<DataType> point_tmp(numPoints());
       for (MY_SIZE i = 0; i < numPoints(); ++i) {
         point_tmp[permutation[i]] = (*point_data)[i];
       }
@@ -274,7 +275,7 @@ public:
     std::for_each(edge_to_node.begin(), edge_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     if (edge_data) {
-      std::vector<std::tuple<MY_SIZE, MY_SIZE, float>> edge_tmp(numEdges());
+      std::vector<std::tuple<MY_SIZE, MY_SIZE, DataType>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
         edge_tmp[i] = std::make_tuple(
             edge_to_node[edge_to_node.getDim() * i],

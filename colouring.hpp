@@ -9,16 +9,17 @@
 #include <iterator>
 #include <map>
 #include <memory>
-#include <vector>
 #include <numeric>
+#include <vector>
 
 #include "problem.hpp"
 
-template <unsigned Dim = 1, bool SOA = false> struct HierarchicalColourMemory {
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+struct HierarchicalColourMemory {
   // I assume 64 colour is enough
   using colourset_t = Graph::colourset_t;
   struct MemoryOfOneColour {
-    std::vector<float>
+    std::vector<DataType>
         edge_weights; // restructured so it can be indexed with tid
                       // it's a vector, because it's not necessarily block_size
                       // long; also I don't want mem. management just now
@@ -36,7 +37,7 @@ template <unsigned Dim = 1, bool SOA = false> struct HierarchicalColourMemory {
   std::vector<MemoryOfOneColour> colours;
 
   HierarchicalColourMemory(MY_SIZE block_size,
-                           const Problem<Dim, SOA> &problem) {
+                           const Problem<Dim, SOA, DataType> &problem) {
     /* Algorithm:
      *   - loop through `block_size` blocks
      *     - determine the points written to (not the same as points used)
@@ -100,7 +101,7 @@ private:
    */
   void colourBlock(MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
                    std::vector<colourset_t> &point_colours,
-                   const Problem<Dim, SOA> &problem,
+                   const Problem<Dim, SOA, DataType> &problem,
                    std::vector<MemoryOfOneColour> &colours) {
     const Graph &graph = problem.graph;
     const data_t<MY_SIZE> &edge_to_node = graph.edge_to_node;
@@ -162,7 +163,7 @@ private:
           Graph::getAvailableColour(available_colours, set_sizes);
       block.edge_colours.push_back(colour);
       ++set_sizes[colour];
-      colourset_t colourset (1ull << colour);
+      colourset_t colourset(1ull << colour);
       point_colours[edge_list[2 * i + 0]] |= colourset;
       point_colours[edge_list[2 * i + 1]] |= colourset;
     }
@@ -174,7 +175,7 @@ public:
   *  Device layout  *
   *******************/
   struct DeviceMemoryOfOneColour {
-    device_data_t<float> edge_weights;
+    device_data_t<DataType> edge_weights;
     device_data_t<MY_SIZE> points_to_be_cached, points_to_be_cached_offsets;
     device_data_t<MY_SIZE> edge_list;
     device_data_t<std::uint8_t> edge_colours;
