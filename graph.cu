@@ -246,7 +246,7 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
     }
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights2.getDeviceData(),
-        sizeof(DataType) * graph.numPoints(), cudaMemcpyDeviceToDevice));
+        sizeof(DataType) * graph.numPoints() * Dim, cudaMemcpyDeviceToDevice));
     TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
@@ -389,6 +389,7 @@ void testTwoImplementations(
     Problem<Dim, SOA, DataType> problem(N, M);
     result1.resize(problem.graph.numPoints() * Dim);
     //save data before test
+    #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         result1[i * Dim + d] = problem.point_weights[i * Dim + d];
@@ -419,9 +420,9 @@ void testTwoImplementations(
       }
     }
     std::cout << "Nodes stayed: " << not_changed.size() << "/" << problem.graph.numPoints() << std::endl;
-    /*for(MY_SIZE v : not_changed){
-      std::cout << "  " << v  << std::endl;
-    }*/
+    for(MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i){
+      std::cout << "  " << not_changed[i]  << std::endl;
+    }
     std::cout << "Abs max: " << abs_max << " node: " << ind_max << " dim: "
               << dim_max << std::endl;
   }
@@ -433,6 +434,7 @@ void testTwoImplementations(
     Problem<Dim, SOA, DataType> problem(N, M);
     result2.resize(problem.graph.numPoints() * Dim);
     //save data before test
+    #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         result2[i * Dim + d] = problem.point_weights[i * Dim + d];
@@ -470,9 +472,9 @@ void testTwoImplementations(
       }
     }
     std::cout << "Nodes stayed: " << not_changed2.size() << "/" << problem.graph.numPoints() << std::endl;
-    /*for(MY_SIZE v : not_changed2){
-      std::cout << "  " << v  << std::endl;
-    }*/
+    for(MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i){
+      std::cout << "  " << not_changed2[i]  << std::endl;
+    }
     std::cout << "Abs max: " << abs_max << " node: " << ind_max << " dim: "
               << dim_max << std::endl;
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff << " dim: "
@@ -560,10 +562,9 @@ int main(int argc, const char **argv) {
   /*generateTimes<8, true, false>(argv[1]);*/
   /*generateTimes<16, true, false>(argv[1]);*/
   MY_SIZE num = 500;
-  MY_SIZE N = 1000, M = 100;
+  MY_SIZE N = 1000, M = 1000;
   MY_SIZE reset_every = 0;
   #define TEST_DIM 2
-  num = 1;
   testTwoImplementations<TEST_DIM, false, float>(
       num, N, M, reset_every, &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred,
       &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP);
