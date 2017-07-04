@@ -366,147 +366,6 @@ using implementation_algorithm_t =
     void (Problem<Dim, SOA, DataType>::*)(MY_SIZE, MY_SIZE);
 
 /* tests {{{1 */
-void testColours() {
-  Graph graph(1000, 2000);
-  auto v = graph.colourEdges();
-
-  // for (const auto &vv : v) {
-  //  for (MY_SIZE a : vv) {
-  //    std::cout << a << " ";
-  //  }
-  //  std::cout << std::endl;
-  //}
-  std::cout << v.size() << " " << v.at(0).size() << " " << v.at(1).size()
-            << std::endl;
-}
-
-void testGPUSolution(MY_SIZE num) {
-  std::cout << "CPU edge vs GPU edge" << std::endl;
-
-  std::vector<float> result1;
-  double rms = 0;
-  MY_SIZE N = 1000;
-  MY_SIZE M = 2000;
-  MY_SIZE reset_every = 10;
-  {
-    srand(1);
-    Problem<> problem(N, M);
-    problem.loopCPUEdgeCentred(num, reset_every);
-    float abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      result1.push_back(problem.point_weights[i]);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
-    }
-    std::cout << "Abs max: " << abs_max << std::endl;
-  }
-
-  {
-    srand(1);
-    Problem<> problem(N, M);
-    problem.loopGPUEdgeCentred(num, reset_every);
-    float abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      rms += std::pow(problem.point_weights[i] - result1[i], 2);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
-    }
-    rms = std::pow(rms / result1.size(), 0.5);
-    std::cout << "Abs max: " << abs_max << std::endl;
-    std::cout << "RMS: " << rms << std::endl;
-  }
-}
-
-void testHierarchicalColouring() {
-  Problem<> problem(2, 4);
-  constexpr MY_SIZE BLOCK_SIZE = 3;
-  constexpr bool PRINT_RESULT = true;
-  if (PRINT_RESULT) {
-    std::cout << "Edge weights: ";
-    for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-      std::cout << problem.edge_weights[i] << " ";
-    }
-    std::cout << std::endl << "Edge list: ";
-    for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
-      std::cout << problem.graph.edge_to_node[2 * i] << "->"
-                << problem.graph.edge_to_node[2 * i + 1] << std::endl;
-    }
-    std::cout << std::endl;
-  }
-  Timer t;
-  HierarchicalColourMemory<> memory(BLOCK_SIZE, problem);
-  std::cout << "memory colouring time: ";
-  t.printTime();
-  std::cout << std::endl;
-  if (PRINT_RESULT) {
-    for (const auto &c : memory.colours) {
-      std::cout << "================================================"
-                << std::endl
-                << "Memory:" << std::endl;
-      std::cout << "Edge weights: ";
-      for (float w : c.edge_weights) {
-        std::cout << w << " ";
-      }
-      std::cout << std::endl << "Points to be cached: ";
-      for (const auto &p : c.points_to_be_cached) {
-        std::cout << p << " ";
-      }
-      std::cout << std::endl << "Points to be cached (offsets): ";
-      for (const auto &p : c.points_to_be_cached_offsets) {
-        std::cout << p << " ";
-      }
-      std::cout << std::endl << "Edge list: ";
-      for (MY_SIZE i = 0; i < c.edge_list.size(); i += 2) {
-        std::cout << c.edge_list[i] << "->" << c.edge_list[i + 1] << " ";
-      }
-      std::cout << std::endl;
-      std::cout << "Num of edge colours: ";
-      for (std::uint8_t nec : c.num_edge_colours) {
-        std::cout << static_cast<unsigned>(nec) << " ";
-      }
-      std::cout << std::endl;
-      std::cout << "Edge colours: ";
-      for (std::uint8_t cc : c.edge_colours) {
-        std::cout << static_cast<int>(cc) << " ";
-      }
-      std::cout << std::endl;
-    }
-  }
-}
-
-void testGPUHierarchicalSolution(MY_SIZE num) {
-  std::cout << "CPU edge vs GPU hierarchical" << std::endl;
-
-  std::vector<float> result1;
-  double rms = 0;
-  MY_SIZE N = 1000;
-  MY_SIZE M = 2000;
-  MY_SIZE reset_every = 10;
-  {
-    srand(1);
-    Problem<> problem(N, M);
-    problem.loopCPUEdgeCentred(num, reset_every);
-    float abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      result1.push_back(problem.point_weights[i]);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
-    }
-    std::cout << "Abs max: " << abs_max << std::endl;
-  }
-
-  {
-    srand(1);
-    Problem<> problem(N, M);
-    problem.loopGPUHierarchical(num, reset_every);
-    float abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      rms += std::pow(problem.point_weights[i] - result1[i], 2);
-      abs_max = std::max(abs_max, problem.point_weights[i]);
-    }
-    std::cout << "Abs max: " << abs_max << std::endl;
-    rms = std::pow(rms / result1.size(), 0.5);
-    std::cout << "RMS: " << rms << std::endl;
-  }
-}
-
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 void testTwoImplementations(
     MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
@@ -514,30 +373,34 @@ void testTwoImplementations(
     implementation_algorithm_t<Dim, SOA, DataType> algorithm2) {
   std::vector<DataType> result1;
   DataType maxdiff = 0;
+  MY_SIZE ind_max = 0;
   {
     srand(1);
     Problem<Dim, SOA, DataType> problem(N, M);
     (problem.*algorithm1)(num, reset_every);
     DataType abs_max = 0;
     result1.resize(problem.graph.numPoints() * Dim);
-    #pragma omp parallel for collapse(2) reduction(max : abs_max)
+
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         result1[i * Dim + d] = problem.point_weights[i * Dim + d];
         if (abs_max < problem.point_weights[i * Dim + d]) {
           abs_max = problem.point_weights[i * Dim + d];
+          ind_max = i * Dim +d;
         }
       }
     }
-    std::cout << "Abs max: " << abs_max << std::endl;
+    std::cout << "Abs max: " << abs_max << " " << ind_max << std::endl;
   }
 
+  MY_SIZE ind_diff =0;
+  DataType max =0;
   {
     srand(1);
     Problem<Dim, SOA, DataType> problem(N, M);
     (problem.*algorithm2)(num, reset_every);
     DataType abs_max = 0;
-    #pragma omp parallel for collapse(2) reduction(max : abs_max, maxdiff)
+
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE ind = i * Dim + d;
@@ -545,15 +408,20 @@ void testTwoImplementations(
                         std::min(result1[ind], problem.point_weights[ind]);
         if (diff > maxdiff) {
           maxdiff = diff;
+          ind_diff = ind;
+          max = problem.point_weights[ind];
         }
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        if( abs_max < problem.point_weights[ind] ){
+          abs_max = problem.point_weights[ind]; 
+          ind_max = ind;
         }
       }
     }
-    std::cout << "Abs max: " << abs_max << std::endl;
-    std::cout << "MAX DIFF: " << maxdiff << std::endl;
-    std::cout << "Test considered " << (maxdiff < 0.004 ? "PASSED" : "FAILED")
+    std::cout << "Abs max: " << abs_max << " ind: " << ind_max << std::endl;
+    std::cout << "MAX DIFF: " << maxdiff << " ind: " << ind_diff << std::endl;
+    std::cout << "Values: " << result1[ind_diff] << " / " << max << std::endl;
+    std::cout << "Test considered " 
+              << (maxdiff < 0.004 ? "PASSED" : "FAILED")
               << std::endl;
   }
 }
@@ -638,7 +506,6 @@ int main(int argc, const char **argv) {
   testTwoImplementations<1, false, float>(
       num, N, M, reset_every, &Problem<1, false, float>::loopGPUEdgeCentred,
       &Problem<1, false, float>::loopGPUHierarchical);
-  cudaDeviceReset();
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:

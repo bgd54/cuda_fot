@@ -132,7 +132,7 @@ struct Problem {
         temp[e] = point_weights[e];
       }
       TIMER_TOGGLE(t);
-      for (int c = num_of_colours-1; c >=0; --c) {
+      for (MY_SIZE c = 0; c < num_of_colours; ++c) {
         stepCPUEdgeCentredOMP(partition[c], temp);
       }
       if (reset_every && i % reset_every == reset_every - 1) {
