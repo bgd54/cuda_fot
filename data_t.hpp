@@ -27,8 +27,8 @@ public:
   const T &operator[](MY_SIZE ind) const;
   T *begin();
   T *end();
-  const T * cbegin() const;
-  const T * cend() const;
+  const T *cbegin() const;
+  const T *cend() const;
 
   // functions to manage state between host and device memory
   void flushToHost();
@@ -85,14 +85,12 @@ template <typename T> data_t<T>::~data_t() {
   }
 }
 
-template <typename T>
-data_t<T>::data_t(data_t<T> &&other) {
+template <typename T> data_t<T>::data_t(data_t<T> &&other) {
   data_d = other.data_d;
   other.data_d = nullptr;
 }
 
-template <typename T>
-data_t<T> &data_t<T>::operator=(data_t<T> &&rhs) {
+template <typename T> data_t<T> &data_t<T>::operator=(data_t<T> &&rhs) {
   std::swap(data_d, rhs.data_d);
   return *this;
 }
@@ -130,7 +128,9 @@ template <typename T> T *data_t<T>::end() { return data + (size * dim); }
 
 template <typename T> const T *data_t<T>::cbegin() const { return data; }
 
-template <typename T> const T *data_t<T>::cend() const { return data + (size * dim); }
+template <typename T> const T *data_t<T>::cend() const {
+  return data + (size * dim);
+}
 
 template <typename T>
 device_data_t<T>::device_data_t(const std::vector<T> &host_buffer)
@@ -171,18 +171,19 @@ __host__ __device__ MY_SIZE index(MY_SIZE num_points, MY_SIZE node_ind,
 }
 /* 1}}} */
 
-template<unsigned Dim, bool SOA, typename T, typename UnsignedType>
-void reorderData(data_t<T> & point_data, std::vector<UnsignedType> permutation){
+template <unsigned Dim, bool SOA, typename T, typename UnsignedType>
+void reorderData(data_t<T> &point_data,
+                 const std::vector<UnsignedType> &permutation) {
   std::vector<T> old_data(point_data.begin(), point_data.end());
-  for(MY_SIZE i = 0; i < point_data.getSize(); ++i){
-    for(MY_SIZE d = 0; d < Dim; ++d){
+  for (MY_SIZE i = 0; i < point_data.getSize(); ++i) {
+    for (MY_SIZE d = 0; d < Dim; ++d) {
       MY_SIZE old_ind = index<Dim, SOA>(point_data.getSize(), i, d);
-      MY_SIZE new_ind = index<Dim, SOA>(point_data.getSize(), permutation[i], d);
+      MY_SIZE new_ind =
+          index<Dim, SOA>(point_data.getSize(), permutation[i], d);
       point_data[new_ind] = old_data[old_ind];
     }
   }
 }
-
 
 #endif /* end of guard DATA_T_HPP */
 // vim:set et sw=2 ts=2 fdm=marker:
