@@ -80,8 +80,6 @@ __global__ void problem_stepGPUHierarchical(
   extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
   DataType *point_cache = reinterpret_cast<DataType *>(shared);
 
-  MY_SIZE left_ind, right_ind;
-
   std::uint8_t our_colour;
   if (thread_ind >= num_threads) {
     our_colour = num_edge_colours[bid];
@@ -113,6 +111,7 @@ __global__ void problem_stepGPUHierarchical(
   DataType increment[Dim * 2];
   if (thread_ind < num_threads) {
     for (MY_SIZE d = 0; d < Dim; ++d) {
+      MY_SIZE left_ind, right_ind;
       if (SOA) {
         left_ind = d * num_cached_point + edge_list[2 * thread_ind];
         right_ind = d * num_cached_point + edge_list[2 * thread_ind + 1];
@@ -148,6 +147,14 @@ __global__ void problem_stepGPUHierarchical(
   for (MY_SIZE i = 0; i < num_edge_colours[bid]; ++i) {
     if (our_colour == i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
+        MY_SIZE left_ind, right_ind;
+        if (SOA) {
+          left_ind = d * num_cached_point + edge_list[2 * thread_ind];
+          right_ind = d * num_cached_point + edge_list[2 * thread_ind + 1];
+        } else {
+          left_ind = edge_list[2 * thread_ind] * Dim + d;
+          right_ind = edge_list[2 * thread_ind + 1] * Dim + d;
+        }
         point_cache[right_ind] += increment[d];
         point_cache[left_ind] += increment[d + Dim];
       }
@@ -324,7 +331,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
     TIMER_TOGGLE(t);
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights_out.getDeviceData(),
-        sizeof(DataType) * graph.numPoints(), cudaMemcpyDeviceToDevice));
+        sizeof(DataType) * graph.numPoints() * Dim, cudaMemcpyDeviceToDevice));
     if (reset_every && iteration % reset_every == reset_every - 1) {
       reset();
       point_weights.flushToDevice();
@@ -384,6 +391,7 @@ void testTwoImplementations(
   std::vector<MY_SIZE> not_changed, not_changed2;
   DataType maxdiff = 0;
   MY_SIZE ind_max = 0, dim_max = 0;
+  bool single_change_in_node = false;
   {
     srand(1);
     Problem<Dim, SOA, DataType> problem(N, M);
@@ -416,10 +424,13 @@ void testTwoImplementations(
         }
       }
       if(value_changed != Dim && value_changed != 0){
-        std::cout << "  " << i << " stayed in some dimension" << std::endl;
+        single_change_in_node = true;
       }
     }
     std::cout << "Nodes stayed: " << not_changed.size() << "/" << problem.graph.numPoints() << std::endl;
+    if(single_change_in_node){
+      std::cout << "WARNING node values updated only some dimension." << std::endl; 
+    }
     for(MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i){
       std::cout << "  " << not_changed[i]  << std::endl;
     }
@@ -429,6 +440,7 @@ void testTwoImplementations(
 
   MY_SIZE ind_diff = 0, dim_diff = 0;
   DataType max = 0;
+  single_change_in_node = false;
   {
     srand(1);
     Problem<Dim, SOA, DataType> problem(N, M);
@@ -455,7 +467,7 @@ void testTwoImplementations(
         MY_SIZE ind = i * Dim + d;
         DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
                         std::min(result1[ind], problem.point_weights[ind]);
-        if (diff > maxdiff) {
+        if (diff >= maxdiff) {
           maxdiff = diff;
           ind_diff = i;
           dim_diff = d;
@@ -468,10 +480,18 @@ void testTwoImplementations(
         }
       }
       if(value_changed != Dim && value_changed != 0){
-        std::cout << "  " << i << " stayed in some dimension" << std::endl;
+        std::cout << value_changed << " " << i << std::endl;
+        for(MY_SIZE d = 0; d < Dim; ++d){
+          std::cout << result2[i*Dim + d] << " / " << problem.point_weights[i*Dim+d] << "\t"; 
+        }
+        std::cout << std::endl;
+        single_change_in_node = true;
       }
     }
     std::cout << "Nodes stayed: " << not_changed2.size() << "/" << problem.graph.numPoints() << std::endl;
+    if(single_change_in_node){
+      std::cout << "WARNING node values updated only some dimension." << std::endl; 
+    }
     for(MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i){
       std::cout << "  " << not_changed2[i]  << std::endl;
     }
@@ -562,12 +582,12 @@ int main(int argc, const char **argv) {
   /*generateTimes<8, true, false>(argv[1]);*/
   /*generateTimes<16, true, false>(argv[1]);*/
   MY_SIZE num = 500;
-  MY_SIZE N = 1000, M = 1000;
+  MY_SIZE N = 1000, M = 2000;
   MY_SIZE reset_every = 0;
-  #define TEST_DIM 2
+  #define TEST_DIM 4
   testTwoImplementations<TEST_DIM, false, float>(
-      num, N, M, reset_every, &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred,
-      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP);
+      num, N, M, reset_every, &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, false, float>::loopGPUHierarchical);
   //testTwoImplementations<TEST_DIM, false, double>(
   //    num, N, M, reset_every, &Problem<TEST_DIM, false, double>::loopGPUEdgeCentred,
   //    &Problem<TEST_DIM, false, double>::loopCPUEdgeCentredOMP);
