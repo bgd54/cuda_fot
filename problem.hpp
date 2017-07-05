@@ -28,9 +28,15 @@ struct Problem {
   Graph graph;
   DataType *edge_weights;
   data_t<DataType> point_weights;
+  const MY_SIZE block_size;       // GPU block size
 
   /* ctor/dtor {{{1 */
-  Problem(MY_SIZE N, MY_SIZE M) : graph(N, M), point_weights(N * M, Dim) {
+  Problem(MY_SIZE N, MY_SIZE M,
+          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, 128})
+      : graph(N, M, block_dims), point_weights(N * M, Dim),
+        block_size{block_dims.first == 0
+                       ? block_dims.second
+                       : block_dims.first * block_dims.second * 2} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;

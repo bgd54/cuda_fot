@@ -10,8 +10,6 @@
 #include "helper_cuda.h"
 #include "problem.hpp"
 
-constexpr MY_SIZE BLOCK_SIZE = 128;
-
 /* problem_stepGPU {{{1 */
 template <unsigned Dim = 1, bool SOA = false, typename DataType>
 __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
@@ -179,7 +177,7 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
                                             })
                                ->size();
   MY_SIZE num_blocks = static_cast<MY_SIZE>(
-      std::ceil(double(max_thread_num) / static_cast<double>(BLOCK_SIZE)));
+      std::ceil(double(max_thread_num) / static_cast<double>(block_size)));
   DataType *d_edge_weights;
   data_t<DataType> point_weights2(point_weights.getSize(),
                                   point_weights.getDim());
@@ -205,7 +203,7 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
   TIMER_START(t);
   for (MY_SIZE i = 0; i < num; ++i) {
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
-      problem_stepGPU<Dim, SOA><<<num_blocks, BLOCK_SIZE>>>(
+      problem_stepGPU<Dim, SOA><<<num_blocks, block_size>>>(
           point_weights.getDeviceData(), d_edge_weights,
           graph.edge_to_node.getDeviceData(), d_partition[c],
           point_weights2.getDeviceData(), partition[c].size(),
@@ -249,7 +247,7 @@ template <unsigned Dim, bool SOA, typename DataType>
 void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                                                       MY_SIZE reset_every) {
   TIMER_START(t_colouring);
-  HierarchicalColourMemory<Dim, SOA, DataType> memory(BLOCK_SIZE, *this);
+  HierarchicalColourMemory<Dim, SOA, DataType> memory(block_size, *this);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
   data_t<DataType> point_weights_out(point_weights.getSize(),
@@ -279,12 +277,12 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       assert(memory.colours[colour_ind].edge_list.size() % 2 == 0);
       MY_SIZE num_threads = memory.colours[colour_ind].edge_list.size() / 2;
       MY_SIZE num_blocks = static_cast<MY_SIZE>(
-          std::ceil(static_cast<double>(num_threads) / BLOCK_SIZE));
+          std::ceil(static_cast<double>(num_threads) / block_size));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
       MY_SIZE cache_size =
           sizeof(DataType) * d_memory[colour_ind].shared_size * Dim;
       problem_stepGPUHierarchical<Dim, SOA>
-          <<<num_blocks, BLOCK_SIZE, cache_size>>>(
+          <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
               static_cast<DataType *>(d_memory[colour_ind].edge_weights),
@@ -328,7 +326,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
   avg_num_edge_colours /=
-      std::ceil(static_cast<double>(graph.numEdges()) / BLOCK_SIZE);
+      std::ceil(static_cast<double>(graph.numEdges()) / block_size);
   std::cout << "  average number of colours used: " << avg_num_edge_colours
             << std::endl;
   // ---------------
@@ -544,6 +542,51 @@ void generateTimes(std::string in_file) {
   std::cout << "Finished." << std::endl;
 }
 
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE,MY_SIZE> block_dims) {
+  constexpr MY_SIZE num = 500;
+  MY_SIZE block_size = block_dims.first == 0 ? block_dims.second :
+    block_dims.first * block_dims.second * 2;
+  std::cout << ":::: Generating problems with block size: " << block_dims.first
+            << "x" << block_dims.second << " (= " << block_size << ")"
+            << "::::" << std::endl
+            << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
+            << "     Data type: " << (sizeof(DataType) == sizeof(float) ? "float" :
+                "double")
+            << std::endl;
+  std::function<void(implementation_algorithm_t<Dim, SOA, DataType>)> run =
+      [&](implementation_algorithm_t<Dim, SOA, DataType> algo) {
+        Problem<Dim, SOA, DataType> problem(N,M,block_dims);
+        std::cout << "--Problem created" << std::endl;
+        (problem.*algo)(num, 0);
+        std::cout << "--Problem finished." << std::endl;
+      };
+  run(&Problem<Dim, SOA, DataType>::loopGPUEdgeCentred);
+  run(&Problem<Dim, SOA, DataType>::loopGPUHierarchical);
+  std::cout << "Finished." << std::endl;
+}
+
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+void generateTimesDifferentBlockDims (MY_SIZE N, MY_SIZE M) {
+  // Should use N,M = 1153
+  generateTimesWithBlockDims(N,M,{0,32});
+  generateTimesWithBlockDims(N,M,{2,8});
+  generateTimesWithBlockDims(N,M,{4,4});
+  generateTimesWithBlockDims(N,M,{0,128});
+  generateTimesWithBlockDims(N,M,{2,32});
+  generateTimesWithBlockDims(N,M,{4,16});
+  generateTimesWithBlockDims(N,M,{8,8});
+  generateTimesWithBlockDims(N,M,{0,288});
+  generateTimesWithBlockDims(N,M,{2,72});
+  generateTimesWithBlockDims(N,M,{4,36});
+  generateTimesWithBlockDims(N,M,{12,12});
+  generateTimesWithBlockDims(N,M,{0,512});
+  generateTimesWithBlockDims(N,M,{2,128});
+  generateTimesWithBlockDims(N,M,{4,64});
+  generateTimesWithBlockDims(N,M,{8,32});
+  generateTimesWithBlockDims(N,M,{16,16});
+}
+
 int main(int argc, const char **argv) {
   /*if (argc <= 1) {*/
   /*  std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;*/
@@ -553,18 +596,19 @@ int main(int argc, const char **argv) {
   /*generateTimes<4, true, false>(argv[1]);*/
   /*generateTimes<8, true, false>(argv[1]);*/
   /*generateTimes<16, true, false>(argv[1]);*/
-  MY_SIZE num = 500;
-  MY_SIZE N = 100, M = 200;
-  MY_SIZE reset_every = 0;
-#define TEST_DIM 4
-  testTwoImplementations<TEST_DIM, false, float>(
-      num, N, M, reset_every,
-      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred);
-  testTwoImplementations<TEST_DIM, true, float>(
-      num, N, M, reset_every,
-      &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, true, float>::loopGPUEdgeCentred);
+/*  MY_SIZE num = 500;*/
+/*  MY_SIZE N = 100, M = 200;*/
+/*  MY_SIZE reset_every = 0;*/
+/*#define TEST_DIM 4*/
+/*  testTwoImplementations<TEST_DIM, false, float>(*/
+/*      num, N, M, reset_every,*/
+/*      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,*/
+/*      &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred);*/
+/*  testTwoImplementations<TEST_DIM, true, float>(*/
+/*      num, N, M, reset_every,*/
+/*      &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,*/
+/*      &Problem<TEST_DIM, true, float>::loopGPUEdgeCentred);*/
+  generateTimesDifferentBlockDims<1,true,float>(1153,1153);
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
