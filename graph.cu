@@ -20,36 +20,29 @@ __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
                                 const MY_SIZE *__restrict__ edge_inds,
                                 DataType *__restrict__ out,
                                 const MY_SIZE edge_num,
-                                const MY_SIZE point_num) {
+                                const MY_SIZE num_points) {
   MY_SIZE id = blockIdx.x * blockDim.x + threadIdx.x;
   DataType inc[2 * Dim];
   if (id < edge_num) {
     MY_SIZE edge_ind = edge_inds[id];
-#pragma unroll
+    #pragma unroll
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE ind_left, ind_right;
-      if (SOA) {
-        ind_left = d * point_num + edge_list[2 * edge_ind];
-        ind_right = d * point_num + edge_list[2 * edge_ind + 1];
-      } else {
-        ind_left = edge_list[2 * edge_ind] * Dim + d;
-        ind_right = edge_list[2 * edge_ind + 1] * Dim + d;
-      }
+      MY_SIZE ind_left =
+          index<Dim, SOA>(num_points, edge_list[2 * edge_ind], d);
+      MY_SIZE ind_right =
+          index<Dim, SOA>(num_points, edge_list[2 * edge_ind + 1], d);
       inc[d] =
           out[ind_right] + edge_weights[edge_ind] * point_weights[ind_left];
       inc[d + Dim] =
           out[ind_left] + edge_weights[edge_ind] * point_weights[ind_right];
     }
-#pragma unroll
+    #pragma unroll
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE ind_left, ind_right;
-      if (SOA) {
-        ind_left = d * point_num + edge_list[2 * edge_ind];
-        ind_right = d * point_num + edge_list[2 * edge_ind + 1];
-      } else {
-        ind_left = edge_list[2 * edge_ind] * Dim + d;
-        ind_right = edge_list[2 * edge_ind + 1] * Dim + d;
-      }
+      MY_SIZE ind_left =
+          index<Dim, SOA>(num_points, edge_list[2 * edge_ind], d);
+      MY_SIZE ind_right =
+          index<Dim, SOA>(num_points, edge_list[2 * edge_ind + 1], d);
+
       out[ind_right] = inc[d];
       out[ind_left] = inc[d + Dim];
     }
@@ -74,7 +67,7 @@ __global__ void problem_stepGPUHierarchical(
   MY_SIZE tid = threadIdx.x;
 
   MY_SIZE cache_points_offset = points_to_be_cached_offsets[bid];
-  MY_SIZE num_cached_point =
+  MY_SIZE num_cached_points =
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
 
   extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
@@ -88,19 +81,15 @@ __global__ void problem_stepGPUHierarchical(
   }
 
   // Cache in
-  for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
+  for (MY_SIZE i = 0; i < num_cached_points; i += blockDim.x) {
     for (MY_SIZE d = 0; d < Dim; ++d) {
       MY_SIZE c_ind, g_ind;
       MY_SIZE g_point_to_be_cached =
           points_to_be_cached[cache_points_offset + i + tid];
-      if (i + tid < num_cached_point) {
-        if (SOA) {
-          g_ind = d * num_points + g_point_to_be_cached;
-          c_ind = d * num_cached_point + (i + tid);
-        } else {
-          g_ind = g_point_to_be_cached * Dim + d;
-          c_ind = (i + tid) * Dim + d;
-        }
+      if (i + tid < num_cached_points) {
+        g_ind = index<Dim, SOA>(num_points, g_point_to_be_cached, d);
+        c_ind = index<Dim, SOA>(num_cached_points, i + tid, d);
+
         point_cache[c_ind] = point_weights[g_ind];
       }
     }
@@ -112,14 +101,11 @@ __global__ void problem_stepGPUHierarchical(
   DataType increment[Dim * 2];
   if (thread_ind < num_threads) {
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE left_ind, right_ind;
-      if (SOA) {
-        left_ind = d * num_cached_point + edge_list[2 * thread_ind];
-        right_ind = d * num_cached_point + edge_list[2 * thread_ind + 1];
-      } else {
-        left_ind = edge_list[2 * thread_ind] * Dim + d;
-        right_ind = edge_list[2 * thread_ind + 1] * Dim + d;
-      }
+      MY_SIZE left_ind =
+          index<Dim, SOA>(num_cached_points, edge_list[2 * thread_ind], d);
+      MY_SIZE right_ind =
+          index<Dim, SOA>(num_cached_points, edge_list[2 * thread_ind + 1], d);
+
       increment[d] = point_cache[left_ind] * edge_weights[thread_ind];
       increment[d + Dim] = point_cache[right_ind] * edge_weights[thread_ind];
     }
@@ -128,16 +114,10 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
-    if (i + tid < num_cached_point) {
+  for (MY_SIZE i = 0; i < num_cached_points; i += blockDim.x) {
+    if (i + tid < num_cached_points) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE c_ind;
-        if (SOA) {
-          c_ind = d * num_cached_point + (i + tid);
-        } else {
-          c_ind = (i + tid) * Dim + d;
-        }
-        point_cache[c_ind] = 0;
+        point_cache[index<Dim, SOA>(num_cached_points, i + tid, d)] = 0;
       }
     }
   }
@@ -148,14 +128,11 @@ __global__ void problem_stepGPUHierarchical(
   for (MY_SIZE i = 0; i < num_edge_colours[bid]; ++i) {
     if (our_colour == i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE left_ind, right_ind;
-        if (SOA) {
-          left_ind = d * num_cached_point + edge_list[2 * thread_ind];
-          right_ind = d * num_cached_point + edge_list[2 * thread_ind + 1];
-        } else {
-          left_ind = edge_list[2 * thread_ind] * Dim + d;
-          right_ind = edge_list[2 * thread_ind + 1] * Dim + d;
-        }
+        MY_SIZE left_ind =
+            index<Dim, SOA>(num_cached_points, edge_list[2 * thread_ind], d);
+        MY_SIZE right_ind = index<Dim, SOA>(num_cached_points,
+                                            edge_list[2 * thread_ind + 1], d);
+
         point_cache[right_ind] += increment[d];
         point_cache[left_ind] += increment[d + Dim];
       }
@@ -164,31 +141,23 @@ __global__ void problem_stepGPUHierarchical(
   }
 
   // Cache out
-  for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
-    if (i + tid < num_cached_point) {
+  for (MY_SIZE i = 0; i < num_cached_points; i += blockDim.x) {
+    if (i + tid < num_cached_points) {
       MY_SIZE g_point_to_be_cached =
           points_to_be_cached[cache_points_offset + i + tid];
       DataType result[Dim];
-#pragma unroll
+      #pragma unroll
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE write_c_ind, write_g_ind;
-        if (SOA) {
-          write_g_ind = d * num_points + g_point_to_be_cached;
-          write_c_ind = d * num_cached_point + (i + tid);
-        } else {
-          write_g_ind = g_point_to_be_cached * Dim + d;
-          write_c_ind = (i + tid) * Dim + d;
-        }
+        MY_SIZE write_g_ind =
+            index<Dim, SOA>(num_points, g_point_to_be_cached, d);
+        MY_SIZE write_c_ind = index<Dim, SOA>(num_cached_points, i + tid, d);
+
         result[d] = point_weights_out[write_g_ind] + point_cache[write_c_ind];
       }
-#pragma unroll
+      #pragma unroll
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE write_g_ind;
-        if (SOA) {
-          write_g_ind = d * num_points + g_point_to_be_cached;
-        } else {
-          write_g_ind = g_point_to_be_cached * Dim + d;
-        }
+        MY_SIZE write_g_ind =
+            index<Dim, SOA>(num_points, g_point_to_be_cached, d);
         point_weights_out[write_g_ind] = result[d];
       }
     }
@@ -400,7 +369,8 @@ void testTwoImplementations(
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        result1[i * Dim + d] = problem.point_weights[i * Dim + d];
+        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+        result1[ind] = problem.point_weights[ind];
       }
     }
 
@@ -411,14 +381,15 @@ void testTwoImplementations(
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       MY_SIZE value_changed = Dim;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        if (result1[i * Dim + d] == problem.point_weights[i * Dim + d]) {
+        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+        if (result1[ind] == problem.point_weights[ind]) {
           if (value_changed == Dim)
             not_changed.push_back(i);
           value_changed--;
         }
-        result1[i * Dim + d] = problem.point_weights[i * Dim + d];
-        if (abs_max < problem.point_weights[i * Dim + d]) {
-          abs_max = problem.point_weights[i * Dim + d];
+        result1[ind] = problem.point_weights[ind];
+        if (abs_max < problem.point_weights[ind]) {
+          abs_max = problem.point_weights[ind];
           ind_max = i;
           dim_max = d;
         }
@@ -451,7 +422,8 @@ void testTwoImplementations(
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        result2[i * Dim + d] = problem.point_weights[i * Dim + d];
+        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+        result2[ind] = problem.point_weights[ind];
       }
     }
     // run algorithm
@@ -461,12 +433,12 @@ void testTwoImplementations(
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       MY_SIZE value_changed = Dim;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        if (result2[i * Dim + d] == problem.point_weights[i * Dim + d]) {
+        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+        if (result2[ind] == problem.point_weights[ind]) {
           if (value_changed == Dim)
             not_changed2.push_back(i);
           value_changed--;
         }
-        MY_SIZE ind = i * Dim + d;
         DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
                         std::min(result1[ind], problem.point_weights[ind]);
         if (diff >= maxdiff) {
@@ -482,11 +454,6 @@ void testTwoImplementations(
         }
       }
       if (value_changed != Dim && value_changed != 0) {
-        std::cout << value_changed << " " << i << std::endl;
-        for (MY_SIZE d = 0; d < Dim; ++d) {
-          std::cout << result2[i * Dim + d] << " / "
-                    << problem.point_weights[i * Dim + d] << "\t";
-        }
         std::cout << std::endl;
         single_change_in_node = true;
       }
@@ -504,8 +471,9 @@ void testTwoImplementations(
               << " dim: " << dim_max << std::endl;
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
               << " dim: " << dim_diff << std::endl;
-    std::cout << "Values: " << result1[ind_diff * Dim + dim_diff] << " / "
-              << max << std::endl;
+    MY_SIZE ind =
+        index<Dim, SOA>(problem.graph.numPoints(), ind_diff, dim_diff);
+    std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
   }
@@ -586,16 +554,17 @@ int main(int argc, const char **argv) {
   /*generateTimes<8, true, false>(argv[1]);*/
   /*generateTimes<16, true, false>(argv[1]);*/
   MY_SIZE num = 500;
-  MY_SIZE N = 1000, M = 2000;
+  MY_SIZE N = 100, M = 200;
   MY_SIZE reset_every = 0;
-  #define TEST_DIM 4
+#define TEST_DIM 4
   testTwoImplementations<TEST_DIM, false, float>(
-      num, N, M, reset_every, &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, false, float>::loopGPUHierarchical);
-  //testTwoImplementations<TEST_DIM, false, double>(
-  //    num, N, M, reset_every, &Problem<TEST_DIM, false, double>::loopGPUEdgeCentred,
-  //    &Problem<TEST_DIM, false, double>::loopCPUEdgeCentredOMP);
-
+      num, N, M, reset_every,
+      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred);
+  testTwoImplementations<TEST_DIM, true, float>(
+      num, N, M, reset_every,
+      &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, true, float>::loopGPUEdgeCentred);
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:
