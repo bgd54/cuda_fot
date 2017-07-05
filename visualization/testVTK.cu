@@ -11,23 +11,20 @@ using namespace std;
 void writeGlobalColouringVTK(const std::string &filename,
                              const data_t<float> &point_coords,
                              const Graph &graph, MY_SIZE block_size) {
+  std::vector<std::vector<MY_SIZE>> partition = std::move(graph.colourEdges<>());
   std::vector<std::vector<std::uint16_t>> data(3);
-  data[VTK_IND_THR_COL] = std::move(graph.colourEdges<true>());
+  data[VTK_IND_THR_COL].resize(graph.numEdges()); 
   data[VTK_IND_BLK_ID].resize(graph.numEdges());
-  MY_SIZE ind = 0;
   // TODO optimise
-  MY_SIZE num_colours = *std::max_element(data[VTK_IND_THR_COL].begin(),
-                                          data[VTK_IND_THR_COL].end());
+  MY_SIZE num_colours = partition.size();
+  MY_SIZE bid = 0;
   for (MY_SIZE c = 0; c < num_colours; ++c) {
-    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      if (data[VTK_IND_THR_COL][i] == c) {
-        data[VTK_IND_BLK_ID][i] = ind / block_size;
-        ++ind;
-      }
+    for(MY_SIZE tid = 0; tid < partition[c].size(); ++tid){
+      data[VTK_IND_THR_COL][partition[c][tid]] = c;
+      if(tid % block_size == 0) bid++;
+      data[VTK_IND_BLK_ID][partition[c][tid]] = bid;
     }
-    if (ind % block_size != 0) {
-      ind += block_size - (ind % block_size);
-    }
+    bid++;
   }
   writeGraphToVTKAscii(filename, point_coords, graph.edge_to_node, data);
 }
