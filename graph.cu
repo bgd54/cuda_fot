@@ -379,11 +379,10 @@ void testTwoImplementations(
     MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
     implementation_algorithm_t<Dim, SOA, DataType> algorithm1,
     implementation_algorithm_t<Dim, SOA, DataType> algorithm2) {
-  std::cout << "========================================" << std:: endl;
+  std::cout << "========================================" << std::endl;
   std::cout << "Two implementation test" << std::endl;
-  std::cout << "Dim: " << Dim << ( SOA ? ", SOA": ", AOS" ) 
-            << ", Precision: ";
-  std::cout << ( sizeof(DataType) == sizeof(float) ? "float" : "double" );
+  std::cout << "Dim: " << Dim << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
+  std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
   std::cout << " reset: " << reset_every << std::endl;
   std::cout << "========================================" << std::endl;
@@ -397,7 +396,7 @@ void testTwoImplementations(
     srand(1);
     Problem<Dim, SOA, DataType> problem(N, M);
     result1.resize(problem.graph.numPoints() * Dim);
-    //save data before test
+    // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
@@ -405,15 +404,15 @@ void testTwoImplementations(
       }
     }
 
-    //run algorithm
+    // run algorithm
     (problem.*algorithm1)(num, reset_every);
-    
+
     DataType abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       MY_SIZE value_changed = Dim;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        if(result1[i * Dim + d] == problem.point_weights[i * Dim + d]){
-          if(value_changed == Dim)
+        if (result1[i * Dim + d] == problem.point_weights[i * Dim + d]) {
+          if (value_changed == Dim)
             not_changed.push_back(i);
           value_changed--;
         }
@@ -424,19 +423,21 @@ void testTwoImplementations(
           dim_max = d;
         }
       }
-      if(value_changed != Dim && value_changed != 0){
+      if (value_changed != Dim && value_changed != 0) {
         single_change_in_node = true;
       }
     }
-    std::cout << "Nodes stayed: " << not_changed.size() << "/" << problem.graph.numPoints() << std::endl;
-    if(single_change_in_node){
-      std::cout << "WARNING node values updated only some dimension." << std::endl; 
+    std::cout << "Nodes stayed: " << not_changed.size() << "/"
+              << problem.graph.numPoints() << std::endl;
+    if (single_change_in_node) {
+      std::cout << "WARNING node values updated only some dimension."
+                << std::endl;
     }
-    for(MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i){
-      std::cout << "  " << not_changed[i]  << std::endl;
+    for (MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i) {
+      std::cout << "  " << not_changed[i] << std::endl;
     }
-    std::cout << "Abs max: " << abs_max << " node: " << ind_max << " dim: "
-              << dim_max << std::endl;
+    std::cout << "Abs max: " << abs_max << " node: " << ind_max
+              << " dim: " << dim_max << std::endl;
   }
 
   MY_SIZE ind_diff = 0, dim_diff = 0;
@@ -446,22 +447,22 @@ void testTwoImplementations(
     srand(1);
     Problem<Dim, SOA, DataType> problem(N, M);
     result2.resize(problem.graph.numPoints() * Dim);
-    //save data before test
+    // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         result2[i * Dim + d] = problem.point_weights[i * Dim + d];
       }
     }
-    //run algorithm
+    // run algorithm
     (problem.*algorithm2)(num, reset_every);
     DataType abs_max = 0;
 
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
       MY_SIZE value_changed = Dim;
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        if(result2[i * Dim + d] == problem.point_weights[i * Dim + d]){
-          if(value_changed == Dim)
+        if (result2[i * Dim + d] == problem.point_weights[i * Dim + d]) {
+          if (value_changed == Dim)
             not_changed2.push_back(i);
           value_changed--;
         }
@@ -474,36 +475,38 @@ void testTwoImplementations(
           dim_diff = d;
           max = problem.point_weights[ind];
         }
-        if( abs_max < problem.point_weights[ind] ){
-          abs_max = problem.point_weights[ind]; 
+        if (abs_max < problem.point_weights[ind]) {
+          abs_max = problem.point_weights[ind];
           ind_max = i;
           dim_max = d;
         }
       }
-      if(value_changed != Dim && value_changed != 0){
+      if (value_changed != Dim && value_changed != 0) {
         std::cout << value_changed << " " << i << std::endl;
-        for(MY_SIZE d = 0; d < Dim; ++d){
-          std::cout << result2[i*Dim + d] << " / " << problem.point_weights[i*Dim+d] << "\t"; 
+        for (MY_SIZE d = 0; d < Dim; ++d) {
+          std::cout << result2[i * Dim + d] << " / "
+                    << problem.point_weights[i * Dim + d] << "\t";
         }
         std::cout << std::endl;
         single_change_in_node = true;
       }
     }
-    std::cout << "Nodes stayed: " << not_changed2.size() << "/" << problem.graph.numPoints() << std::endl;
-    if(single_change_in_node){
-      std::cout << "WARNING node values updated only some dimension." << std::endl; 
+    std::cout << "Nodes stayed: " << not_changed2.size() << "/"
+              << problem.graph.numPoints() << std::endl;
+    if (single_change_in_node) {
+      std::cout << "WARNING node values updated only some dimension."
+                << std::endl;
     }
-    for(MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i){
-      std::cout << "  " << not_changed2[i]  << std::endl;
+    for (MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i) {
+      std::cout << "  " << not_changed2[i] << std::endl;
     }
-    std::cout << "Abs max: " << abs_max << " node: " << ind_max << " dim: "
-              << dim_max << std::endl;
-    std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff << " dim: "
-              << dim_diff << std::endl;
-    std::cout << "Values: " << result1[ind_diff * Dim + dim_diff] << " / " 
+    std::cout << "Abs max: " << abs_max << " node: " << ind_max
+              << " dim: " << dim_max << std::endl;
+    std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
+              << " dim: " << dim_diff << std::endl;
+    std::cout << "Values: " << result1[ind_diff * Dim + dim_diff] << " / "
               << max << std::endl;
-    std::cout << "Test considered " 
-              << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
+    std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
   }
 }
