@@ -11,18 +11,6 @@
 #include "graph.hpp"
 #include "timer.hpp"
 
-/* index {{{1 */
-template <unsigned Dim = 1, bool SOA = false>
-__host__ __device__ MY_SIZE index(MY_SIZE num_points, MY_SIZE node_ind,
-                                  MY_SIZE dim) {
-  if (SOA) {
-    return dim * num_points + node_ind;
-  } else {
-    return node_ind * Dim + dim;
-  }
-}
-/* 1}}} */
-
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 struct Problem {
   Graph graph;
