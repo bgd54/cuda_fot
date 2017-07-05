@@ -37,14 +37,14 @@ def transform (in_file, out_file, vis):
         f.flush()
     if vis:
         import matplotlib.pyplot as plt
-        B = scipy.sparse.csr_matrix((np.ones((el_in[0,1],)),\
-                (el_out[:,0],el_out[:,1])),\
+        B = scipy.sparse.csr_matrix((np.ones((2*el_in[0,1],)),\
+                (np.r_[el_out[:,0],el_out[:,1]],np.r_[el_out[:,1],el_out[:,0]])),\
                 shape=(el_in[0,0],el_in[0,0]))
         plt.subplot(1,2,1)
-        plt.spy(A,markersize=0.01)
+        plt.spy(A,markersize=3)
         plt.title('Original')
         plt.subplot(1,2,2)
-        plt.spy(B,markersize=0.01)
+        plt.spy(B,markersize=3)
         plt.title('RCM''d')
         plt.show()
 
