@@ -9,6 +9,7 @@
 #include "colouring.hpp"
 #include "helper_cuda.h"
 #include "problem.hpp"
+#include "tests.hpp"
 
 /* problem_stepGPU {{{1 */
 template <unsigned Dim = 1, bool SOA = false, typename DataType>
@@ -336,189 +337,6 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
 }
 /* 1}}} */
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
-using implementation_algorithm_t =
-    void (Problem<Dim, SOA, DataType>::*)(MY_SIZE, MY_SIZE);
-
-/* tests {{{1 */
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
-void testTwoImplementations(
-    MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
-    implementation_algorithm_t<Dim, SOA, DataType> algorithm1,
-    implementation_algorithm_t<Dim, SOA, DataType> algorithm2) {
-  std::cout << "========================================" << std::endl;
-  std::cout << "Two implementation test" << std::endl;
-  std::cout << "Dim: " << Dim << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
-  std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
-  std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
-  std::cout << " reset: " << reset_every << std::endl;
-  std::cout << "========================================" << std::endl;
-
-  std::vector<DataType> result1, result2;
-  std::vector<MY_SIZE> not_changed, not_changed2;
-  DataType maxdiff = 0;
-  MY_SIZE ind_max = 0, dim_max = 0;
-  bool single_change_in_node = false;
-  {
-    srand(1);
-    Problem<Dim, SOA, DataType> problem(N, M);
-    result1.resize(problem.graph.numPoints() * Dim);
-    // save data before test
-    #pragma omp parallel for
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
-        result1[ind] = problem.point_weights[ind];
-      }
-    }
-
-    // run algorithm
-    (problem.*algorithm1)(num, reset_every);
-
-    DataType abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      MY_SIZE value_changed = Dim;
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
-        if (result1[ind] == problem.point_weights[ind]) {
-          if (value_changed == Dim)
-            not_changed.push_back(i);
-          value_changed--;
-        }
-        result1[ind] = problem.point_weights[ind];
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
-          ind_max = i;
-          dim_max = d;
-        }
-      }
-      if (value_changed != Dim && value_changed != 0) {
-        single_change_in_node = true;
-      }
-    }
-    std::cout << "Nodes stayed: " << not_changed.size() << "/"
-              << problem.graph.numPoints() << std::endl;
-    if (single_change_in_node) {
-      std::cout << "WARNING node values updated only some dimension."
-                << std::endl;
-    }
-    for (MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i) {
-      std::cout << "  " << not_changed[i] << std::endl;
-    }
-    std::cout << "Abs max: " << abs_max << " node: " << ind_max
-              << " dim: " << dim_max << std::endl;
-  }
-
-  MY_SIZE ind_diff = 0, dim_diff = 0;
-  DataType max = 0;
-  single_change_in_node = false;
-  {
-    srand(1);
-    Problem<Dim, SOA, DataType> problem(N, M);
-    result2.resize(problem.graph.numPoints() * Dim);
-    // save data before test
-    #pragma omp parallel for
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
-        result2[ind] = problem.point_weights[ind];
-      }
-    }
-    // run algorithm
-    (problem.*algorithm2)(num, reset_every);
-    DataType abs_max = 0;
-
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      MY_SIZE value_changed = Dim;
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
-        if (result2[ind] == problem.point_weights[ind]) {
-          if (value_changed == Dim)
-            not_changed2.push_back(i);
-          value_changed--;
-        }
-        DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
-                        std::min(result1[ind], problem.point_weights[ind]);
-        if (diff >= maxdiff) {
-          maxdiff = diff;
-          ind_diff = i;
-          dim_diff = d;
-          max = problem.point_weights[ind];
-        }
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
-          ind_max = i;
-          dim_max = d;
-        }
-      }
-      if (value_changed != Dim && value_changed != 0) {
-        std::cout << std::endl;
-        single_change_in_node = true;
-      }
-    }
-    std::cout << "Nodes stayed: " << not_changed2.size() << "/"
-              << problem.graph.numPoints() << std::endl;
-    if (single_change_in_node) {
-      std::cout << "WARNING node values updated only some dimension."
-                << std::endl;
-    }
-    for (MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i) {
-      std::cout << "  " << not_changed2[i] << std::endl;
-    }
-    std::cout << "Abs max: " << abs_max << " node: " << ind_max
-              << " dim: " << dim_max << std::endl;
-    std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
-              << " dim: " << dim_diff << std::endl;
-    MY_SIZE ind =
-        index<Dim, SOA>(problem.graph.numPoints(), ind_diff, dim_diff);
-    std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
-    std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
-              << std::endl;
-  }
-}
-
-void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
-                    implementation_algorithm_t<> algorithm1,
-                    implementation_algorithm_t<> algorithm2) {
-  std::vector<float> result1;
-  double rms = 0;
-  {
-    srand(1);
-    Problem<> problem(N, M);
-    /*std::ifstream f("test.in");*/
-    /*Problem<> problem (f);*/
-    std::cout << "Problem 1 created" << std::endl;
-    problem.reorder();
-    std::cout << "Problem 1 reordered" << std::endl;
-    (problem.*algorithm1)(num, reset_every);
-    float abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      result1.push_back(problem.point_weights[i]);
-      abs_max = std::max(abs_max, std::abs(problem.point_weights[i]));
-    }
-    std::cout << "Abs max: " << abs_max << std::endl;
-  }
-
-  {
-    srand(1);
-    Problem<> problem(N, M);
-    /*std::ifstream f("rotor37_mesh");*/
-    /*Problem<> problem (f);*/
-    std::cout << "Problem 2 created" << std::endl;
-    (problem.*algorithm2)(num, reset_every);
-    problem.reorder();
-    float abs_max = 0;
-    for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      rms += std::pow(problem.point_weights[i] - result1[i], 2);
-      abs_max = std::max(abs_max, std::abs(problem.point_weights[i]));
-    }
-    std::cout << "Abs max: " << abs_max << std::endl;
-    rms = std::pow(rms / result1.size(), 0.5);
-    std::cout << "RMS: " << rms << std::endl;
-  }
-}
-/* 1}}} */
-
 template <unsigned Dim = 1, bool SOA = false, bool RunSerial = true,
           typename DataType = float>
 void generateTimes(std::string in_file) {
@@ -543,20 +361,22 @@ void generateTimes(std::string in_file) {
 }
 
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
-void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE,MY_SIZE> block_dims) {
+void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
+                                std::pair<MY_SIZE, MY_SIZE> block_dims) {
   constexpr MY_SIZE num = 500;
-  MY_SIZE block_size = block_dims.first == 0 ? block_dims.second :
-    block_dims.first * block_dims.second * 2;
+  MY_SIZE block_size = block_dims.first == 0
+                           ? block_dims.second
+                           : block_dims.first * block_dims.second * 2;
   std::cout << ":::: Generating problems with block size: " << block_dims.first
             << "x" << block_dims.second << " (= " << block_size << ")"
             << "::::" << std::endl
             << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
-            << "     Data type: " << (sizeof(DataType) == sizeof(float) ? "float" :
-                "double")
+            << "     Data type: "
+            << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
   std::function<void(implementation_algorithm_t<Dim, SOA, DataType>)> run =
       [&](implementation_algorithm_t<Dim, SOA, DataType> algo) {
-        Problem<Dim, SOA, DataType> problem(N,M,block_dims);
+        Problem<Dim, SOA, DataType> problem(N, M, block_dims);
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
@@ -567,48 +387,56 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE,MY_SIZE>
 }
 
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
-void generateTimesDifferentBlockDims (MY_SIZE N, MY_SIZE M) {
-  // Should use N,M = 1153
-  generateTimesWithBlockDims(N,M,{0,32});
-  generateTimesWithBlockDims(N,M,{2,8});
-  generateTimesWithBlockDims(N,M,{4,4});
-  generateTimesWithBlockDims(N,M,{0,128});
-  generateTimesWithBlockDims(N,M,{2,32});
-  generateTimesWithBlockDims(N,M,{4,16});
-  generateTimesWithBlockDims(N,M,{8,8});
-  generateTimesWithBlockDims(N,M,{0,288});
-  generateTimesWithBlockDims(N,M,{2,72});
-  generateTimesWithBlockDims(N,M,{4,36});
-  generateTimesWithBlockDims(N,M,{12,12});
-  generateTimesWithBlockDims(N,M,{0,512});
-  generateTimesWithBlockDims(N,M,{2,128});
-  generateTimesWithBlockDims(N,M,{4,64});
-  generateTimesWithBlockDims(N,M,{8,32});
-  generateTimesWithBlockDims(N,M,{16,16});
+void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
+  generateTimesWithBlockDims(N, M, {0, 32});
+  generateTimesWithBlockDims(N, M, {2, 8});
+  generateTimesWithBlockDims(N, M, {4, 4});
+  generateTimesWithBlockDims(N, M, {0, 128});
+  generateTimesWithBlockDims(N, M, {2, 32});
+  generateTimesWithBlockDims(N, M, {4, 16});
+  generateTimesWithBlockDims(N, M, {8, 8});
+  generateTimesWithBlockDims(N, M, {0, 288});
+  generateTimesWithBlockDims(N, M, {2, 72});
+  generateTimesWithBlockDims(N, M, {4, 36});
+  generateTimesWithBlockDims(N, M, {12, 12});
+  generateTimesWithBlockDims(N, M, {0, 512});
+  generateTimesWithBlockDims(N, M, {2, 128});
+  generateTimesWithBlockDims(N, M, {4, 64});
+  generateTimesWithBlockDims(N, M, {8, 32});
+  generateTimesWithBlockDims(N, M, {16, 16});
+}
+
+void generateTimesFromFile (int argc, const char **argv) {
+  if (argc <= 1) {
+    std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;
+    std::exit(1);
+  }
+  generateTimes<1, true, false>(argv[1]);
+  generateTimes<4, true, false>(argv[1]);
+  generateTimes<8, true, false>(argv[1]);
+  generateTimes<16, true, false>(argv[1]);
+}
+
+void test () {
+  MY_SIZE num = 500;
+  MY_SIZE N = 100, M = 200;
+  MY_SIZE reset_every = 0;
+  constexpr unsigned TEST_DIM = 4;
+  testTwoImplementations<TEST_DIM, false, float>(
+      num, N, M, reset_every,
+      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred);
+  testTwoImplementations<TEST_DIM, true, float>(
+      num, N, M, reset_every,
+      &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, true, float>::loopGPUEdgeCentred);
 }
 
 int main(int argc, const char **argv) {
-  /*if (argc <= 1) {*/
-  /*  std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;*/
-  /*  return 1;*/
-  /*}*/
-  /*generateTimes<1, true, false>(argv[1]);*/
-  /*generateTimes<4, true, false>(argv[1]);*/
-  /*generateTimes<8, true, false>(argv[1]);*/
-  /*generateTimes<16, true, false>(argv[1]);*/
-/*  MY_SIZE num = 500;*/
-/*  MY_SIZE N = 100, M = 200;*/
-/*  MY_SIZE reset_every = 0;*/
-/*#define TEST_DIM 4*/
-/*  testTwoImplementations<TEST_DIM, false, float>(*/
-/*      num, N, M, reset_every,*/
-/*      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,*/
-/*      &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred);*/
-/*  testTwoImplementations<TEST_DIM, true, float>(*/
-/*      num, N, M, reset_every,*/
-/*      &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,*/
-/*      &Problem<TEST_DIM, true, float>::loopGPUEdgeCentred);*/
-  generateTimesDifferentBlockDims<1,true,float>(1153,1153);
+  /*generateTimesFromFile(argc, argv);*/
+  /*test();*/
+  generateTimesDifferentBlockDims<1, true, float>(1153, 1153);
+  return 0;
 }
 
 // vim:set et sw=2 ts=2 fdm=marker:

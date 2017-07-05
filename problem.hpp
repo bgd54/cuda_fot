@@ -11,20 +11,23 @@
 #include "graph.hpp"
 #include "timer.hpp"
 
+constexpr MY_SIZE DEFAULT_BLOCK_SIZE = 128;
+
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 struct Problem {
   Graph graph;
   DataType *edge_weights;
   data_t<DataType> point_weights;
-  const MY_SIZE block_size;       // GPU block size
+  const MY_SIZE block_size; // GPU block size
 
   /* ctor/dtor {{{1 */
   Problem(MY_SIZE N, MY_SIZE M,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, 128})
-      : graph(N, M, block_dims), point_weights(N * M, Dim),
-        block_size{block_dims.first == 0
-                       ? block_dims.second
-                       : block_dims.first * block_dims.second * 2} {
+          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE})
+      : graph(N, M, block_dims),
+        point_weights(N * M, Dim), block_size{block_dims.first == 0
+                                                  ? block_dims.second
+                                                  : block_dims.first *
+                                                        block_dims.second * 2} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
@@ -33,7 +36,9 @@ struct Problem {
     reset();
   }
 
-  Problem(std::istream &is) : graph(is), point_weights(graph.numPoints(), Dim) {
+  Problem(std::istream &is)
+      : graph(is),
+        point_weights(graph.numPoints(), Dim), block_size{DEFAULT_BLOCK_SIZE} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
