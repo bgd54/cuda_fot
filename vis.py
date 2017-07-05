@@ -1,24 +1,38 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse
+import argparse
 
-el1 = np.array([[int(a) for a in line.lstrip().rstrip().split()] for line in open('./my_edge_list')])
-num_points, num_edges = el1[0,:]
-el1 = el1[1:,:]
-el2= np.array([[int(a) for a in line.lstrip().rstrip().split()] for line in open('./scotch_reordered_edge_list')])
-el2 = el2[1:,:]
-data = np.array([1]*2*num_edges)
-csr1 = scipy.sparse.coo_matrix((data,\
-        (np.r_[el1[:,1],el1[:,0]],np.r_[el1[:,0],el1[:,1]])),\
-        shape=(num_points,num_points))
-csr2 = scipy.sparse.coo_matrix((data,\
-        (np.r_[el2[:,1],el2[:,0]],np.r_[el2[:,0],el2[:,1]])),\
-        shape=(num_points,num_points))
-plt.figure()
-plt.subplot(1,2,1)
-plt.title('mine')
-plt.spy(csr1,markersize=3)
-plt.subplot(1,2,2)
-plt.title('rcm')
-plt.spy(csr2,markersize=3)
-plt.show()
+def genArgParser ():
+    parser = argparse.ArgumentParser(\
+            description = 'visualise the graph on a spy diagram')
+    parser.add_argument('file',nargs='+')
+    return parser
+
+def vis (files):
+    fig,axarr = plt.subplots(1,len(files))
+    if len(files) == 1:
+        axarr = [axarr]
+    for i,fname in enumerate(files):
+        el = np.array([[int(a) for a in line.lstrip().rstrip().split()]\
+                for line in open(fname)])
+        num_points, num_edges = el[0,:]
+        el = el[1:,:]
+        print('-- ' + fname)
+        print('Max bandwidth:', np.max(np.abs((el[:,0])-(el[:,1]))))
+        print('Mean bandwidth:', np.mean(np.abs((el[:,0])-(el[:,1]))))
+        data = np.array([1]*2*num_edges)
+        csr = scipy.sparse.coo_matrix((data,\
+                (np.r_[el[:,1],el[:,0]],np.r_[el[:,0],el[:,1]])),\
+                shape=(num_points,num_points))
+        axarr[i].spy(csr,markersize=3)
+        axarr[i].set_title(fname)
+    plt.show()
+
+def main ():
+    parser = genArgParser()
+    args = parser.parse_args()
+    vis(args.file)
+
+if __name__ == "__main__":
+    main()
