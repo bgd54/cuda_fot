@@ -159,4 +159,30 @@ device_data_t<T> &device_data_t<T>::operator=(device_data_t<T> &&rhs) {
   return *this;
 }
 
+/* index {{{1 */
+template <unsigned Dim = 1, bool SOA = false>
+__host__ __device__ MY_SIZE index(MY_SIZE num_points, MY_SIZE node_ind,
+                                  MY_SIZE dim) {
+  if (SOA) {
+    return dim * num_points + node_ind;
+  } else {
+    return node_ind * Dim + dim;
+  }
+}
+/* 1}}} */
+
+template<unsigned Dim, bool SOA, typename T, typename UnsignedType>
+void reorderData(data_t<T> & point_data, std::vector<UnsignedType> permutation){
+  std::vector<T> old_data(point_data.begin(), point_data.end());
+  for(MY_SIZE i = 0; i < point_data.getSize(); ++i){
+    for(MY_SIZE d = 0; d < Dim; ++d){
+      MY_SIZE old_ind = index<Dim, SOA>(point_data.getSize(), i, d);
+      MY_SIZE new_ind = index<Dim, SOA>(point_data.getSize(), permutation[i], d);
+      point_data[new_ind] = old_data[old_ind];
+    }
+  }
+}
+
+
 #endif /* end of guard DATA_T_HPP */
+// vim:set et sw=2 ts=2 fdm=marker:
