@@ -91,13 +91,14 @@ __global__ void problem_stepGPUHierarchical(
   for (MY_SIZE i = 0; i < num_cached_point; i += blockDim.x) {
     for (MY_SIZE d = 0; d < Dim; ++d) {
       MY_SIZE c_ind, g_ind;
+      MY_SIZE g_point_to_be_cached =
+          points_to_be_cached[cache_points_offset + i + tid];
       if (i + tid < num_cached_point) {
         if (SOA) {
-          g_ind = d * num_points +
-                  points_to_be_cached[cache_points_offset + i + tid];
+          g_ind = d * num_points + g_point_to_be_cached;
           c_ind = d * num_cached_point + (i + tid);
         } else {
-          g_ind = points_to_be_cached[cache_points_offset + i + tid] * Dim + d;
+          g_ind = g_point_to_be_cached * Dim + d;
           c_ind = (i + tid) * Dim + d;
         }
         point_cache[c_ind] = point_weights[g_ind];
