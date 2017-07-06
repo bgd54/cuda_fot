@@ -344,19 +344,21 @@ void generateTimes(std::string in_file) {
   std::cout << ":::: Generating problems from file: " << in_file
             << "::::" << std::endl
             << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
+            << "\n     Data type: "
+            << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
-  std::function<void(implementation_algorithm_t<Dim, SOA>, MY_SIZE)> run =
-      [&in_file](implementation_algorithm_t<Dim, SOA> algo, MY_SIZE num) {
+  std::function<void(implementation_algorithm_t<Dim, SOA, DataType>, MY_SIZE)> run =
+      [&in_file](implementation_algorithm_t<Dim, SOA, DataType> algo, MY_SIZE num) {
         std::ifstream f(in_file);
-        Problem<Dim, SOA> problem(f);
+        Problem<Dim, SOA, DataType> problem(f);
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentred, RunCPU ? num : 1);
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP, RunCPU ? num : 1);
-  run(&Problem<Dim, SOA>::loopGPUEdgeCentred, num);
-  run(&Problem<Dim, SOA>::loopGPUHierarchical, num);
+  run(&Problem<Dim, SOA, DataType>::loopCPUEdgeCentred, RunCPU ? num : 1);
+  run(&Problem<Dim, SOA, DataType>::loopCPUEdgeCentredOMP, RunCPU ? num : 1);
+  run(&Problem<Dim, SOA, DataType>::loopGPUEdgeCentred, num);
+  run(&Problem<Dim, SOA, DataType>::loopGPUHierarchical, num);
   std::cout << "Finished." << std::endl;
 }
 
@@ -371,7 +373,7 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
             << "x" << block_dims.second << " (= " << block_size << ")"
             << "::::" << std::endl
             << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
-            << "     Data type: "
+            << "\n     Data type: "
             << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
   std::function<void(implementation_algorithm_t<Dim, SOA, DataType>)> run =
@@ -388,22 +390,22 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
 
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
-  generateTimesWithBlockDims(N, M, {0, 32});
-  generateTimesWithBlockDims(N, M, {2, 8});
-  generateTimesWithBlockDims(N, M, {4, 4});
-  generateTimesWithBlockDims(N, M, {0, 128});
-  generateTimesWithBlockDims(N, M, {2, 32});
-  generateTimesWithBlockDims(N, M, {4, 16});
-  generateTimesWithBlockDims(N, M, {8, 8});
-  generateTimesWithBlockDims(N, M, {0, 288});
-  generateTimesWithBlockDims(N, M, {2, 72});
-  generateTimesWithBlockDims(N, M, {4, 36});
-  generateTimesWithBlockDims(N, M, {12, 12});
-  generateTimesWithBlockDims(N, M, {0, 512});
-  generateTimesWithBlockDims(N, M, {2, 128});
-  generateTimesWithBlockDims(N, M, {4, 64});
-  generateTimesWithBlockDims(N, M, {8, 32});
-  generateTimesWithBlockDims(N, M, {16, 16});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 32});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 8});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 4});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 128});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 32});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 16});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {8, 8});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 288});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 72});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 36});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {12, 12});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 512});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 128});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 64});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {8, 32});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {16, 16});
 }
 
 void generateTimesFromFile(int argc, const char **argv) {
@@ -415,6 +417,10 @@ void generateTimesFromFile(int argc, const char **argv) {
   generateTimes<4, true, false>(argv[1]);
   generateTimes<8, true, false>(argv[1]);
   generateTimes<16, true, false>(argv[1]);
+  generateTimes<1, true, false, double>(argv[1]);
+  generateTimes<4, true, false, double>(argv[1]);
+  generateTimes<8, true, false, double>(argv[1]);
+  generateTimes<16, true, false, double>(argv[1]);
 }
 
 void test() {
