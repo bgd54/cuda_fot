@@ -337,7 +337,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
 }
 /* 1}}} */
 
-template <unsigned Dim = 1, bool SOA = false, bool RunSerial = true,
+template <unsigned Dim = 1, bool SOA = false, bool RunCPU = true,
           typename DataType = float>
 void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
@@ -353,8 +353,8 @@ void generateTimes(std::string in_file) {
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentred, RunSerial ? num : 1);
-  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP, num);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentred, RunCPU ? num : 1);
+  run(&Problem<Dim, SOA>::loopCPUEdgeCentredOMP, RunCPU ? num : 1);
   run(&Problem<Dim, SOA>::loopGPUEdgeCentred, num);
   run(&Problem<Dim, SOA>::loopGPUHierarchical, num);
   std::cout << "Finished." << std::endl;
