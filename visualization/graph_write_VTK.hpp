@@ -23,9 +23,11 @@ void writeGraphToVTKAscii(std::string filename, const data_t<float> &point_coord
   fout<< "ASCII \nDATASET UNSTRUCTURED_GRID\n\n";
   fout<< "POINTS " << point_coords.getSize() << " float\n";
   for(MY_SIZE i=0; i<point_coords.getSize(); ++i){
-    fout << point_coords[i*point_coords.getDim()+0] << " "
-         << point_coords[i*point_coords.getDim()+1] << " "
-         << 0.0 << "\n";
+    fout << point_coords[i * point_coords.getDim() + 0] << " "
+         << point_coords[i * point_coords.getDim() + 1] << " "
+         << (point_coords.getDim() == 2 ? 
+             0.0 : point_coords[i * point_coords,getDim() + 2]) 
+         << "\n";
   }
   fout << "\nCELLS " << edge_list.getSize() << " " 
     << (edge_list.getDim()+1) * edge_list.getSize() << "\n";
