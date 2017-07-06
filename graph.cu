@@ -24,12 +24,12 @@ __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
   DataType inc[2 * Dim];
   if (id < edge_num) {
     MY_SIZE edge_ind = edge_inds[id];
+    MY_SIZE edge_list_left = edge_list[2 * edge_ind];
+    MY_SIZE edge_list_right = edge_list[2 * edge_ind + 1];
     #pragma unroll
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE ind_left =
-          index<Dim, SOA>(num_points, edge_list[2 * edge_ind], d);
-      MY_SIZE ind_right =
-          index<Dim, SOA>(num_points, edge_list[2 * edge_ind + 1], d);
+      MY_SIZE ind_left = index<Dim, SOA>(num_points, edge_list_left, d);
+      MY_SIZE ind_right = index<Dim, SOA>(num_points, edge_list_right, d);
       inc[d] =
           out[ind_right] + edge_weights[edge_ind] * point_weights[ind_left];
       inc[d + Dim] =
@@ -37,10 +37,8 @@ __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
     }
     #pragma unroll
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE ind_left =
-          index<Dim, SOA>(num_points, edge_list[2 * edge_ind], d);
-      MY_SIZE ind_right =
-          index<Dim, SOA>(num_points, edge_list[2 * edge_ind + 1], d);
+      MY_SIZE ind_left = index<Dim, SOA>(num_points, edge_list_left, d);
+      MY_SIZE ind_right = index<Dim, SOA>(num_points, edge_list_right, d);
 
       out[ind_right] = inc[d];
       out[ind_left] = inc[d + Dim];
@@ -98,12 +96,15 @@ __global__ void problem_stepGPUHierarchical(
 
   // Computation
   DataType increment[Dim * 2];
+  MY_SIZE edge_list_left;
+  MY_SIZE edge_list_right;
   if (thread_ind < num_threads) {
+    edge_list_left = edge_list[2 * thread_ind];
+    edge_list_right = edge_list[2 * thread_ind + 1];
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE left_ind =
-          index<Dim, SOA>(num_cached_points, edge_list[2 * thread_ind], d);
+      MY_SIZE left_ind = index<Dim, SOA>(num_cached_points, edge_list_left, d);
       MY_SIZE right_ind =
-          index<Dim, SOA>(num_cached_points, edge_list[2 * thread_ind + 1], d);
+          index<Dim, SOA>(num_cached_points, edge_list_right, d);
 
       increment[d] = point_cache[left_ind] * edge_weights[thread_ind];
       increment[d + Dim] = point_cache[right_ind] * edge_weights[thread_ind];
@@ -128,9 +129,9 @@ __global__ void problem_stepGPUHierarchical(
     if (our_colour == i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE left_ind =
-            index<Dim, SOA>(num_cached_points, edge_list[2 * thread_ind], d);
-        MY_SIZE right_ind = index<Dim, SOA>(num_cached_points,
-                                            edge_list[2 * thread_ind + 1], d);
+            index<Dim, SOA>(num_cached_points, edge_list_left, d);
+        MY_SIZE right_ind =
+            index<Dim, SOA>(num_cached_points, edge_list_right, d);
 
         point_cache[right_ind] += increment[d];
         point_cache[left_ind] += increment[d + Dim];
