@@ -170,8 +170,9 @@ device_data_t<T> &device_data_t<T>::operator=(device_data_t<T> &&rhs) {
 
 /* index {{{1 */
 template <unsigned Dim = 1, bool SOA = false>
-__host__ __device__ MY_SIZE index(MY_SIZE num_points, MY_SIZE node_ind,
-                                  MY_SIZE dim) {
+__host__ __device__ __forceinline__ MY_SIZE index(MY_SIZE num_points,
+                                                  MY_SIZE node_ind,
+                                                  MY_SIZE dim) {
   if (SOA) {
     return dim * num_points + node_ind;
   } else {
