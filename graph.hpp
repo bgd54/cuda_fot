@@ -25,20 +25,20 @@ private:
   MY_SIZE num_points, num_edges;
 
 public:
-  data_t<MY_SIZE> edge_to_node;
+  data_t<MY_SIZE, 2> edge_to_node;
 
   /* Initialisation {{{1 */
 private:
   Graph(MY_SIZE _num_points, MY_SIZE _num_edges, const MY_SIZE *_edge_to_node)
       : num_points{_num_points}, num_edges{_num_edges},
-        edge_to_node(num_edges, 2) {
+        edge_to_node(num_edges) {
     std::copy(_edge_to_node, _edge_to_node + 2 * num_edges,
               edge_to_node.begin());
   }
 
 public:
-  Graph(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE,MY_SIZE> block_sizes = {0,0})
-      : num_edges{((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges, 2) {
+  Graph(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0})
+      : num_edges{((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     // num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
@@ -61,7 +61,7 @@ public:
    */
   Graph(std::istream &is)
       : num_points{0}, num_edges{0},
-        edge_to_node((is >> num_points >> num_edges, num_edges), 2) {
+        edge_to_node((is >> num_points >> num_edges, num_edges)) {
     if (!is) {
       throw InvalidInputFile{0};
     }
@@ -153,7 +153,8 @@ public:
   /**
    * Grid, hard coded block-indexing
    */
-  void fillEdgeListBlock(MY_SIZE N, MY_SIZE M, MY_SIZE block_h, MY_SIZE block_w) {
+  void fillEdgeListBlock(MY_SIZE N, MY_SIZE M, MY_SIZE block_h,
+                         MY_SIZE block_w) {
     assert((N - 1) % block_h == 0);
     assert((M - 1) % block_w == 0);
     MY_SIZE ind = 0;
@@ -196,7 +197,6 @@ public:
     if (to > numEdges()) {
       to = numEdges();
     }
-    assert(edge_to_node.getDim() == 2);
     std::vector<std::vector<MY_SIZE>> edge_partitions;
     std::vector<colourset_t> point_colours(numPoints(), 0);
     std::vector<MY_SIZE> set_sizes(64, 0);
@@ -256,9 +256,9 @@ public:
    * Also reorders the edge and point data in the arguments. These must be of
    * length `numEdges()` and `numPoints()`, respectively.
    */
-  template <typename DataType = float>
+  template <typename DataType = float, unsigned DataDim = 0>
   void reorder(DataType *edge_data = nullptr,
-               data_t<DataType> *point_data = nullptr) {
+               data_t<DataType, DataDim> *point_data = nullptr) {
     ScotchReorder reorder(*this);
     std::vector<SCOTCH_Num> permutation = reorder.reorder();
     // Permute points
@@ -276,27 +276,23 @@ public:
     if (edge_data) {
       std::vector<std::tuple<MY_SIZE, MY_SIZE, DataType>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp[i] = std::make_tuple(
-            edge_to_node[edge_to_node.getDim() * i],
-            edge_to_node[edge_to_node.getDim() * i + 1], edge_data[i]);
+        edge_tmp[i] = std::make_tuple(edge_to_node[2 * i],
+                                      edge_to_node[2 * i + 1], edge_data[i]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        std::tie(edge_to_node[edge_to_node.getDim() * i],
-                 edge_to_node[edge_to_node.getDim() * i + 1], edge_data[i]) =
+        std::tie(edge_to_node[2 * i], edge_to_node[2 * i + 1], edge_data[i]) =
             edge_tmp[i];
       }
     } else {
       std::vector<std::tuple<MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
         edge_tmp[i] =
-            std::make_tuple(edge_to_node[edge_to_node.getDim() * i],
-                            edge_to_node[edge_to_node.getDim() * i + 1]);
+            std::make_tuple(edge_to_node[2 * i], edge_to_node[2 * i + 1]);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        std::tie(edge_to_node[edge_to_node.getDim() * i],
-                 edge_to_node[edge_to_node.getDim() * i + 1]) = edge_tmp[i];
+        std::tie(edge_to_node[2 * i], edge_to_node[2 * i + 1]) = edge_tmp[i];
       }
     }
   }

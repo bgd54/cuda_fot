@@ -24,16 +24,15 @@ template <class UnsignedType> struct GraphCSR {
   const UnsignedType num_points, num_edges;
 
   explicit GraphCSR(MY_SIZE _num_points, MY_SIZE _num_edges,
-                    const data_t<MY_SIZE> &edge_to_node)
+                    const data_t<MY_SIZE, 2> &edge_to_node)
       : num_points(_num_points), num_edges(_num_edges) {
     static_assert(std::size_t(std::numeric_limits<UnsignedType>::max()) <=
                       std::size_t(std::numeric_limits<MY_SIZE>::max()),
                   "GraphCSR: UnsignedType too small.");
-    assert(edge_to_node.getDim() == 2);
     point_indices = new UnsignedType[num_points + 1];
     UnsignedType point_ind = 0;
     point_indices[0] = 0;
-    std::multimap<UnsignedType,UnsignedType> incidence =
+    std::multimap<UnsignedType, UnsignedType> incidence =
         getPointToEdge(edge_to_node);
     for (const auto incidence_pair : incidence) {
       UnsignedType current_point = incidence_pair.first;
@@ -85,12 +84,10 @@ template <class UnsignedType> struct GraphCSR {
    */
   template <class T>
   static std::multimap<UnsignedType, UnsignedType>
-  getPointToEdge(const data_t<T> &edge_to_node) {
+  getPointToEdge(const data_t<T, 2> &edge_to_node) {
     std::multimap<UnsignedType, UnsignedType> point_to_edge;
-    for (UnsignedType i = 0; i < edge_to_node.getDim() * edge_to_node.getSize();
-         ++i) {
-      point_to_edge.insert(
-          std::make_pair(edge_to_node[i], i / edge_to_node.getDim()));
+    for (UnsignedType i = 0; i < 2 * edge_to_node.getSize(); ++i) {
+      point_to_edge.insert(std::make_pair(edge_to_node[i], i / 2));
     }
     return point_to_edge;
   }

@@ -180,8 +180,7 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
   MY_SIZE num_blocks = static_cast<MY_SIZE>(
       std::ceil(double(max_thread_num) / static_cast<double>(block_size)));
   DataType *d_edge_weights;
-  data_t<DataType> point_weights2(point_weights.getSize(),
-                                  point_weights.getDim());
+  data_t<DataType, Dim> point_weights2(point_weights.getSize());
   std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
   std::vector<MY_SIZE *> d_partition;
   for (const std::vector<MY_SIZE> &colour : partition) {
@@ -251,8 +250,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   HierarchicalColourMemory<Dim, SOA, DataType> memory(block_size, *this);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
-  data_t<DataType> point_weights_out(point_weights.getSize(),
-                                     point_weights.getDim());
+  data_t<DataType, Dim> point_weights_out(point_weights.getSize());
   std::copy(point_weights.begin(), point_weights.end(),
             point_weights_out.begin());
   point_weights.initDeviceMemory();
@@ -406,7 +404,7 @@ void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
   generateTimesWithBlockDims(N, M, {16, 16});
 }
 
-void generateTimesFromFile (int argc, const char **argv) {
+void generateTimesFromFile(int argc, const char **argv) {
   if (argc <= 1) {
     std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;
     std::exit(1);
@@ -417,7 +415,7 @@ void generateTimesFromFile (int argc, const char **argv) {
   generateTimes<16, true, false>(argv[1]);
 }
 
-void test () {
+void test() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
   MY_SIZE reset_every = 0;

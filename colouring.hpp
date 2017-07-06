@@ -54,7 +54,6 @@ struct HierarchicalColourMemory {
      *   - done
      */
     const Graph &graph = problem.graph;
-    assert(graph.edge_to_node.getDim() == 2);
     std::vector<colourset_t> point_colours(graph.numPoints(), 0);
     colourset_t used_colours;
     std::vector<MY_SIZE> set_sizes;
@@ -82,7 +81,7 @@ struct HierarchicalColourMemory {
 
 private:
   static colourset_t
-  getOccupiedColours(const data_t<MY_SIZE> &edge_to_node, MY_SIZE from,
+  getOccupiedColours(const data_t<MY_SIZE, 2> &edge_to_node, MY_SIZE from,
                      MY_SIZE to,
                      const std::vector<colourset_t> &point_colours) {
     colourset_t result;
@@ -104,7 +103,7 @@ private:
                    const Problem<Dim, SOA, DataType> &problem,
                    std::vector<MemoryOfOneColour> &colours) {
     const Graph &graph = problem.graph;
-    const data_t<MY_SIZE> &edge_to_node = graph.edge_to_node;
+    const data_t<MY_SIZE, 2> &edge_to_node = graph.edge_to_node;
     colourset_t colourset(1ull << colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
     std::map<MY_SIZE, std::vector<std::pair<MY_SIZE, MY_SIZE>>>

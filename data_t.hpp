@@ -5,23 +5,26 @@
 #include <cuda.h>
 #include <vector>
 
-template <typename T> struct data_t {
+template <typename T, unsigned Dim> struct data_t {
 private:
   // set_size: #elements, dim: #value per element,
-  MY_SIZE size, dim;
+  MY_SIZE size;
 
   // data pointers
   T *data, *data_d;
 
 public:
+  static constexpr unsigned dim = Dim;
+
+public:
   // constructors
-  data_t() : size(0), dim(0), data(nullptr), data_d(nullptr) {}
-  data_t(MY_SIZE, MY_SIZE);
+  data_t() : size(0), data(nullptr), data_d(nullptr) {}
+  data_t(MY_SIZE);
 
   data_t(const data_t &) = delete;
   data_t operator=(const data_t &) = delete;
-  data_t(data_t<T> &&);
-  data_t &operator=(data_t<T> &&);
+  data_t(data_t &&);
+  data_t &operator=(data_t &&);
 
   T &operator[](MY_SIZE ind);
   const T &operator[](MY_SIZE ind) const;
@@ -36,7 +39,6 @@ public:
   void initDeviceMemory();
 
   MY_SIZE getSize() const { return size; }
-  MY_SIZE getDim() const { return dim; }
   T *getDeviceData() { return data_d; }
 
   // dtor
@@ -72,63 +74,70 @@ template <typename T1, typename T2> struct choose_t<false, T1, T2> {
   static type &&ret_value(T1 &&, T2 &&v) { return std::move(v); }
 };
 
-template <typename T>
-data_t<T>::data_t(MY_SIZE set_s, MY_SIZE set_d)
-    : size(set_s), dim(set_d), data(nullptr), data_d(nullptr) {
+template <typename T, unsigned Dim>
+data_t<T, Dim>::data_t(MY_SIZE set_s)
+    : size(set_s), data(nullptr), data_d(nullptr) {
   data = new T[size * dim];
 }
 
-template <typename T> data_t<T>::~data_t() {
+template <typename T, unsigned Dim> data_t<T, Dim>::~data_t() {
   delete[] data;
   if (data_d) {
     checkCudaErrors(cudaFree(data_d));
   }
 }
 
-template <typename T> data_t<T>::data_t(data_t<T> &&other) {
+template <typename T, unsigned Dim>
+data_t<T, Dim>::data_t(data_t<T, Dim> &&other) {
   data_d = other.data_d;
   other.data_d = nullptr;
 }
 
-template <typename T> data_t<T> &data_t<T>::operator=(data_t<T> &&rhs) {
+template <typename T, unsigned Dim>
+data_t<T, Dim> &data_t<T, Dim>::operator=(data_t<T, Dim> &&rhs) {
   std::swap(data_d, rhs.data_d);
   return *this;
 }
 
-template <typename T> T &data_t<T>::operator[](MY_SIZE ind) {
+template <typename T, unsigned Dim> T &data_t<T, Dim>::operator[](MY_SIZE ind) {
   return data[ind];
 }
 
-template <typename T> const T &data_t<T>::operator[](MY_SIZE ind) const {
+template <typename T, unsigned Dim>
+const T &data_t<T, Dim>::operator[](MY_SIZE ind) const {
   return data[ind];
 }
 
-template <typename T> void data_t<T>::flushToHost() {
+template <typename T, unsigned Dim> void data_t<T, Dim>::flushToHost() {
   assert(data_d != nullptr);
   MY_SIZE bytes = size * dim * sizeof(T);
   checkCudaErrors(cudaMemcpy(data, data_d, bytes, cudaMemcpyDeviceToHost));
 }
 
-template <typename T> void data_t<T>::flushToDevice() {
+template <typename T, unsigned Dim> void data_t<T, Dim>::flushToDevice() {
   assert(data_d != nullptr);
   MY_SIZE bytes = size * dim * sizeof(T);
   checkCudaErrors(cudaMemcpy(data_d, data, bytes, cudaMemcpyHostToDevice));
 }
 
-template <typename T> void data_t<T>::initDeviceMemory() {
+template <typename T, unsigned Dim> void data_t<T, Dim>::initDeviceMemory() {
   assert(data_d == nullptr);
-  int bytes = size * dim * sizeof(T);
+  MY_SIZE bytes = size * dim * sizeof(T);
   checkCudaErrors(cudaMalloc((void **)&data_d, bytes));
   checkCudaErrors(cudaMemcpy(data_d, data, bytes, cudaMemcpyHostToDevice));
 }
 
-template <typename T> T *data_t<T>::begin() { return data; }
+template <typename T, unsigned Dim> T *data_t<T, Dim>::begin() { return data; }
 
-template <typename T> T *data_t<T>::end() { return data + (size * dim); }
+template <typename T, unsigned Dim> T *data_t<T, Dim>::end() {
+  return data + (size * dim);
+}
 
-template <typename T> const T *data_t<T>::cbegin() const { return data; }
+template <typename T, unsigned Dim> const T *data_t<T, Dim>::cbegin() const {
+  return data;
+}
 
-template <typename T> const T *data_t<T>::cend() const {
+template <typename T, unsigned Dim> const T *data_t<T, Dim>::cend() const {
   return data + (size * dim);
 }
 
@@ -172,7 +181,7 @@ __host__ __device__ MY_SIZE index(MY_SIZE num_points, MY_SIZE node_ind,
 /* 1}}} */
 
 template <unsigned Dim, bool SOA, typename T, typename UnsignedType>
-void reorderData(data_t<T> &point_data,
+void reorderData(data_t<T, Dim> &point_data,
                  const std::vector<UnsignedType> &permutation) {
   std::vector<T> old_data(point_data.begin(), point_data.end());
   for (MY_SIZE i = 0; i < point_data.getSize(); ++i) {
