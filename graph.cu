@@ -247,7 +247,7 @@ template <unsigned Dim, bool SOA, typename DataType>
 void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                                                       MY_SIZE reset_every) {
   TIMER_START(t_colouring);
-  HierarchicalColourMemory<Dim, SOA, DataType> memory(block_size, *this);
+  HierarchicalColourMemory<Dim, SOA, DataType> memory(*this);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
   data_t<DataType, Dim> point_weights_out(point_weights.getSize());

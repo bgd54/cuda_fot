@@ -22,8 +22,9 @@ struct Problem {
 
   /* ctor/dtor {{{1 */
   Problem(MY_SIZE N, MY_SIZE M,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE})
-      : graph(N, M, block_dims),
+          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
+          bool use_coordinates = false)
+      : graph(N, M, block_dims, use_coordinates),
         point_weights(N * M), block_size{block_dims.first == 0
                                              ? block_dims.second
                                              : block_dims.first *

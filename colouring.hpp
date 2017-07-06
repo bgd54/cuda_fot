@@ -36,8 +36,7 @@ struct HierarchicalColourMemory {
   };
   std::vector<MemoryOfOneColour> colours;
 
-  HierarchicalColourMemory(MY_SIZE block_size,
-                           const Problem<Dim, SOA, DataType> &problem) {
+  HierarchicalColourMemory(const Problem<Dim, SOA, DataType> &problem) {
     /* Algorithm:
      *   - loop through `block_size` blocks
      *     - determine the points written to (not the same as points used)
@@ -54,6 +53,7 @@ struct HierarchicalColourMemory {
      *   - done
      */
     const Graph &graph = problem.graph;
+    const MY_SIZE block_size = problem.block_size;
     std::vector<colourset_t> point_colours(graph.numPoints(), 0);
     colourset_t used_colours;
     std::vector<MY_SIZE> set_sizes;

@@ -26,19 +26,29 @@ private:
 
 public:
   data_t<MY_SIZE, 2> edge_to_node;
+  data_t<float, 3> point_coordinates;
 
   /* Initialisation {{{1 */
 private:
-  Graph(MY_SIZE _num_points, MY_SIZE _num_edges, const MY_SIZE *_edge_to_node)
-      : num_points{_num_points}, num_edges{_num_edges},
-        edge_to_node(num_edges) {
+  Graph(MY_SIZE _num_points, MY_SIZE _num_edges, const MY_SIZE *_edge_to_node,
+        const float *_point_coordinates = nullptr)
+      : num_points{_num_points}, num_edges{_num_edges}, edge_to_node(num_edges),
+        point_coordinates(num_points) {
     std::copy(_edge_to_node, _edge_to_node + 2 * num_edges,
               edge_to_node.begin());
+    if (_point_coordinates) {
+      std::copy(_point_coordinates,
+                _point_coordinates + point_coordinates.dim * num_points,
+                point_coordinates.begin());
+    }
   }
 
 public:
-  Graph(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0})
-      : num_edges{((N - 1) * M + N * (M - 1))}, edge_to_node(num_edges) {
+  Graph(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0},
+        bool use_coordinates = false)
+      : num_points{N * M}, num_edges{((N - 1) * M + N * (M - 1))},
+        edge_to_node(num_edges),
+        point_coordinates(use_coordinates ? num_points : 0) {
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     // num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
     num_points = N * M;
@@ -46,6 +56,9 @@ public:
       fillEdgeListBlock(N, M, block_sizes.first, block_sizes.second);
     } else {
       fillEdgeList(N, M);
+    }
+    if (use_coordinates) {
+      // TODO
     }
   }
 
@@ -61,7 +74,8 @@ public:
    */
   Graph(std::istream &is)
       : num_points{0}, num_edges{0},
-        edge_to_node((is >> num_points >> num_edges, num_edges)) {
+        edge_to_node((is >> num_points >> num_edges, num_edges)),
+        point_coordinates() {
     if (!is) {
       throw InvalidInputFile{0};
     }
@@ -112,6 +126,16 @@ public:
       edge_to_node[array_ind++] = upper_point_ind;
       edge_to_node[array_ind++] = ++upper_point_ind;
     }
+    if (point_coordinates.getSize() > 0) {
+      for (MY_SIZE r = 0; r < N; ++r) {
+        for (MY_SIZE c = 0; c < M; ++c) {
+          MY_SIZE point_ind = r*M + c;
+          point_coordinates[point_ind * 3 + 0] = r;
+          point_coordinates[point_ind * 3 + 1] = c;
+          point_coordinates[point_ind * 3 + 2] = 0;
+        }
+      }
+    }
   }
 
   /**
@@ -148,6 +172,16 @@ public:
       edge_to_node[array_ind++] = upper_point_ind;
       ++upper_point_ind;
     }
+    if (point_coordinates.getSize() > 0) {
+      for (MY_SIZE r = 0; r < N; ++r) {
+        for (MY_SIZE c = 0; c < M; ++c) {
+          MY_SIZE point_ind = r*M + c;
+          point_coordinates[point_ind * 3 + 0] = r;
+          point_coordinates[point_ind * 3 + 1] = c;
+          point_coordinates[point_ind * 3 + 2] = 0;
+        }
+      }
+    }
   }
 
   /**
@@ -182,10 +216,23 @@ public:
       edge_to_node[ind++] = (N - 1) * M + i;
       edge_to_node[ind++] = (N - 1) * M + i + 1;
     }
+    assert(ind == 2 * numEdges());
+    if (point_coordinates.getSize() > 0) {
+      for (MY_SIZE r = 0; r < N; ++r) {
+        for (MY_SIZE c = 0; c < M; ++c) {
+          MY_SIZE point_ind = r*M + c;
+          point_coordinates[point_ind * 3 + 0] = r;
+          point_coordinates[point_ind * 3 + 1] = c;
+          point_coordinates[point_ind * 3 + 2] = 0;
+        }
+      }
+    }
     std::vector<MY_SIZE> permutation = renumberPoints();
     std::for_each(edge_to_node.begin(), edge_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
-    assert(ind == 2 * numEdges());
+    if (point_coordinates.getSize() > 0) {
+      reorderData<3,false,float,MY_SIZE>(point_coordinates, permutation);
+    }
   }
 
   /* 1}}} */
@@ -274,6 +321,10 @@ public:
     if (point_data) {
       reorderData<DataDim, SOA, DataType, UnsignedType>(*point_data,
                                                         point_permutation);
+    }
+    if (point_coordinates.getSize() > 0) {
+      reorderData<3, false, float, UnsignedType>(point_coordinates,
+          point_permutation);
     }
     // Permute edge_to_node
     std::for_each(

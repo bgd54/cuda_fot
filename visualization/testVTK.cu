@@ -5,36 +5,36 @@
 #include <iostream>
 #include <vector>
 
-
 using namespace std;
 
-void writeGlobalColouringVTK(const std::string &filename,
-                             const data_t<float> &point_coords,
-                             const Graph &graph, MY_SIZE block_size) {
-  std::vector<std::vector<MY_SIZE>> partition = std::move(graph.colourEdges<>());
+void writeGlobalColouringVTK(const std::string &filename, const Graph &graph,
+                             MY_SIZE block_size) {
+  std::vector<std::vector<MY_SIZE>> partition =
+      std::move(graph.colourEdges<>());
   std::vector<std::vector<std::uint16_t>> data(3);
-  data[VTK_IND_THR_COL].resize(graph.numEdges()); 
+  data[VTK_IND_THR_COL].resize(graph.numEdges());
   data[VTK_IND_BLK_ID].resize(graph.numEdges());
   // TODO optimise
   MY_SIZE num_colours = partition.size();
   MY_SIZE bid = 0;
   for (MY_SIZE c = 0; c < num_colours; ++c) {
-    for(MY_SIZE tid = 0; tid < partition[c].size(); ++tid){
+    for (MY_SIZE tid = 0; tid < partition[c].size(); ++tid) {
       data[VTK_IND_THR_COL][partition[c][tid]] = c;
-      if(tid % block_size == 0) bid++;
+      if (tid % block_size == 0)
+        bid++;
       data[VTK_IND_BLK_ID][partition[c][tid]] = bid;
     }
     bid++;
   }
-  writeGraphToVTKAscii(filename, point_coords, graph.edge_to_node, data);
+  writeGraphToVTKAscii(filename, graph.edge_to_node, graph.point_coordinates,
+                       data);
 }
 
 void writeHierarchicalColouringVTK(const std::string &filename,
-                                   const data_t<float> &point_coords,
-                                   const Problem<> &problem,
-                                   MY_SIZE block_size) {
-  const HierarchicalColourMemory<> memory(block_size, problem);
-  data_t<MY_SIZE> edge_list(problem.graph.numEdges(), 2);
+                                   const Problem<> &problem) {
+  const HierarchicalColourMemory<> memory(problem);
+  const MY_SIZE block_size = problem.block_size;
+  data_t<MY_SIZE, 2> edge_list(problem.graph.numEdges());
   std::vector<std::vector<std::uint16_t>> data(3);
   MY_SIZE blk_col_ind = 0, blk_ind = 0;
   MY_SIZE edge_ind = 0;
@@ -63,13 +63,13 @@ void writeHierarchicalColouringVTK(const std::string &filename,
     }
   }
   assert(edge_ind == edge_list.getSize());
-  writeGraphToVTKAscii(filename, point_coords, edge_list, data);
+  writeGraphToVTKAscii(filename, edge_list, problem.graph.point_coordinates,
+                       data);
 }
 
-void writePartitionVTK (const std::string &filename, 
-    const data_t<float> &point_coords, const Graph &graph,
-    MY_SIZE block_size) {
-  std::vector<std::vector<std::uint16_t>> data (3);
+void writePartitionVTK(const std::string &filename, const Graph &graph,
+                       MY_SIZE block_size) {
+  std::vector<std::vector<std::uint16_t>> data(3);
   std::vector<idx_t> partition = partitionMetis(graph, block_size);
   data[VTK_IND_BLK_ID].resize(graph.numEdges());
   for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
@@ -78,22 +78,20 @@ void writePartitionVTK (const std::string &filename,
     data[VTK_IND_BLK_ID][i] = left_colour + right_colour;
   }
   data[VTK_IND_THR_COL].resize(graph.numEdges());
-  std::vector<idx_t> edge_partition = partitionMetis(graph.getLineGraph(), block_size);
-  std::copy(edge_partition.begin(),edge_partition.end(),data[VTK_IND_THR_COL].begin());
-  writeGraphToVTKAscii(filename, point_coords, graph.edge_to_node, data);
+  std::vector<idx_t> edge_partition =
+      partitionMetis(graph.getLineGraph(), block_size);
+  std::copy(edge_partition.begin(), edge_partition.end(),
+            data[VTK_IND_THR_COL].begin());
+  writeGraphToVTKAscii(filename, graph.edge_to_node, graph.point_coordinates,
+                       data);
 }
 
 int main() {
-  data_t<float> points(256, 2);
-  for (size_t i = 0; i < points.getSize(); ++i) {
-    points[points.getDim() * i + 0] = i / 16;
-    points[points.getDim() * i + 1] = i % 16;
-  }
-  Problem<> problem(16, 16);
+  Problem<> problem(17, 17, {4, 4}, true);
 
-  writeGlobalColouringVTK("graph_global.vtk", points, problem.graph, 16);
-  writeHierarchicalColouringVTK("graph_hier.vtk", points, problem, 16);
-  writePartitionVTK("graph_part.vtk", points, problem.graph, 16);
+  writeGlobalColouringVTK("graph_global.vtk", problem.graph, 16);
+  writeHierarchicalColouringVTK("graph_hier.vtk", problem);
+  writePartitionVTK("graph_part.vtk", problem.graph, 16);
 
   return 0;
 }
