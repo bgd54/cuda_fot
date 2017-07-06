@@ -95,16 +95,18 @@ struct Problem {
     }
     PRINT_BANDWIDTH(
         t, "loopCPUEdgeCentred",
-        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
+         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
             num,
-        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
+         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
             num);
     free(temp);
   } /*}}}*/
 
   void stepCPUEdgeCentredOMP(const std::vector<MY_SIZE> &inds,
                              data_t<DataType, Dim> &out) { /*{{{*/
-    #pragma omp parallel for
+#pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
       MY_SIZE ind_left_base = graph.edge_to_node[graph.edge_to_node.dim * ind];
@@ -129,7 +131,7 @@ struct Problem {
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
-      #pragma omp parallel for
+#pragma omp parallel for
       for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.dim;
            ++e) {
         temp[e] = point_weights[e];
@@ -146,9 +148,11 @@ struct Problem {
     }
     PRINT_BANDWIDTH(
         t, "loopCPUEdgeCentredOMP",
-        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
+         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
             num,
-        sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
+         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
             num);
   } /*}}}*/
 

@@ -226,7 +226,8 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
   }
   PRINT_BANDWIDTH(
       t, "loopGPUEdgeCentred",
-      sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+      (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
+       2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
           num,
       (sizeof(DataType) * graph.numPoints() * Dim * 2.0 + // point_weights
        sizeof(DataType) * graph.numEdges() * 1.0 +        // d_edge_weights
@@ -310,8 +311,9 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   }
   PRINT_BANDWIDTH(
       t, "GPU HierarchicalColouring",
-      num * (2.0 * Dim * graph.numPoints() + graph.numEdges()) *
-          sizeof(DataType),
+      num * ((2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+                 sizeof(DataType) +
+             2.0 * graph.numEdges() * sizeof(MY_SIZE)),
       num * (sizeof(DataType) * graph.numPoints() * Dim * 2.0 + // point_weights
              sizeof(DataType) * graph.numEdges() * 1.0 +        // edge_weights
              sizeof(MY_SIZE) * graph.numEdges() * 2.0 +         // edge_list
