@@ -250,29 +250,35 @@ public:
     }
   }
 
+  template <typename DataType = float, unsigned DataDim = 0, bool SOA = false>
+  void reorderScotch(DataType *edge_data = nullptr,
+                     data_t<DataType, DataDim> *point_data = nullptr) {
+    ScotchReorder reorder(*this);
+    std::vector<SCOTCH_Num> permutation = reorder.reorder();
+    this->template reorder<SCOTCH_Num, DataType, DataDim, SOA>(
+        permutation, edge_data, point_data);
+  }
+
   /**
-   * Reorder using Scotch.
+   * Reorders the graph using the point permutation vector.
    *
    * Also reorders the edge and point data in the arguments. These must be of
    * length `numEdges()` and `numPoints()`, respectively.
    */
-  template <typename DataType = float, unsigned DataDim = 0>
-  void reorder(DataType *edge_data = nullptr,
+  template <typename UnsignedType, typename DataType = float,
+            unsigned DataDim = 0, bool SOA = false>
+  void reorder(const std::vector<UnsignedType> &point_permutation,
+               DataType *edge_data = nullptr,
                data_t<DataType, DataDim> *point_data = nullptr) {
-    ScotchReorder reorder(*this);
-    std::vector<SCOTCH_Num> permutation = reorder.reorder();
     // Permute points
     if (point_data) {
-      assert(false);   // Currently not implemented
-      //std::vector<DataType> point_tmp(numPoints());
-      //for (MY_SIZE i = 0; i < numPoints(); ++i) {
-      //  point_tmp[permutation[i]] = (*point_data)[i];
-      //}
-      //std::copy(point_tmp.begin(), point_tmp.end(), point_data->begin());
+      reorderData<DataDim, SOA, DataType, UnsignedType>(*point_data,
+                                                        point_permutation);
     }
     // Permute edge_to_node
-    std::for_each(edge_to_node.begin(), edge_to_node.end(),
-                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
+    std::for_each(
+        edge_to_node.begin(), edge_to_node.end(),
+        [&point_permutation](MY_SIZE &a) { a = point_permutation[a]; });
     if (edge_data) {
       std::vector<std::tuple<MY_SIZE, MY_SIZE, DataType>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {

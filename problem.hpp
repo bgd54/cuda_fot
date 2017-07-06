@@ -151,7 +151,9 @@ struct Problem {
             num);
   } /*}}}*/
 
-  void reorder() { graph.reorder(edge_weights, &point_weights); }
+  void reorder() {
+    graph.reorderScotch<DataType, Dim, SOA>(edge_weights, &point_weights);
+  }
 };
 
 #endif /* end of include guard: PROBLEM_HPP_CGW3IDMV */
