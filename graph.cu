@@ -259,19 +259,23 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   point_weights_out.initDeviceMemory();
   MY_SIZE total_cache_size = 0; // for bandwidth calculations
   DataType avg_num_edge_colours = 0;
+  MY_SIZE total_num_blocks = 0;
   for (const typename HierarchicalColourMemory<
            Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour :
        memory.colours) {
+    MY_SIZE num_threads = memory_of_one_colour.edge_list.size() / 2;
+    MY_SIZE num_blocks = static_cast<MY_SIZE>(
+        std::ceil(static_cast<double>(num_threads) / block_size));
     total_cache_size += memory_of_one_colour.points_to_be_cached.size();
     avg_num_edge_colours +=
         std::accumulate(memory_of_one_colour.num_edge_colours.begin(),
                         memory_of_one_colour.num_edge_colours.end(), 0.0f);
+      total_num_blocks += num_blocks;
   }
   // -----------------------
   // -  Start computation  -
   // -----------------------
   TIMER_START(t);
-  MY_SIZE total_num_blocks = 0; // for bandwidth calculations
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
@@ -295,7 +299,6 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                   d_memory[colour_ind].num_edge_colours),
               num_threads, graph.numPoints());
       checkCudaErrors(cudaDeviceSynchronize());
-      total_num_blocks += num_blocks;
     }
     TIMER_TOGGLE(t);
     checkCudaErrors(cudaMemcpy(
