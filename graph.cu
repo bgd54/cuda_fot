@@ -5,6 +5,7 @@
 #include <functional>
 #include <iostream>
 #include <vector>
+#include <set>
 
 #include "colouring.hpp"
 #include "helper_cuda.h"
@@ -272,6 +273,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   // -----------------------
   TIMER_START(t);
   MY_SIZE total_num_blocks = 0; // for bandwidth calculations
+  MY_SIZE total_shared_size = 0;
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
@@ -282,6 +284,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
       MY_SIZE cache_size =
           sizeof(DataType) * d_memory[colour_ind].shared_size * Dim;
+      total_shared_size += num_blocks * d_memory[colour_ind].shared_size;
       problem_stepGPUHierarchical<Dim, SOA>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
@@ -327,6 +330,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
+  std::cout << "cache/shared mem: " << static_cast<double>(total_cache_size) / total_shared_size << "\n cross reuse factor: " << static_cast<double>(total_shared_size) / (2*graph.numEdges())<< std::endl;
   avg_num_edge_colours /=
       std::ceil(static_cast<double>(graph.numEdges()) / block_size);
   std::cout << "  average number of colours used: " << avg_num_edge_colours
@@ -337,6 +341,47 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   point_weights.flushToHost();
 }
 /* 1}}} */
+
+
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+size_t countCacheLinesForBlock(MY_SIZE block_from, MY_SIZE block_to, const data_t<MY_SIZE, 2> &edge_to_node, MY_SIZE num_points) {
+  std::set<MY_SIZE> cache_lines;
+  MY_SIZE data_per_cacheline = 32 / sizeof(DataType);
+  
+  for(MY_SIZE edge_id = block_from; edge_id < block_to; ++edge_id) {
+    MY_SIZE cache_line_id = edge_to_node[2 * edge_id + 0] / data_per_cacheline;
+    if(!SOA) {
+      if ( data_per_cacheline / Dim > 0 ){
+        cache_line_id /= Dim;
+        cache_lines.insert(cache_line_id);
+      } else {
+        MY_SIZE cache_line_per_data = Dim / data_per_cacheline; //Assume that Dim is multiply of data_per_cacheline
+        cache_line_id *= cache_line_per_data;
+        for(MY_SIZE i = 0; i < cache_line_per_data; ++i){
+          cache_lines.insert(cache_line_id++);
+        }
+      }
+    } else {
+      cache_lines.insert(cache_line_id);
+    }
+    cache_line_id = edge_to_node[2 * edge_id + 1] / data_per_cacheline;
+    if(!SOA) {
+      if ( data_per_cacheline / Dim > 0 ){
+        cache_line_id /= Dim;
+        cache_lines.insert(cache_line_id);
+      } else {
+        MY_SIZE cache_line_per_data = Dim / data_per_cacheline; //Assume that Dim is multiply of data_per_cacheline
+        cache_line_id *= cache_line_per_data;
+        for(MY_SIZE i = 0; i < cache_line_per_data; ++i){
+          cache_lines.insert(cache_line_id++);
+        }
+      }
+    } else {
+      cache_lines.insert(cache_line_id);
+    } 
+  }
+  return cache_lines.size();
+}
 
 template <unsigned Dim = 1, bool SOA = false, bool RunCPU = true,
           typename DataType = float>
@@ -366,7 +411,7 @@ void generateTimes(std::string in_file) {
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
                                 std::pair<MY_SIZE, MY_SIZE> block_dims) {
-  constexpr MY_SIZE num = 500;
+  constexpr MY_SIZE num = 1;
   MY_SIZE block_size = block_dims.first == 0
                            ? block_dims.second
                            : block_dims.first * block_dims.second * 2;
@@ -443,6 +488,13 @@ int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
   /*test();*/
   generateTimesDifferentBlockDims<1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, true, double>(1153, 1153);
   return 0;
 }
 
