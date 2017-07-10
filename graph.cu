@@ -125,11 +125,8 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
-    // TODO optimise;coalesced access
-    for (MY_SIZE d = 0; d < Dim; ++d) {
-      point_cache[index<Dim, SOA>(num_cached_points, i, d)] = 0;
-    }
+  for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
+    point_cache[i] = 0;
   }
 
   __syncthreads();
