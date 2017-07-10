@@ -254,11 +254,15 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
 
   for (; block_begin != block_end; ++block_begin) {
     MY_SIZE point_id = *block_begin;
-    MY_SIZE cache_line_id = point_id * Dim / data_per_cacheline;
+    MY_SIZE cache_line_id = SOA ?
+      point_id / data_per_cacheline :
+      point_id * Dim / data_per_cacheline;
     if (!SOA) {
       if (data_per_cacheline / Dim > 0) {
+        assert(data_per_cacheline % Dim == 0);
         cache_lines.insert(cache_line_id);
       } else {
+        assert(Dim % data_per_cacheline == 0);
         MY_SIZE cache_line_per_data =
             Dim / data_per_cacheline; // Assume that Dim is multiple of
                                       // data_per_cacheline
