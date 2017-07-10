@@ -304,16 +304,15 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                         memory_of_one_colour.num_edge_colours.end(), 0.0f);
     total_num_blocks += num_blocks;
     total_shared_size += num_blocks * d_memory[i].shared_size;
-    for (MY_SIZE block_from = 0;
-         block_from < memory_of_one_colour.edge_list.size();
-         block_from += block_size) {
-      MY_SIZE block_to = std::min<size_t>(memory_of_one_colour.edge_list.size(),
-                                          block_from + block_size);
+    for (MY_SIZE j = 0;
+         j < memory_of_one_colour.points_to_be_cached_offsets.size() - 1; ++j) {
       total_num_cache_lines +=
           countCacheLinesForBlock<Dim, SOA, DataType,
                                   std::vector<MY_SIZE>::const_iterator>(
-              memory_of_one_colour.edge_list.begin() + block_from,
-              memory_of_one_colour.edge_list.begin() + block_to);
+              memory_of_one_colour.points_to_be_cached.begin() +
+                  memory_of_one_colour.points_to_be_cached_offsets[j],
+              memory_of_one_colour.points_to_be_cached.begin() +
+                  memory_of_one_colour.points_to_be_cached_offsets[j + 1]);
     }
   }
   // -----------------------
