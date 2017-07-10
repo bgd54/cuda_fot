@@ -49,7 +49,8 @@ __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
 /* 1}}} */
 
 /* problem_stepGPUHierarchical {{{1 */
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned Dim = 1, bool SOA = false, bool PerDataCache = false,
+          typename DataType = float>
 __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ edge_list,
     const DataType *__restrict__ point_weights,
@@ -79,14 +80,23 @@ __global__ void problem_stepGPUHierarchical(
   }
 
   // Cache in
-  for (MY_SIZE i = 0; i < num_cached_points; i += blockDim.x) {
-    for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE c_ind, g_ind;
-      MY_SIZE g_point_to_be_cached =
-          points_to_be_cached[cache_points_offset + i + tid];
-      if (i + tid < num_cached_points) {
+  if (PerDataCache) {
+    for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
+      MY_SIZE point_ind = SOA ? i % num_cached_points : i / Dim;
+      MY_SIZE d = SOA ? i / num_cached_points : i % Dim;
+      MY_SIZE g_ind = index<Dim, SOA>(
+          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+      MY_SIZE c_ind = i;
+      point_cache[c_ind] = point_weights[g_ind];
+    }
+  } else {
+    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
+      for (MY_SIZE d = 0; d < Dim; ++d) {
+        MY_SIZE c_ind, g_ind;
+        MY_SIZE g_point_to_be_cached =
+            points_to_be_cached[cache_points_offset + i];
         g_ind = index<Dim, SOA>(num_points, g_point_to_be_cached, d);
-        c_ind = index<Dim, SOA>(num_cached_points, i + tid, d);
+        c_ind = index<Dim, SOA>(num_cached_points, i, d);
 
         point_cache[c_ind] = point_weights[g_ind];
       }
@@ -115,11 +125,10 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = 0; i < num_cached_points; i += blockDim.x) {
-    if (i + tid < num_cached_points) {
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        point_cache[index<Dim, SOA>(num_cached_points, i + tid, d)] = 0;
-      }
+  for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
+    // TODO optimise;coalesced access
+    for (MY_SIZE d = 0; d < Dim; ++d) {
+      point_cache[index<Dim, SOA>(num_cached_points, i, d)] = 0;
     }
   }
 
@@ -142,16 +151,26 @@ __global__ void problem_stepGPUHierarchical(
   }
 
   // Cache out
-  for (MY_SIZE i = 0; i < num_cached_points; i += blockDim.x) {
-    if (i + tid < num_cached_points) {
+  if (PerDataCache) {
+    for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
+      MY_SIZE point_ind = SOA ? i % num_cached_points : i / Dim;
+      MY_SIZE d = SOA ? i / num_cached_points : i % Dim;
+      MY_SIZE g_ind = index<Dim, SOA>(
+          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+      MY_SIZE c_ind = i;
+      DataType result = point_weights_out[g_ind] + point_cache[c_ind];
+      point_weights_out[g_ind] = result;
+    }
+  } else {
+    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
       MY_SIZE g_point_to_be_cached =
-          points_to_be_cached[cache_points_offset + i + tid];
+          points_to_be_cached[cache_points_offset + i];
       DataType result[Dim];
       #pragma unroll
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE write_g_ind =
             index<Dim, SOA>(num_points, g_point_to_be_cached, d);
-        MY_SIZE write_c_ind = index<Dim, SOA>(num_cached_points, i + tid, d);
+        MY_SIZE write_c_ind = index<Dim, SOA>(num_cached_points, i, d);
 
         result[d] = point_weights_out[write_g_ind] + point_cache[write_c_ind];
       }
@@ -330,7 +349,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
       MY_SIZE cache_size =
           sizeof(DataType) * d_memory[colour_ind].shared_size * Dim;
-      problem_stepGPUHierarchical<Dim, SOA>
+      problem_stepGPUHierarchical<Dim, SOA, !SOA>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
@@ -488,11 +507,11 @@ void test() {
   testTwoImplementations<TEST_DIM, false, float>(
       num, N, M, reset_every,
       &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, false, float>::loopGPUEdgeCentred);
+      &Problem<TEST_DIM, false, float>::loopGPUHierarchical);
   testTwoImplementations<TEST_DIM, true, float>(
       num, N, M, reset_every,
       &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, true, float>::loopGPUEdgeCentred);
+      &Problem<TEST_DIM, true, float>::loopGPUHierarchical);
 }
 
 int main(int argc, const char **argv) {
