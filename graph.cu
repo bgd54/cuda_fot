@@ -245,6 +245,34 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
 }
 /* 1}}} */
 
+template <unsigned Dim = 1, bool SOA = false, typename DataType = float,
+          class ForwardIterator>
+size_t countCacheLinesForBlock(ForwardIterator block_begin,
+                               ForwardIterator block_end) {
+  std::set<MY_SIZE> cache_lines;
+  MY_SIZE data_per_cacheline = 32 / sizeof(DataType);
+
+  for (; block_begin != block_end; ++block_begin) {
+    MY_SIZE point_id = *block_begin;
+    MY_SIZE cache_line_id = point_id * Dim / data_per_cacheline;
+    if (!SOA) {
+      if (data_per_cacheline / Dim > 0) {
+        cache_lines.insert(cache_line_id);
+      } else {
+        MY_SIZE cache_line_per_data =
+            Dim / data_per_cacheline; // Assume that Dim is multiple of
+                                      // data_per_cacheline
+        for (MY_SIZE i = 0; i < cache_line_per_data; ++i) {
+          cache_lines.insert(cache_line_id++);
+        }
+      }
+    } else {
+      cache_lines.insert(cache_line_id);
+    }
+  }
+  return (SOA ? Dim : 1) * cache_lines.size();
+}
+
 /* loopGPUHierarchical {{{1 */
 template <unsigned Dim, bool SOA, typename DataType>
 void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
@@ -262,9 +290,11 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   DataType avg_num_edge_colours = 0;
   MY_SIZE total_num_blocks = 0;
   MY_SIZE total_shared_size = 0;
+  size_t total_num_cache_lines = 0;
   for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {
     const typename HierarchicalColourMemory<
-           Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour = memory.colours[i];
+        Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour =
+        memory.colours[i];
     MY_SIZE num_threads = memory_of_one_colour.edge_list.size() / 2;
     MY_SIZE num_blocks = static_cast<MY_SIZE>(
         std::ceil(static_cast<double>(num_threads) / block_size));
@@ -274,6 +304,17 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                         memory_of_one_colour.num_edge_colours.end(), 0.0f);
     total_num_blocks += num_blocks;
     total_shared_size += num_blocks * d_memory[i].shared_size;
+    for (MY_SIZE block_from = 0;
+         block_from < memory_of_one_colour.edge_list.size();
+         block_from += block_size) {
+      MY_SIZE block_to = std::min<size_t>(memory_of_one_colour.edge_list.size(),
+                                          block_from + block_size);
+      total_num_cache_lines +=
+          countCacheLinesForBlock<Dim, SOA, DataType,
+                                  std::vector<MY_SIZE>::const_iterator>(
+              memory_of_one_colour.edge_list.begin() + block_from,
+              memory_of_one_colour.edge_list.begin() + block_to);
+    }
   }
   // -----------------------
   // -  Start computation  -
@@ -333,10 +374,13 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
-  std::cout << "cache/shared mem: "
+  std::cout << "  cache/shared mem: "
             << static_cast<double>(total_cache_size) / total_shared_size
-            << "\n shared mem reuse factor (total shared / (2 * #edges)): "
+            << "\n  shared mem reuse factor (total shared / (2 * #edges)): "
             << static_cast<double>(total_shared_size) / (2 * graph.numEdges())
+            << std::endl;
+  std::cout << "  average cache_line / block: "
+            << static_cast<double>(total_num_cache_lines) / total_num_blocks
             << std::endl;
   avg_num_edge_colours /=
       std::ceil(static_cast<double>(graph.numEdges()) / block_size);
@@ -348,52 +392,6 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   point_weights.flushToHost();
 }
 /* 1}}} */
-
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
-size_t countCacheLinesForBlock(MY_SIZE block_from, MY_SIZE block_to,
-                               const data_t<MY_SIZE, 2> &edge_to_node,
-                               MY_SIZE num_points) {
-  std::set<MY_SIZE> cache_lines;
-  MY_SIZE data_per_cacheline = 32 / sizeof(DataType);
-
-  for (MY_SIZE edge_id = block_from; edge_id < block_to; ++edge_id) {
-    MY_SIZE cache_line_id = edge_to_node[2 * edge_id + 0] / data_per_cacheline;
-    if (!SOA) {
-      if (data_per_cacheline / Dim > 0) {
-        cache_line_id /= Dim;
-        cache_lines.insert(cache_line_id);
-      } else {
-        MY_SIZE cache_line_per_data =
-            Dim / data_per_cacheline; // Assume that Dim is multiple of
-                                      // data_per_cacheline
-        cache_line_id *= cache_line_per_data;
-        for (MY_SIZE i = 0; i < cache_line_per_data; ++i) {
-          cache_lines.insert(cache_line_id++);
-        }
-      }
-    } else {
-      cache_lines.insert(cache_line_id);
-    }
-    cache_line_id = edge_to_node[2 * edge_id + 1] / data_per_cacheline;
-    if (!SOA) {
-      if (data_per_cacheline / Dim > 0) {
-        cache_line_id /= Dim;
-        cache_lines.insert(cache_line_id);
-      } else {
-        MY_SIZE cache_line_per_data =
-            Dim / data_per_cacheline; // Assume that Dim is multiple of
-                                      // data_per_cacheline
-        cache_line_id *= cache_line_per_data;
-        for (MY_SIZE i = 0; i < cache_line_per_data; ++i) {
-          cache_lines.insert(cache_line_id++);
-        }
-      }
-    } else {
-      cache_lines.insert(cache_line_id);
-    }
-  }
-  return cache_lines.size();
-}
 
 template <unsigned Dim = 1, bool SOA = false, bool RunCPU = true,
           typename DataType = float>
@@ -424,7 +422,7 @@ void generateTimes(std::string in_file) {
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
                                 std::pair<MY_SIZE, MY_SIZE> block_dims) {
-  constexpr MY_SIZE num = 1;
+  constexpr MY_SIZE num = 0;
   MY_SIZE block_size = block_dims.first == 0
                            ? block_dims.second
                            : block_dims.first * block_dims.second * 2;
@@ -504,10 +502,10 @@ int main(int argc, const char **argv) {
   generateTimesDifferentBlockDims<2, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<4, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<8, true, float>(1153, 1153);
-  generateTimesDifferentBlockDims<1, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<2, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<4, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<8, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, false, float>(1153, 1153);
   return 0;
 }
 
