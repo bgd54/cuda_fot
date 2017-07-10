@@ -42,23 +42,39 @@ private:
                 point_coordinates.begin());
     }
   }
+  static MY_SIZE calcNumPoints(const std::vector<MY_SIZE> &grid_dim) {
+    return grid_dim[0] * grid_dim[1] * (grid_dim.size() == 3 ? grid_dim[2] : 1);
+  }
+  static MY_SIZE calcNumEdges(const std::vector<MY_SIZE> &grid_dim) {
+    MY_SIZE N = grid_dim[0];
+    MY_SIZE M = grid_dim[1];
+    return ((N - 1) * M + N * (M - 1)) *
+               (grid_dim.size() == 3 ? grid_dim[2] : 1) +
+           (grid_dim.size() == 3 ? (grid_dim[2] - 1) * N * M : 0);
+  }
 
 public:
-  Graph(MY_SIZE N, MY_SIZE M, std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0},
+  Graph(const std::vector<MY_SIZE> &grid_dim,
+        std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0},
         bool use_coordinates = false)
-      : num_points{N * M}, num_edges{((N - 1) * M + N * (M - 1))},
+      : num_points{calcNumPoints(grid_dim)}, num_edges{calcNumEdges(grid_dim)},
         edge_to_node(num_edges),
         point_coordinates(use_coordinates ? num_points : 0) {
+    assert(grid_dim.size() >= 2);
     // num_edges = (N - 1) * M + N * (M - 1); // vertical + horizontal
     // num_edges = 2 * ((N - 1) * M + N * (M - 1)); // to and fro
-    num_points = N * M;
-    if (block_sizes.first != 0) {
-      fillEdgeListBlock(N, M, block_sizes.first, block_sizes.second);
+    MY_SIZE N = grid_dim[0];
+    MY_SIZE M = grid_dim[1];
+    if (grid_dim.size() == 2) {
+      num_points = N * M;
+      if (block_sizes.first != 0) {
+        fillEdgeListBlock(N, M, block_sizes.first, block_sizes.second);
+      } else {
+        fillEdgeList(N, M);
+      }
     } else {
-      fillEdgeList(N, M);
-    }
-    if (use_coordinates) {
-      // TODO
+      num_points = N * M * grid_dim[2];
+      fillEdgeList3D(N, M, grid_dim[2]);
     }
   }
 
@@ -129,7 +145,7 @@ public:
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
-          MY_SIZE point_ind = r*M + c;
+          MY_SIZE point_ind = r * M + c;
           point_coordinates[point_ind * 3 + 0] = r;
           point_coordinates[point_ind * 3 + 1] = c;
           point_coordinates[point_ind * 3 + 2] = 0;
@@ -137,7 +153,6 @@ public:
       }
     }
   }
-
   /**
    * Grid, bidirectional
    */
@@ -175,7 +190,7 @@ public:
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
-          MY_SIZE point_ind = r*M + c;
+          MY_SIZE point_ind = r * M + c;
           point_coordinates[point_ind * 3 + 0] = r;
           point_coordinates[point_ind * 3 + 1] = c;
           point_coordinates[point_ind * 3 + 2] = 0;
@@ -220,7 +235,7 @@ public:
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
-          MY_SIZE point_ind = r*M + c;
+          MY_SIZE point_ind = r * M + c;
           point_coordinates[point_ind * 3 + 0] = r;
           point_coordinates[point_ind * 3 + 1] = c;
           point_coordinates[point_ind * 3 + 2] = 0;
@@ -231,7 +246,83 @@ public:
     std::for_each(edge_to_node.begin(), edge_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     if (point_coordinates.getSize() > 0) {
-      reorderData<3,false,float,MY_SIZE>(point_coordinates, permutation);
+      reorderData<3, false, float, MY_SIZE>(point_coordinates, permutation);
+    }
+  }
+
+  void fillEdgeList3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3) {
+    MY_SIZE array_ind = 0, upper_point_ind = 0;
+    MY_SIZE lower_point_ind = N2, inner_point_ind = N1 * N2;
+    for (MY_SIZE l = 0; l < N3 - 1; ++l) {
+      upper_point_ind = l * N1 * N2;
+      lower_point_ind = upper_point_ind + N2;
+      inner_point_ind = (l + 1) * N1 * N2;
+      for (MY_SIZE r = 0; r < N1 - 1; ++r) {
+        for (MY_SIZE c = 0; c < N2 - 1; ++c) {
+          // Down
+          edge_to_node[array_ind++] = lower_point_ind;
+          edge_to_node[array_ind++] = upper_point_ind;
+          // Deep
+          edge_to_node[array_ind++] = upper_point_ind;
+          edge_to_node[array_ind++] = inner_point_ind;
+          // Left
+          edge_to_node[array_ind++] = upper_point_ind;
+          edge_to_node[array_ind++] = ++upper_point_ind;
+          ++lower_point_ind;
+          ++inner_point_ind;
+        }
+        // Left end
+        edge_to_node[array_ind++] = lower_point_ind++;
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = inner_point_ind++;
+        edge_to_node[array_ind++] = upper_point_ind++;
+      }
+      // Down end
+      for (MY_SIZE c = 0; c < N2 - 1; ++c) {
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = upper_point_ind + 1;
+        edge_to_node[array_ind++] = inner_point_ind++;
+        edge_to_node[array_ind++] = upper_point_ind++;
+      }
+      // Down last element
+      edge_to_node[array_ind++] = inner_point_ind++;
+      edge_to_node[array_ind++] = upper_point_ind++;
+    }
+    
+    // Last layer
+    upper_point_ind = (N3 - 1) * N1 * N2;
+    lower_point_ind = upper_point_ind + N2;
+    for (MY_SIZE r = 0; r < N1 - 1; ++r) {
+      for (MY_SIZE c = 0; c < N2 - 1; ++c) {
+        // Down
+        edge_to_node[array_ind++] = lower_point_ind++;
+        edge_to_node[array_ind++] = upper_point_ind;
+        // Left
+        edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = ++upper_point_ind;
+      }
+      // Left end
+      edge_to_node[array_ind++] = lower_point_ind++;
+      edge_to_node[array_ind++] = upper_point_ind++;
+    }
+    // Last layer Down end
+    for (MY_SIZE c = 0; c < N2 - 1; ++c) {
+      edge_to_node[array_ind++] = upper_point_ind;
+      edge_to_node[array_ind++] = ++upper_point_ind;
+    }
+
+    // generate coordinates
+    if (point_coordinates.getSize() > 0) {
+      for (MY_SIZE l = 0; l < N3; ++l) {
+        for (MY_SIZE r = 0; r < N1; ++r) {
+          for (MY_SIZE c = 0; c < N2; ++c) {
+            MY_SIZE point_ind = l * N1 *N2 + r * N2 + c;
+            point_coordinates[point_ind * 3 + 0] = r;
+            point_coordinates[point_ind * 3 + 1] = c;
+            point_coordinates[point_ind * 3 + 2] = l;
+          }
+        }
+      }
     }
   }
 
@@ -324,7 +415,7 @@ public:
     }
     if (point_coordinates.getSize() > 0) {
       reorderData<3, false, float, UnsignedType>(point_coordinates,
-          point_permutation);
+                                                 point_permutation);
     }
     // Permute edge_to_node
     std::for_each(

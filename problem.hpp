@@ -24,8 +24,24 @@ struct Problem {
   Problem(MY_SIZE N, MY_SIZE M,
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
-      : graph(N, M, block_dims, use_coordinates),
+      : graph(std::vector<MY_SIZE>{N,M}, block_dims, use_coordinates),
         point_weights(N * M), block_size{block_dims.first == 0
+                                             ? block_dims.second
+                                             : block_dims.first *
+                                                   block_dims.second * 2} {
+    edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
+    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
+      edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
+      edge_weights[i] *= 0.001;
+    }
+    reset();
+  }
+  //TODO unify constructors! add weight calc!
+  Problem(const std::vector<MY_SIZE> &grid_dim,
+          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
+          bool use_coordinates = false)
+      : graph(grid_dim, block_dims, use_coordinates),
+        point_weights(4*4*4), block_size{block_dims.first == 0
                                              ? block_dims.second
                                              : block_dims.first *
                                                    block_dims.second * 2} {

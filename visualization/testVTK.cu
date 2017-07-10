@@ -87,8 +87,7 @@ void writePartitionVTK(const std::string &filename, const Graph &graph,
 }
 
 int main() {
-  Problem<> problem(17, 17, {4, 4}, true);
-
+  Problem<> problem({4, 4, 4}, {4, 4}, true);
   writeGlobalColouringVTK("graph_global.vtk", problem.graph, 16);
   writeHierarchicalColouringVTK("graph_hier.vtk", problem);
   writePartitionVTK("graph_part.vtk", problem.graph, 16);
