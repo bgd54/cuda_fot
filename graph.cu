@@ -486,6 +486,16 @@ void generateTimesFromFile(int argc, const char **argv) {
     std::cerr << "Usage: " << argv[0] << " <input graph>" << std::endl;
     std::exit(1);
   }
+  // AOS
+  generateTimes<1, false, false>(argv[1]);
+  generateTimes<4, false, false>(argv[1]);
+  generateTimes<8, false, false>(argv[1]);
+  generateTimes<16, false, false>(argv[1]);
+  generateTimes<1, false, false, double>(argv[1]);
+  generateTimes<4, false, false, double>(argv[1]);
+  generateTimes<8, false, false, double>(argv[1]);
+  generateTimes<16, false, false, double>(argv[1]);
+  // SOA
   generateTimes<1, true, false>(argv[1]);
   generateTimes<4, true, false>(argv[1]);
   generateTimes<8, true, false>(argv[1]);
@@ -511,17 +521,33 @@ void test() {
       &Problem<TEST_DIM, true, float>::loopGPUHierarchical);
 }
 
-int main(int argc, const char **argv) {
-  /*generateTimesFromFile(argc, argv);*/
-  /*test();*/
+void generateTimesDifferentBlockDims () {
+  // SOA
   generateTimesDifferentBlockDims<1, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<2, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<4, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<8, true, float>(1153, 1153);
+  // AOS
   generateTimesDifferentBlockDims<1, false, float>(1153, 1153);
   generateTimesDifferentBlockDims<2, false, float>(1153, 1153);
   generateTimesDifferentBlockDims<4, false, float>(1153, 1153);
   generateTimesDifferentBlockDims<8, false, float>(1153, 1153);
+  // SOA
+  generateTimesDifferentBlockDims<1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, true, double>(1153, 1153);
+  // AOS
+  generateTimesDifferentBlockDims<1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, false, double>(1153, 1153);
+}
+
+int main(int argc, const char **argv) {
+  /*generateTimesFromFile(argc, argv);*/
+  /*test();*/
+  generateTimesDifferentBlockDims();
   return 0;
 }
 
