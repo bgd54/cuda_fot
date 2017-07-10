@@ -262,9 +262,9 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   DataType avg_num_edge_colours = 0;
   MY_SIZE total_num_blocks = 0;
   MY_SIZE total_shared_size = 0;
-  for (const typename HierarchicalColourMemory<
-           Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour :
-       memory.colours) {
+  for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {
+    const typename HierarchicalColourMemory<
+           Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour = memory.colours[i];
     MY_SIZE num_threads = memory_of_one_colour.edge_list.size() / 2;
     MY_SIZE num_blocks = static_cast<MY_SIZE>(
         std::ceil(static_cast<double>(num_threads) / block_size));
@@ -273,7 +273,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
         std::accumulate(memory_of_one_colour.num_edge_colours.begin(),
                         memory_of_one_colour.num_edge_colours.end(), 0.0f);
     total_num_blocks += num_blocks;
-    total_shared_size += num_blocks * memory_of_one_colour.shared_size;
+    total_shared_size += num_blocks * d_memory[i].shared_size;
   }
   // -----------------------
   // -  Start computation  -
