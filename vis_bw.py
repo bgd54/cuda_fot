@@ -86,7 +86,8 @@ def plot_along_dims (bw,names,y_height = 4e10):
     ax.set_ylim([0,y_height])
     ax.set_ylabel('B/s');
     ax.set_xlabel('Dimension')
-    ax.set_xticks(np.arange(4),[1,4,8,16]);
+    ax.set_xticks(np.arange(4))
+    ax.set_xticklabels(map(str,[1,4,8,16]));
     ax.set_title('2layer, all reorderings, along dimensions')
     fig.tight_layout()
 
