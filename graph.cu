@@ -61,6 +61,7 @@ __global__ void problem_stepGPUHierarchical(
     const std::uint8_t *__restrict__ edge_colours,
     const std::uint8_t *__restrict__ num_edge_colours, MY_SIZE num_threads,
     const MY_SIZE num_points) {
+  static_assert(SOA || PerDataCache, "Currently only supporting SOA in shared memory.");
   MY_SIZE bid = blockIdx.x;
   MY_SIZE thread_ind = bid * blockDim.x + threadIdx.x;
   MY_SIZE tid = threadIdx.x;
@@ -82,11 +83,10 @@ __global__ void problem_stepGPUHierarchical(
   // Cache in
   if (PerDataCache) {
     for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
-      MY_SIZE point_ind = SOA ? i % num_cached_points : i / Dim;
-      MY_SIZE d = SOA ? i / num_cached_points : i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(
-          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind = i;
+      MY_SIZE point_ind = i / Dim;
+      MY_SIZE d = i % Dim;
+      MY_SIZE g_ind = index<Dim, SOA>(num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+      MY_SIZE c_ind = index<Dim, true>(num_cached_points, point_ind, d);
       point_cache[c_ind] = point_weights[g_ind];
     }
   } else {
@@ -113,9 +113,9 @@ __global__ void problem_stepGPUHierarchical(
     edge_list_left = edge_list[2 * thread_ind];
     edge_list_right = edge_list[2 * thread_ind + 1];
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE left_ind = index<Dim, SOA>(num_cached_points, edge_list_left, d);
+      MY_SIZE left_ind = index<Dim, true>(num_cached_points, edge_list_left, d);
       MY_SIZE right_ind =
-          index<Dim, SOA>(num_cached_points, edge_list_right, d);
+          index<Dim, true>(num_cached_points, edge_list_right, d);
 
       increment[d] = point_cache[left_ind] * edge_weights[thread_ind];
       increment[d + Dim] = point_cache[right_ind] * edge_weights[thread_ind];
@@ -136,9 +136,9 @@ __global__ void problem_stepGPUHierarchical(
     if (our_colour == i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE left_ind =
-            index<Dim, SOA>(num_cached_points, edge_list_left, d);
+            index<Dim, true>(num_cached_points, edge_list_left, d);
         MY_SIZE right_ind =
-            index<Dim, SOA>(num_cached_points, edge_list_right, d);
+            index<Dim, true>(num_cached_points, edge_list_right, d);
 
         point_cache[right_ind] += increment[d];
         point_cache[left_ind] += increment[d + Dim];
@@ -150,11 +150,10 @@ __global__ void problem_stepGPUHierarchical(
   // Cache out
   if (PerDataCache) {
     for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
-      MY_SIZE point_ind = SOA ? i % num_cached_points : i / Dim;
-      MY_SIZE d = SOA ? i / num_cached_points : i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(
-          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind = i;
+      MY_SIZE point_ind = i / Dim;
+      MY_SIZE d = i % Dim;
+      MY_SIZE g_ind = index<Dim, SOA>(num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+      MY_SIZE c_ind = index<Dim, true>(num_cached_points, point_ind, d);
       DataType result = point_weights_out[g_ind] + point_cache[c_ind];
       point_weights_out[g_ind] = result;
     }
