@@ -53,9 +53,9 @@ struct Problem {
     reset();
   }
 
-  Problem(std::istream &is)
+  Problem(std::istream &is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
       : graph(is),
-        point_weights(graph.numPoints()), block_size{DEFAULT_BLOCK_SIZE} {
+        point_weights(graph.numPoints()), block_size{_block_size} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
