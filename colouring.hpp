@@ -137,6 +137,7 @@ private:
     colour.points_to_be_cached_offsets.push_back(
         colour.points_to_be_cached.size());
     colourEdges(to - from, colour, c_edge_list, points_to_be_cached.size());
+    sortEdgesByColours(from, to, colour_ind);
   }
 
   void colourEdges(MY_SIZE block_size, MemoryOfOneColour &block,
@@ -167,6 +168,27 @@ private:
       point_colours[edge_list[2 * i + 1]] |= colourset;
     }
     block.num_edge_colours.push_back(num_edge_colours);
+  }
+
+  void sortEdgesByColours(MY_SIZE from, MY_SIZE to, MY_SIZE block_colour) {
+    std::vector<std::tuple<std::uint8_t, MY_SIZE, MY_SIZE, DataType>> tmp(to -
+                                                                          from);
+    MemoryOfOneColour &memory = colours[block_colour];
+    for (MY_SIZE i = 0; i < to - from; ++i) {
+      tmp[i] =
+          std::make_tuple(memory.edge_colours[i], memory.edge_list[2 * i],
+                          memory.edge_list[2 * i + 1], memory.edge_weights[i]);
+    }
+    std::stable_sort(
+        tmp.begin(), tmp.end(),
+        [](const std::tuple<std::uint8_t, MY_SIZE, MY_SIZE, DataType> &a,
+           const std::tuple<std::uint8_t, MY_SIZE, MY_SIZE, DataType> &b) {
+          return std::get<0>(a) < std::get<0>(b);
+        });
+    for (MY_SIZE i = 0; i < to - from; ++i) {
+      std::tie(memory.edge_colours[i], memory.edge_list[2 * i],
+               memory.edge_list[2 * i + 1], memory.edge_weights[i]) = tmp[i];
+    }
   }
 
 public:
