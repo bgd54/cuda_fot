@@ -24,11 +24,13 @@ struct Problem {
   Problem(MY_SIZE N, MY_SIZE M,
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
-      : graph(std::vector<MY_SIZE>{N,M}, block_dims, use_coordinates),
-        point_weights(N * M), block_size{block_dims.first == 0
-                                             ? block_dims.second
-                                             : block_dims.first *
-                                                   block_dims.second * 2} {
+      : graph(std::vector<MY_SIZE>{N, M}, block_dims, use_coordinates),
+        point_weights(N * M),
+        block_size{block_dims.first == 0
+                       ? block_dims.second
+                       : (block_dims.first == 9 && block_dims.second == 8
+                             ? 9 * 8 * 2 * 2
+                             : block_dims.first * block_dims.second * 2)} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
@@ -36,15 +38,15 @@ struct Problem {
     }
     reset();
   }
-  //TODO unify constructors! add weight calc!
+  // TODO unify constructors! add weight calc!
   Problem(const std::vector<MY_SIZE> &grid_dim,
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
       : graph(grid_dim, block_dims, use_coordinates),
-        point_weights(4*4*4), block_size{block_dims.first == 0
-                                             ? block_dims.second
-                                             : block_dims.first *
-                                                   block_dims.second * 2} {
+        point_weights(4 * 4 * 4), block_size{block_dims.first == 0
+                                                 ? block_dims.second
+                                                 : block_dims.first *
+                                                       block_dims.second * 2} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
@@ -54,8 +56,7 @@ struct Problem {
   }
 
   Problem(std::istream &is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
-      : graph(is),
-        point_weights(graph.numPoints()), block_size{_block_size} {
+      : graph(is), point_weights(graph.numPoints()), block_size{_block_size} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
@@ -122,7 +123,7 @@ struct Problem {
 
   void stepCPUEdgeCentredOMP(const std::vector<MY_SIZE> &inds,
                              data_t<DataType, Dim> &out) { /*{{{*/
-#pragma omp parallel for
+    #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
       MY_SIZE ind_left_base = graph.edge_to_node[graph.edge_to_node.dim * ind];
@@ -147,7 +148,7 @@ struct Problem {
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
-#pragma omp parallel for
+      #pragma omp parallel for
       for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.dim;
            ++e) {
         temp[e] = point_weights[e];

@@ -206,6 +206,10 @@ public:
                          MY_SIZE block_w) {
     assert((N - 1) % block_h == 0);
     assert((M - 1) % block_w == 0);
+    if (block_h == 9 && block_w == 8) {
+      fillEdgeList9x8(N,M);
+      return;
+    }
     MY_SIZE ind = 0;
     for (MY_SIZE i = 0; i < (N - 1) / block_h; ++i) {
       for (MY_SIZE j = 0; j < (M - 1) / block_w; ++j) {
@@ -288,7 +292,7 @@ public:
       edge_to_node[array_ind++] = inner_point_ind++;
       edge_to_node[array_ind++] = upper_point_ind++;
     }
-    
+
     // Last layer
     upper_point_ind = (N3 - 1) * N1 * N2;
     lower_point_ind = upper_point_ind + N2;
@@ -316,7 +320,7 @@ public:
       for (MY_SIZE l = 0; l < N3; ++l) {
         for (MY_SIZE r = 0; r < N1; ++r) {
           for (MY_SIZE c = 0; c < N2; ++c) {
-            MY_SIZE point_ind = l * N1 *N2 + r * N2 + c;
+            MY_SIZE point_ind = l * N1 * N2 + r * N2 + c;
             point_coordinates[point_ind * 3 + 0] = r;
             point_coordinates[point_ind * 3 + 1] = c;
             point_coordinates[point_ind * 3 + 2] = l;
@@ -324,6 +328,98 @@ public:
         }
       }
     }
+  }
+
+  void fillEdgeList9x8(MY_SIZE N, MY_SIZE M) {
+    assert((N - 1) % 9 == 0);
+    assert((M - 1) % 8 == 0);
+    constexpr MY_SIZE block_h = 9, block_w = 8;
+    // clang-format off
+    std::array<std::array<MY_SIZE,block_w + 1>,block_h + 1> pattern = {{
+      {{ 0, 1, 2, 3, 4, 5, 6, 7, 0}},
+      {{ 8,16,24,32,40,48,56,64, 0}},
+      {{ 9,17,25,33,41,49,57,65, 0}},
+      {{10,18,26,34,42,50,58,66, 0}},
+      {{11,19,27,35,43,51,59,67, 0}},
+      {{12,20,28,36,44,52,60,68, 0}},
+      {{13,21,29,37,45,53,61,69, 0}},
+      {{14,22,30,38,46,54,62,70, 0}},
+      {{15,23,31,39,47,55,63,71, 0}},
+      {{ 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+    }};
+    // clang-format on
+    MY_SIZE ind = 0, block_ind_offset = 0;
+    for (MY_SIZE i = 0; i < (N - 1) / block_h; ++i) {
+      for (MY_SIZE j = 0; j < (M - 1) / block_w; ++j) {
+        for (MY_SIZE k = 0; k < block_w; ++k) {
+          if (i != (N - 1) / block_h - 1) {
+            pattern[block_h][k] = pattern[0][k] + block_h * (M - 1);
+          } else {
+            pattern[block_h][k] =
+                (N - 1) * (M - 1) + j * block_w + k - block_ind_offset;
+          }
+        }
+        for (MY_SIZE k = 0; k < block_h; ++k) {
+          if (j != (M - 1) / block_w - 1) {
+            pattern[k][block_w] = pattern[k][0] + block_h * block_w;
+          } else {
+            pattern[k][block_w] =
+                N * M - 1 - i * block_h - k - block_ind_offset;
+          }
+        }
+        for (MY_SIZE k = 0; k < block_h; ++k) {
+          for (MY_SIZE l = 0; l < block_w; ++l) {
+            const MY_SIZE point_cur = block_ind_offset + pattern[k][l];
+            const MY_SIZE point_down = block_ind_offset + pattern[k + 1][l];
+            const MY_SIZE point_right = block_ind_offset + pattern[k][l + 1];
+            // Down
+            edge_to_node[ind++] = point_cur;
+            edge_to_node[ind++] = point_down;
+            // Right
+            edge_to_node[ind++] = point_cur;
+            edge_to_node[ind++] = point_right;
+
+            if (point_coordinates.getSize() > 0){
+              point_coordinates[point_cur * 3 + 0] = i * block_h + k;
+              point_coordinates[point_cur * 3 + 1] = j * block_w + l;
+              point_coordinates[point_cur * 3 + 2] = 0;
+            }
+          }
+        }
+        block_ind_offset += block_h * block_w;
+      }
+    }
+    // edges along the edges of the grid
+    MY_SIZE point_cur = (N - 1) * (M - 1);
+    for (MY_SIZE i = 0; i < M - 1; ++i) {
+      edge_to_node[ind++] = point_cur;
+      edge_to_node[ind++] = point_cur + 1;
+
+      if (point_coordinates.getSize() > 0) {
+        point_coordinates[point_cur * 3 + 0] = N - 1;
+        point_coordinates[point_cur * 3 + 1] = i;
+        point_coordinates[point_cur * 3 + 2] = 0;
+      }
+      ++point_cur;
+    }
+    for (MY_SIZE i = 0; i < N - 1; ++i) {
+      edge_to_node[ind++] = point_cur;
+      edge_to_node[ind++] = point_cur + 1;
+
+      if (point_coordinates.getSize() > 0) {
+        point_coordinates[point_cur * 3 + 0] = N - 1 - i;
+        point_coordinates[point_cur * 3 + 1] = M - 1;
+        point_coordinates[point_cur * 3 + 2] = 0;
+      }
+      ++point_cur;
+    }
+    if (point_coordinates.getSize() > 0) {
+      point_coordinates[point_cur * 3 + 0] = 0;
+      point_coordinates[point_cur * 3 + 1] = M - 1;
+      point_coordinates[point_cur * 3 + 2] = 0;
+    }
+    assert(ind == 2 * numEdges());
+    assert(point_cur + 1 == numPoints());
   }
 
   /* 1}}} */
