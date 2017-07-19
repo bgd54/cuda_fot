@@ -30,3 +30,13 @@
 
 # vim swapfiles
 *.swp
+
+# Custom
+.ycm_extra_conf.py
+*.bak*
+graph
+test
+test_scotch
+apply_reorder
+visualization/*.vtk
+visualization/testVTK
