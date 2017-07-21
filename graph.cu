@@ -70,8 +70,21 @@ __global__ void problem_stepGPUHierarchical(
   MY_SIZE cache_points_offset = points_to_be_cached_offsets[bid];
   MY_SIZE num_cached_points =
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
-  MY_SIZE shared_num_cached_points =
-      num_cached_points + (SOAInShared && num_cached_points % 32 == 0 ? 1 : 0);
+  MY_SIZE shared_num_cached_points;
+  if (SOAInShared) {
+    assert(32 % Dim == 0);
+    MY_SIZE needed_offset = 32 / Dim;
+    if (num_cached_points % 32 <= needed_offset) {
+      shared_num_cached_points =
+        num_cached_points - (num_cached_points % 32) + needed_offset;
+    } else {
+      shared_num_cached_points =
+        num_cached_points - (num_cached_points % 32) + 32 + needed_offset;
+    }
+    assert(shared_num_cached_points >= num_cached_points);
+  } else {
+    shared_num_cached_points = num_cached_points;
+  }
 
   extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
   DataType *point_cache = reinterpret_cast<DataType *>(shared);
@@ -131,7 +144,7 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
+  for (MY_SIZE i = tid; i < shared_num_cached_points * Dim; i += blockDim.x) {
     point_cache[i] = 0;
   }
 
@@ -354,10 +367,10 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       MY_SIZE num_blocks = static_cast<MY_SIZE>(
           std::ceil(static_cast<double>(num_threads) / block_size));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
-      // + 1 in case it needs to avoid shared mem bank collisions
+      // + 32 in case it needs to avoid shared mem bank collisions
       MY_SIZE cache_size =
-          sizeof(DataType) * (d_memory[colour_ind].shared_size + 1) * Dim;
-      problem_stepGPUHierarchical<Dim, SOA, !SOA, false, DataType>
+          sizeof(DataType) * (d_memory[colour_ind].shared_size + 32) * Dim;
+      problem_stepGPUHierarchical<Dim, SOA, !SOA, true, DataType>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
