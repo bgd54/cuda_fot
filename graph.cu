@@ -50,7 +50,7 @@ __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
 
 /* problem_stepGPUHierarchical {{{1 */
 template <unsigned Dim = 1, bool SOA = false, bool PerDataCache = false,
-          typename DataType = float>
+          bool SOAInShared = true, typename DataType = float>
 __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ edge_list,
     const DataType *__restrict__ point_weights,
@@ -61,7 +61,8 @@ __global__ void problem_stepGPUHierarchical(
     const std::uint8_t *__restrict__ edge_colours,
     const std::uint8_t *__restrict__ num_edge_colours, MY_SIZE num_threads,
     const MY_SIZE num_points) {
-  static_assert(SOA || PerDataCache, "Currently only supporting SOA in shared memory.");
+  static_assert(SOA || PerDataCache,
+                "AOS and not per data cache is currently not supported");
   MY_SIZE bid = blockIdx.x;
   MY_SIZE thread_ind = bid * blockDim.x + threadIdx.x;
   MY_SIZE tid = threadIdx.x;
@@ -69,8 +70,8 @@ __global__ void problem_stepGPUHierarchical(
   MY_SIZE cache_points_offset = points_to_be_cached_offsets[bid];
   MY_SIZE num_cached_points =
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
-  MY_SIZE shared_num_cached_points = num_cached_points +
-    (num_cached_points % 32 == 0 ? 1 : 0);
+  MY_SIZE shared_num_cached_points =
+      num_cached_points + (SOAInShared && num_cached_points % 32 == 0 ? 1 : 0);
 
   extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
   DataType *point_cache = reinterpret_cast<DataType *>(shared);
@@ -87,8 +88,10 @@ __global__ void problem_stepGPUHierarchical(
     for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
       MY_SIZE point_ind = i / Dim;
       MY_SIZE d = i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind = index<Dim, true>(shared_num_cached_points, point_ind, d);
+      MY_SIZE g_ind = index<Dim, SOA>(
+          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+      MY_SIZE c_ind =
+          index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
       point_cache[c_ind] = point_weights[g_ind];
     }
   } else {
@@ -98,7 +101,7 @@ __global__ void problem_stepGPUHierarchical(
         MY_SIZE g_point_to_be_cached =
             points_to_be_cached[cache_points_offset + i];
         g_ind = index<Dim, SOA>(num_points, g_point_to_be_cached, d);
-        c_ind = index<Dim, SOA>(shared_num_cached_points, i, d);
+        c_ind = index<Dim, SOAInShared>(shared_num_cached_points, i, d);
 
         point_cache[c_ind] = point_weights[g_ind];
       }
@@ -115,9 +118,10 @@ __global__ void problem_stepGPUHierarchical(
     edge_list_left = edge_list[2 * thread_ind];
     edge_list_right = edge_list[2 * thread_ind + 1];
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE left_ind = index<Dim, true>(shared_num_cached_points, edge_list_left, d);
+      MY_SIZE left_ind =
+          index<Dim, SOAInShared>(shared_num_cached_points, edge_list_left, d);
       MY_SIZE right_ind =
-          index<Dim, true>(shared_num_cached_points, edge_list_right, d);
+          index<Dim, SOAInShared>(shared_num_cached_points, edge_list_right, d);
 
       increment[d] = point_cache[left_ind] * edge_weights[thread_ind];
       increment[d + Dim] = point_cache[right_ind] * edge_weights[thread_ind];
@@ -137,10 +141,10 @@ __global__ void problem_stepGPUHierarchical(
   for (MY_SIZE i = 0; i < num_edge_colours[bid]; ++i) {
     if (our_colour == i) {
       for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE left_ind =
-            index<Dim, true>(shared_num_cached_points, edge_list_left, d);
-        MY_SIZE right_ind =
-            index<Dim, true>(shared_num_cached_points, edge_list_right, d);
+        MY_SIZE left_ind = index<Dim, SOAInShared>(shared_num_cached_points,
+                                                   edge_list_left, d);
+        MY_SIZE right_ind = index<Dim, SOAInShared>(shared_num_cached_points,
+                                                    edge_list_right, d);
 
         point_cache[right_ind] += increment[d];
         point_cache[left_ind] += increment[d + Dim];
@@ -154,8 +158,10 @@ __global__ void problem_stepGPUHierarchical(
     for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
       MY_SIZE point_ind = i / Dim;
       MY_SIZE d = i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind = index<Dim, true>(shared_num_cached_points, point_ind, d);
+      MY_SIZE g_ind = index<Dim, SOA>(
+          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+      MY_SIZE c_ind =
+          index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
       DataType result = point_weights_out[g_ind] + point_cache[c_ind];
       point_weights_out[g_ind] = result;
     }
@@ -168,7 +174,8 @@ __global__ void problem_stepGPUHierarchical(
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE write_g_ind =
             index<Dim, SOA>(num_points, g_point_to_be_cached, d);
-        MY_SIZE write_c_ind = index<Dim, SOA>(shared_num_cached_points, i, d);
+        MY_SIZE write_c_ind =
+            index<Dim, SOAInShared>(shared_num_cached_points, i, d);
 
         result[d] = point_weights_out[write_g_ind] + point_cache[write_c_ind];
       }
@@ -271,9 +278,8 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
 
   for (; block_begin != block_end; ++block_begin) {
     MY_SIZE point_id = *block_begin;
-    MY_SIZE cache_line_id = SOA ?
-      point_id / data_per_cacheline :
-      point_id * Dim / data_per_cacheline;
+    MY_SIZE cache_line_id = SOA ? point_id / data_per_cacheline
+                                : point_id * Dim / data_per_cacheline;
     if (!SOA) {
       if (data_per_cacheline / Dim > 0) {
         assert(data_per_cacheline % Dim == 0);
@@ -351,7 +357,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       // + 1 in case it needs to avoid shared mem bank collisions
       MY_SIZE cache_size =
           sizeof(DataType) * (d_memory[colour_ind].shared_size + 1) * Dim;
-      problem_stepGPUHierarchical<Dim, SOA, !SOA>
+      problem_stepGPUHierarchical<Dim, SOA, !SOA, false, DataType>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
