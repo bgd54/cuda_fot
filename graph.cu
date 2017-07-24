@@ -109,10 +109,10 @@ __global__ void problem_stepGPUHierarchical(
     }
   } else {
     for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
+      MY_SIZE g_point_to_be_cached =
+          points_to_be_cached[cache_points_offset + i];
       for (MY_SIZE d = 0; d < Dim; ++d) {
         MY_SIZE c_ind, g_ind;
-        MY_SIZE g_point_to_be_cached =
-            points_to_be_cached[cache_points_offset + i];
         g_ind = index<Dim, SOA>(num_points, g_point_to_be_cached, d);
         c_ind = index<Dim, SOAInShared>(shared_num_cached_points, i, d);
 
