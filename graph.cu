@@ -128,8 +128,8 @@ __global__ void problem_stepGPUHierarchical(
   MY_SIZE edge_list_left;
   MY_SIZE edge_list_right;
   if (thread_ind < num_threads) {
-    edge_list_left = edge_list[2 * thread_ind];
-    edge_list_right = edge_list[2 * thread_ind + 1];
+    edge_list_left = edge_list[index<2,true>(num_threads,thread_ind,0)];
+    edge_list_right = edge_list[index<2,true>(num_threads,thread_ind,1)];
     for (MY_SIZE d = 0; d < Dim; ++d) {
       MY_SIZE left_ind =
           index<Dim, SOAInShared>(shared_num_cached_points, edge_list_left, d);

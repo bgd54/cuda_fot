@@ -195,5 +195,33 @@ void reorderData(data_t<T, Dim> &point_data,
   }
 }
 
+template <unsigned Dim, class Iterator>
+inline void AOStoSOA(Iterator begin, Iterator end) {
+  MY_SIZE size = std::distance(begin,end);
+  assert(size % Dim == 0);
+  MY_SIZE num_data = size / Dim;
+  using DataType = typename std::iterator_traits<Iterator>::value_type;
+  data_t<DataType, Dim> tmp (num_data);
+  Iterator cur = begin;
+  for (MY_SIZE i = 0; i < num_data; ++i) {
+    for (MY_SIZE d = 0; d < Dim; ++d) {
+      bool b = index<Dim,false>(num_data,i,d) == std::distance(begin,cur);
+      assert(b);
+      tmp[index<Dim, true>(num_data, i, d)] = *cur++;
+    }
+  }
+  std::copy(tmp.begin(),tmp.end(),begin);
+}
+
+template<unsigned Dim, class T>
+inline void AOStoSOA(std::vector<T> &container) {
+  AOStoSOA<Dim>(container.begin(), container.end());
+}
+
+template<unsigned Dim, class T>
+inline void AOStoSOA(data_t<T,Dim> &container) {
+  AOStoSOA<Dim>(container.begin(),container.end());
+}
+
 #endif /* end of guard DATA_T_HPP */
 // vim:set et sw=2 ts=2 fdm=marker:

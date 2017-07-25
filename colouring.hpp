@@ -77,6 +77,7 @@ struct HierarchicalColourMemory {
       colourBlock(block_from, block_to, colour, point_colours, problem,
                   colours);
     }
+    edgeListSOA();
   }
 
 private:
@@ -192,6 +193,12 @@ private:
       const MY_SIZE j = i + from;
       std::tie(memory.edge_colours[j], memory.edge_list[2 * j],
                memory.edge_list[2 * j + 1], memory.edge_weights[j]) = tmp[i];
+    }
+  }
+
+  void edgeListSOA () {
+    for (MemoryOfOneColour &memory : colours) {
+      AOStoSOA<2>(memory.edge_list);
     }
   }
 
