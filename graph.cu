@@ -61,6 +61,11 @@ __global__ void problem_stepGPUHierarchical(
     const std::uint8_t *__restrict__ edge_colours,
     const std::uint8_t *__restrict__ num_edge_colours, MY_SIZE num_threads,
     const MY_SIZE num_points) {
+
+  const float4 *__restrict__ point_weights2 = reinterpret_cast<const float4*>(point_weights);
+  float4 *__restrict__ point_weights_out2 = reinterpret_cast<float4*>(point_weights_out);
+
+
   static_assert(SOA || PerDataCache,
                 "AOS and not per data cache is currently not supported");
   MY_SIZE bid = blockIdx.x;
@@ -98,14 +103,36 @@ __global__ void problem_stepGPUHierarchical(
 
   // Cache in
   if (PerDataCache) {
-    for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
-      MY_SIZE point_ind = i / Dim;
-      MY_SIZE d = i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(
-          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind =
-          index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
-      point_cache[c_ind] = point_weights[g_ind];
+    if (!SOA && Dim % 4 == 0 && std::is_same<DataType,float>::value) {
+      for (MY_SIZE i = tid; i < Dim * num_cached_points / 4; i += blockDim.x) {
+        MY_SIZE point_ind = i * 4 / Dim;
+        MY_SIZE d = (i * 4) % Dim;
+        MY_SIZE g_ind = index<Dim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+        MY_SIZE c_ind0 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 0);
+        MY_SIZE c_ind1 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 1);
+        MY_SIZE c_ind2 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 2);
+        MY_SIZE c_ind3 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 3);
+        float4 tmp = point_weights2[g_ind / 4];
+        point_cache[c_ind0] = tmp.x;
+        point_cache[c_ind1] = tmp.y;
+        point_cache[c_ind2] = tmp.z;
+        point_cache[c_ind3] = tmp.w;
+      }
+    } else {
+      for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
+        MY_SIZE point_ind = i / Dim;
+        MY_SIZE d = i % Dim;
+        MY_SIZE g_ind = index<Dim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+        MY_SIZE c_ind =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
+        point_cache[c_ind ] = point_weights[g_ind];
+      }
     }
   } else {
     for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
@@ -168,15 +195,38 @@ __global__ void problem_stepGPUHierarchical(
 
   // Cache out
   if (PerDataCache) {
-    for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
-      MY_SIZE point_ind = i / Dim;
-      MY_SIZE d = i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(
-          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind =
-          index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
-      DataType result = point_weights_out[g_ind] + point_cache[c_ind];
-      point_weights_out[g_ind] = result;
+    if (!SOA && Dim % 4 == 0) {
+      for (MY_SIZE i = tid; i < Dim * num_cached_points / 4; i += blockDim.x) {
+        MY_SIZE point_ind = i * 4 / Dim;
+        MY_SIZE d = (i * 4) % Dim;
+        MY_SIZE g_ind = index<Dim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+        MY_SIZE c_ind0 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 0);
+        MY_SIZE c_ind1 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 1);
+        MY_SIZE c_ind2 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 2);
+        MY_SIZE c_ind3 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 3);
+        float4 result = point_weights_out2[g_ind / 4];
+        result.x += point_cache[c_ind0];
+        result.y += point_cache[c_ind1];
+        result.z += point_cache[c_ind2];
+        result.w += point_cache[c_ind3];
+        point_weights_out2[g_ind / 4] = result;
+      }
+    } else {
+      for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
+        MY_SIZE point_ind = i / Dim;
+        MY_SIZE d = i % Dim;
+        MY_SIZE g_ind = index<Dim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+        MY_SIZE c_ind =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
+        DataType result = point_weights_out[g_ind] + point_cache[c_ind];
+        point_weights_out[g_ind] = result;
+      }
     }
   } else {
     for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
