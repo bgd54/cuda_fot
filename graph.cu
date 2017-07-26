@@ -59,12 +59,14 @@ __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
     const std::uint8_t *__restrict__ edge_colours,
-    const std::uint8_t *__restrict__ num_edge_colours, MY_SIZE num_threads,
+    const std::uint8_t *__restrict__ num_edge_colours,
+    const MY_SIZE *__restrict__ block_offsets,
+    const MY_SIZE num_threads,
     const MY_SIZE num_points) {
   static_assert(SOA || PerDataCache,
                 "AOS and not per data cache is currently not supported");
   MY_SIZE bid = blockIdx.x;
-  MY_SIZE thread_ind = bid * blockDim.x + threadIdx.x;
+  MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;
   MY_SIZE tid = threadIdx.x;
 
   MY_SIZE cache_points_offset = points_to_be_cached_offsets[bid];
@@ -89,8 +91,10 @@ __global__ void problem_stepGPUHierarchical(
   extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
   DataType *point_cache = reinterpret_cast<DataType *>(shared);
 
+  MY_SIZE block_size = block_offsets[bid + 1] - block_offsets[bid];
+
   std::uint8_t our_colour;
-  if (thread_ind >= num_threads) {
+  if (tid >= block_size) {
     our_colour = num_edge_colours[bid];
   } else {
     our_colour = edge_colours[thread_ind];
@@ -127,7 +131,7 @@ __global__ void problem_stepGPUHierarchical(
   DataType increment[Dim * 2];
   MY_SIZE edge_list_left;
   MY_SIZE edge_list_right;
-  if (thread_ind < num_threads) {
+  if (tid < block_size) {
     edge_list_left = edge_list[index<2,true>(num_threads,thread_ind,0)];
     edge_list_right = edge_list[index<2,true>(num_threads,thread_ind,1)];
     for (MY_SIZE d = 0; d < Dim; ++d) {
@@ -370,6 +374,18 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       // + 32 in case it needs to avoid shared mem bank collisions
       MY_SIZE cache_size =
           sizeof(DataType) * (d_memory[colour_ind].shared_size + 32) * Dim;
+      data_t<MY_SIZE,1> d_block_offsets (num_blocks + 1);
+      d_block_offsets[0] = 0;
+      for (MY_SIZE i = 0; i < num_blocks - 1; ++i) {
+        d_block_offsets[i+1] = d_block_offsets[i] + block_size;
+      }
+      assert(num_blocks > 0);
+      d_block_offsets[num_blocks] =
+          d_block_offsets[num_blocks - 1] + (num_threads % block_size == 0 ?
+              block_size : num_threads % block_size);
+      assert(d_block_offsets[num_blocks]
+          == memory.colours[colour_ind].edge_colours.size());
+      d_block_offsets.initDeviceMemory();
       problem_stepGPUHierarchical<Dim, SOA, !SOA, true, DataType>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
@@ -381,7 +397,8 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
               static_cast<std::uint8_t *>(d_memory[colour_ind].edge_colours),
               static_cast<std::uint8_t *>(
                   d_memory[colour_ind].num_edge_colours),
-              num_threads, graph.numPoints());
+              d_block_offsets.getDeviceData(), num_threads,
+              graph.numPoints());
       checkCudaErrors(cudaDeviceSynchronize());
     }
     TIMER_TOGGLE(t);
@@ -422,8 +439,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   std::cout << "  average cache_line / block: "
             << static_cast<double>(total_num_cache_lines) / total_num_blocks
             << std::endl;
-  avg_num_edge_colours /=
-      std::ceil(static_cast<double>(graph.numEdges()) / block_size);
+  avg_num_edge_colours /= total_num_blocks;
   std::cout << "  average number of colours used: " << avg_num_edge_colours
             << std::endl;
   // ---------------
