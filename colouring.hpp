@@ -136,8 +136,8 @@ private:
     colourEdges(to - from, colour, c_edge_list, points_to_be_cached.size());
     const MY_SIZE colour_to = colour.edge_colours.size();
     sortEdgesByColours(colour_from, colour_to, colour_ind);
-    permuteCachedPoints(points_to_be_cached, colour_from, colour_to,
-                        colour_ind);
+    //permuteCachedPoints(points_to_be_cached, colour_from, colour_to,
+                        //colour_ind);
     colour.points_to_be_cached.insert(colour.points_to_be_cached.end(),
                                       points_to_be_cached.begin(),
                                       points_to_be_cached.end());
@@ -226,7 +226,6 @@ private:
   void edgeListSOA() {
     for (MemoryOfOneColour &memory : colours) {
       AOStoSOA<2>(memory.edge_list);
-      std::cout << memory.edge_list[0] << std::endl;
     }
   }
 
