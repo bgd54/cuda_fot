@@ -64,6 +64,8 @@ __global__ void problem_stepGPUHierarchical(
 
   const float4 *__restrict__ point_weights2 = reinterpret_cast<const float4*>(point_weights);
   float4 *__restrict__ point_weights_out2 = reinterpret_cast<float4*>(point_weights_out);
+  const double2 *__restrict__ point_weights3 = reinterpret_cast<const double2*>(point_weights);
+  double2 *__restrict__ point_weights_out3 = reinterpret_cast<double2 *>(point_weights_out);
 
 
   static_assert(SOA || PerDataCache,
@@ -103,7 +105,7 @@ __global__ void problem_stepGPUHierarchical(
 
   // Cache in
   if (PerDataCache) {
-    if (!SOA && Dim % 4 == 0 && std::is_same<DataType,float>::value) {
+    if (!SOA && Dim % 4 == 0 && std::is_same<DataType, float>::value) {
       for (MY_SIZE i = tid; i < Dim * num_cached_points / 4; i += blockDim.x) {
         MY_SIZE point_ind = i * 4 / Dim;
         MY_SIZE d = (i * 4) % Dim;
@@ -122,6 +124,20 @@ __global__ void problem_stepGPUHierarchical(
         point_cache[c_ind1] = tmp.y;
         point_cache[c_ind2] = tmp.z;
         point_cache[c_ind3] = tmp.w;
+      }
+    } else if (!SOA && Dim % 2 == 0 && std::is_same<DataType, double>::value) {
+      for (MY_SIZE i = tid; i < Dim * num_cached_points / 2; i += blockDim.x) {
+        MY_SIZE point_ind = i * 2 / Dim;
+        MY_SIZE d = (i * 2) % Dim;
+        MY_SIZE g_ind = index<Dim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+        MY_SIZE c_ind0 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 0);
+        MY_SIZE c_ind1 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 1);
+        double2 tmp = point_weights3[g_ind / 2];
+        point_cache[c_ind0] = tmp.x;
+        point_cache[c_ind1] = tmp.y;
       }
     } else {
       for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
@@ -195,7 +211,7 @@ __global__ void problem_stepGPUHierarchical(
 
   // Cache out
   if (PerDataCache) {
-    if (!SOA && Dim % 4 == 0) {
+    if (!SOA && Dim % 4 == 0 && std::is_same<DataType, float>::value) {
       for (MY_SIZE i = tid; i < Dim * num_cached_points / 4; i += blockDim.x) {
         MY_SIZE point_ind = i * 4 / Dim;
         MY_SIZE d = (i * 4) % Dim;
@@ -215,6 +231,21 @@ __global__ void problem_stepGPUHierarchical(
         result.z += point_cache[c_ind2];
         result.w += point_cache[c_ind3];
         point_weights_out2[g_ind / 4] = result;
+      }
+    } else if (!SOA && Dim % 2 == 0 && std::is_same<DataType, double>::value) {
+      for (MY_SIZE i = tid; i < Dim * num_cached_points / 2; i += blockDim.x) {
+        MY_SIZE point_ind = i * 2 / Dim;
+        MY_SIZE d = (i * 2) % Dim;
+        MY_SIZE g_ind = index<Dim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind], d);
+        MY_SIZE c_ind0 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 0);
+        MY_SIZE c_ind1 =
+            index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d + 1);
+        double2 result = point_weights_out3[g_ind / 2];
+        result.x += point_cache[c_ind0];
+        result.y += point_cache[c_ind1];
+        point_weights_out3[g_ind / 2] = result;
       }
     } else {
       for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
