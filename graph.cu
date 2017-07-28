@@ -319,8 +319,7 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
                              sizeof(DataType) * graph.numEdges(),
                              cudaMemcpyHostToDevice));
   graph.edge_to_node.initDeviceMemory();
-  // Timer t;
-  TIMER_START(t);
+  CUDA_TIMER_START(t);
   for (MY_SIZE i = 0; i < num; ++i) {
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
       problem_stepGPU<Dim, SOA><<<num_blocks, block_size>>>(
@@ -439,7 +438,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   // -----------------------
   // -  Start computation  -
   // -----------------------
-  TIMER_START(t);
+  CUDA_TIMER_START(t);
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
