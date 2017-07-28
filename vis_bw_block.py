@@ -40,7 +40,7 @@ def plot_block_versions(bw, names, offset=1):
         if i > 0:
             plt.plot(bw[offset,0,:,ind,1])
             ind += 1
-        if i > 2:
+        if i > 1:
             plt.plot(bw[offset,0,:,ind,1])
             ind += 1
         ind = start
@@ -53,7 +53,7 @@ def plot_block_versions(bw, names, offset=1):
         if i > 0:
             plt.plot(bw[offset,1,:,ind,1],':')
             ind += 1
-        if i > 2:
+        if i > 1:
             plt.plot(bw[offset,1,:,ind,1],':')
             ind += 1
         legend_text = [a + ' - ' + b\
