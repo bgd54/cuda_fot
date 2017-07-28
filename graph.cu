@@ -542,7 +542,7 @@ void generateTimes(std::string in_file) {
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
 void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
                                 std::pair<MY_SIZE, MY_SIZE> block_dims) {
-  constexpr MY_SIZE num = 0;
+  constexpr MY_SIZE num = 500;
   MY_SIZE block_size = block_dims.first == 0
                            ? block_dims.second
                            : block_dims.first * block_dims.second * 2;
@@ -578,6 +578,7 @@ void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
   generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 72});
   generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 36});
   generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {12, 12});
+  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {9, 8});
   generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 512});
   generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 128});
   generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 64});
