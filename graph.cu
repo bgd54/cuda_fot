@@ -438,7 +438,10 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   // -----------------------
   // -  Start computation  -
   // -----------------------
-  CUDA_TIMER_START(t);
+  CUDA_TIMER_START(timer_calc);
+  TIMER_TOGGLE(timer_calc);
+  CUDA_TIMER_START(timer_copy);
+  TIMER_TOGGLE(timer_copy);
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
@@ -450,6 +453,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       // + 32 in case it needs to avoid shared mem bank collisions
       MY_SIZE cache_size =
           sizeof(DataType) * (d_memory[colour_ind].shared_size + 32) * Dim;
+      TIMER_TOGGLE(timer_calc);
       problem_stepGPUHierarchical<Dim, SOA, !SOA, true, DataType>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
@@ -462,12 +466,14 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
               static_cast<std::uint8_t *>(
                   d_memory[colour_ind].num_edge_colours),
               num_threads, graph.numPoints());
+      TIMER_TOGGLE(timer_calc);
       checkCudaErrors(cudaDeviceSynchronize());
     }
-    TIMER_TOGGLE(t);
+    TIMER_TOGGLE(timer_copy);
     checkCudaErrors(cudaMemcpy(
         point_weights.getDeviceData(), point_weights_out.getDeviceData(),
         sizeof(DataType) * graph.numPoints() * Dim, cudaMemcpyDeviceToDevice));
+    TIMER_TOGGLE(timer_copy);
     if (reset_every && iteration % reset_every == reset_every - 1) {
       reset();
       point_weights.flushToDevice();
@@ -475,10 +481,9 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                 point_weights_out.begin());
       point_weights_out.flushToDevice();
     }
-    TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
-      t, "GPU HierarchicalColouring",
+      timer_calc, "GPU HierarchicalColouring",
       num * ((2.0 * Dim * graph.numPoints() + graph.numEdges()) *
                  sizeof(DataType) +
              2.0 * graph.numEdges() * sizeof(MY_SIZE)),
@@ -491,6 +496,9 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                   memory.colours.size()) + // points_to_be_cached_offsets
              sizeof(std::uint8_t) * graph.numEdges() // edge_colours
              ));
+  PRINT_BANDWIDTH(timer_copy, " -copy",
+      num * sizeof(DataType) * Dim * graph.numPoints(),
+      num * sizeof(DataType) * Dim * graph.numPoints());
   std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
