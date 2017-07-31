@@ -497,8 +497,8 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
              sizeof(std::uint8_t) * graph.numEdges() // edge_colours
              ));
   PRINT_BANDWIDTH(timer_copy, " -copy",
-      num * sizeof(DataType) * Dim * graph.numPoints(),
-      num * sizeof(DataType) * Dim * graph.numPoints());
+      2.0 * num * sizeof(DataType) * Dim * graph.numPoints(),
+      2.0 * num * sizeof(DataType) * Dim * graph.numPoints());
   std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
