@@ -207,7 +207,7 @@ public:
     assert((N - 1) % block_h == 0);
     assert((M - 1) % block_w == 0);
     if (block_h == 9 && block_w == 8) {
-      fillEdgeList9x8(N,M);
+      fillEdgeList9x8(N, M);
       return;
     }
     MY_SIZE ind = 0;
@@ -379,7 +379,7 @@ public:
             edge_to_node[ind++] = point_cur;
             edge_to_node[ind++] = point_right;
 
-            if (point_coordinates.getSize() > 0){
+            if (point_coordinates.getSize() > 0) {
               point_coordinates[point_cur * 3 + 0] = i * block_h + k;
               point_coordinates[point_cur * 3 + 1] = j * block_w + l;
               point_coordinates[point_cur * 3 + 2] = 0;
@@ -484,7 +484,7 @@ public:
     }
   }
 
-  template <typename DataType = float, unsigned DataDim = 0, bool SOA = false>
+  template <typename DataType = float, unsigned DataDim = 1, bool SOA = false>
   void reorderScotch(DataType *edge_data = nullptr,
                      data_t<DataType, DataDim> *point_data = nullptr) {
     ScotchReorder reorder(*this);
@@ -500,7 +500,7 @@ public:
    * length `numEdges()` and `numPoints()`, respectively.
    */
   template <typename UnsignedType, typename DataType = float,
-            unsigned DataDim = 0, bool SOA = false>
+            unsigned DataDim = 1, bool SOA = false>
   void reorder(const std::vector<UnsignedType> &point_permutation,
                DataType *edge_data = nullptr,
                data_t<DataType, DataDim> *point_data = nullptr) {
