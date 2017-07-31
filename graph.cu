@@ -12,6 +12,24 @@
 #include "problem.hpp"
 #include "tests.hpp"
 
+__global__ void copyKernel (const float *__restrict__ a, float *__restrict__ b, MY_SIZE size) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  const float4 *__restrict__ a_ = reinterpret_cast<const float4*>(a);
+  float4 *__restrict__ b_ = reinterpret_cast<float4*>(b);
+  if (tid * 4 < size) {
+    b_[tid] = a_[tid];
+  }
+}
+
+__global__ void copyKernel (const double *__restrict__ a, double *__restrict__ b, MY_SIZE size) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  const double2 *__restrict__ a_ = reinterpret_cast<const double2*>(a);
+  double2 *__restrict__ b_ = reinterpret_cast<double2*>(b);
+  if (tid * 2 < size) {
+    b_[tid] = a_[tid];
+  }
+}
+
 /* problem_stepGPU {{{1 */
 template <unsigned Dim = 1, bool SOA = false, typename DataType>
 __global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
@@ -469,10 +487,10 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       TIMER_TOGGLE(timer_calc);
       checkCudaErrors(cudaDeviceSynchronize());
     }
+    MY_SIZE copy_size = graph.numPoints() * Dim;
     TIMER_TOGGLE(timer_copy);
-    checkCudaErrors(cudaMemcpy(
-        point_weights.getDeviceData(), point_weights_out.getDeviceData(),
-        sizeof(DataType) * graph.numPoints() * Dim, cudaMemcpyDeviceToDevice));
+    copyKernel<<<copy_size / 512, 512>>>(point_weights_out.getDeviceData(),
+        point_weights.getDeviceData(), copy_size);
     TIMER_TOGGLE(timer_copy);
     if (reset_every && iteration % reset_every == reset_every - 1) {
       reset();
