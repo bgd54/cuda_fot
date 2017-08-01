@@ -24,29 +24,14 @@ struct Problem {
   Problem(MY_SIZE N, MY_SIZE M,
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
-      : graph(std::vector<MY_SIZE>{N, M}, block_dims, use_coordinates),
-        point_weights(N * M),
-        block_size{block_dims.first == 0
-                       ? block_dims.second
-                       : (block_dims.first == 9 && block_dims.second == 8
-                             ? 9 * 8 * 2 * 2
-                             : block_dims.first * block_dims.second * 2)} {
-    edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
-    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
-      edge_weights[i] *= 0.001;
-    }
-    reset();
-  }
-  // TODO unify constructors! add weight calc!
+      : Problem({N, M}, block_dims, use_coordinates) {}
+
   Problem(const std::vector<MY_SIZE> &grid_dim,
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
       : graph(grid_dim, block_dims, use_coordinates),
-        point_weights(graph.numPoints()), block_size{block_dims.first == 0
-                                                 ? block_dims.second
-                                                 : block_dims.first *
-                                                       block_dims.second * 2} {
+        point_weights(graph.numPoints()), block_size{
+                                              calculateBlockSize(block_dims)} {
     edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
@@ -175,6 +160,16 @@ struct Problem {
 
   void reorder() {
     graph.reorderScotch<DataType, Dim, SOA>(edge_weights, &point_weights);
+  }
+
+  static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
+    if (block_dims.first == 0) {
+      return block_dims.second;
+    } else if (block_dims == {9, 8}) {
+      return 9 * 8 * 2 * 2;
+    } else {
+      return block_dims.first * block_dims.second * 2;
+    }
   }
 };
 
