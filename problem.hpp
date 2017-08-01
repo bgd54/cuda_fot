@@ -43,7 +43,7 @@ struct Problem {
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
       : graph(grid_dim, block_dims, use_coordinates),
-        point_weights(4 * 4 * 4), block_size{block_dims.first == 0
+        point_weights(graph.numPoints()), block_size{block_dims.first == 0
                                                  ? block_dims.second
                                                  : block_dims.first *
                                                        block_dims.second * 2} {
