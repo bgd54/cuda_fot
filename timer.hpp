@@ -15,7 +15,7 @@
 #define TIMER_TOGGLE(t) t.toggle()
 #define PRINT_BANDWIDTH(t, pre, data, tot_data)                                \
   do {                                                                         \
-    long long time = t.getTime();                                              \
+    auto time = t.getTime();                                                   \
     std::cout << pre << ":" << std::endl                                       \
               << "  time:             " << time << " ms\n"                     \
               << "  useful bandwidth: "                                        \
@@ -24,6 +24,7 @@
               << static_cast<double>(tot_data) / time * 1000.0 << "B/s"        \
               << std::endl;                                                    \
   } while (0)
+#define CUDA_TIMER_START(t) CudaTimer t
 
 #else // don't use timer
 
@@ -31,9 +32,11 @@
 #define TIMER_PRINT(t, pre)
 #define TIMER_TOGGLE(t)
 #define PRINT_BANDWIDTH(t, pre, data)
+#define CUDA_TIMER_START(t)
 
 #endif
 
+#include "helper_cuda.h"
 #include <chrono>
 #include <iostream>
 
@@ -61,6 +64,40 @@ public:
       std::chrono::high_resolution_clock::time_point now =
           std::chrono::high_resolution_clock::now();
       start += now - paused_time;
+    }
+    paused = !paused;
+  }
+};
+
+class CudaTimer {
+  cudaEvent_t start, stop;
+  float time = 0;
+  bool paused = false;
+
+public:
+  CudaTimer() {
+    checkCudaErrors(cudaEventCreate(&start));
+    checkCudaErrors(cudaEventCreate(&stop));
+    checkCudaErrors(cudaEventRecord(start));
+  }
+
+  float getTimeLastBatch() const {
+    checkCudaErrors(cudaEventRecord(stop));
+    checkCudaErrors(cudaEventSynchronize(stop));
+    float milliseconds = 0;
+    checkCudaErrors(cudaEventElapsedTime(&milliseconds, start, stop));
+    return milliseconds;
+  }
+
+  float getTime() const { return getTimeLastBatch() + time; }
+
+  void printTime() const { std::cout << getTime() << " ms"; }
+
+  void toggle() {
+    if (!paused) {
+      time += getTimeLastBatch();
+    } else {
+      checkCudaErrors(cudaEventRecord(start));
     }
     paused = !paused;
   }

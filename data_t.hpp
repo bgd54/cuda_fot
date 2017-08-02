@@ -1,6 +1,7 @@
 #ifndef DATA_T_HPP
 #define DATA_T_HPP
 #include "helper_cuda.h"
+#include <array>
 #include <cassert>
 #include <cuda.h>
 #include <vector>
@@ -195,32 +196,77 @@ void reorderData(data_t<T, Dim> &point_data,
   }
 }
 
+/**
+ * Reorders data using the inverse of the permutation given
+ */
+template <unsigned Dim, bool SOA, typename T, typename UnsignedType>
+void reorderDataInverse(data_t<T, Dim> &point_data,
+                        const std::vector<UnsignedType> &permutation) {
+  std::vector<T> old_data(point_data.begin(), point_data.end());
+  for (MY_SIZE i = 0; i < point_data.getSize(); ++i) {
+    for (MY_SIZE d = 0; d < Dim; ++d) {
+      MY_SIZE old_ind =
+          index<Dim, SOA>(point_data.getSize(), permutation[i], d);
+      MY_SIZE new_ind = index<Dim, SOA>(point_data.getSize(), i, d);
+      point_data[new_ind] = old_data[old_ind];
+    }
+  }
+}
+
+/**
+ * Reorders data using the inverse of the permutation given
+ * Specialised for SOA structures, where the reordering is only on part of the
+ * container (so the data corresponding to the different dimensions are not next
+ * to each other)
+ */
+template <unsigned Dim, typename T, typename UnsignedType>
+void reorderDataInverseVectorSOA(
+    std::array<typename std::vector<T>::iterator, Dim> point_data_begin,
+    typename std::vector<T>::iterator point_data_end_first,
+    const std::vector<UnsignedType> &permutation) {
+  static_assert(Dim >= 1, "reorderDataInverseVectorSOA called with Dim < 1");
+  MY_SIZE size = std::distance(point_data_begin[0], point_data_end_first);
+  std::vector<T> old_data(Dim * size);
+  typename std::vector<T>::iterator it = old_data.begin();
+  for (typename std::vector<T>::iterator ii : point_data_begin) {
+    typename std::vector<T>::iterator end = std::next(ii, size);
+    std::copy(ii, end, it);
+    std::advance(it, size);
+  }
+  for (MY_SIZE i = 0; i < size; ++i) {
+    for (MY_SIZE d = 0; d < Dim; ++d) {
+      MY_SIZE old_ind = index<Dim, true>(size, permutation[i], d);
+      *point_data_begin[d]++ = old_data[old_ind];
+    }
+  }
+}
+
 template <unsigned Dim, class Iterator>
 inline void AOStoSOA(Iterator begin, Iterator end) {
-  MY_SIZE size = std::distance(begin,end);
+  MY_SIZE size = std::distance(begin, end);
   assert(size % Dim == 0);
   MY_SIZE num_data = size / Dim;
   using DataType = typename std::iterator_traits<Iterator>::value_type;
-  data_t<DataType, Dim> tmp (num_data);
+  data_t<DataType, Dim> tmp(num_data);
   Iterator cur = begin;
   for (MY_SIZE i = 0; i < num_data; ++i) {
     for (MY_SIZE d = 0; d < Dim; ++d) {
-      bool b = index<Dim,false>(num_data,i,d) == std::distance(begin,cur);
+      bool b = index<Dim, false>(num_data, i, d) == std::distance(begin, cur);
       assert(b);
       tmp[index<Dim, true>(num_data, i, d)] = *cur++;
     }
   }
-  std::copy(tmp.begin(),tmp.end(),begin);
+  std::copy(tmp.begin(), tmp.end(), begin);
 }
 
-template<unsigned Dim, class T>
+template <unsigned Dim, class T>
 inline void AOStoSOA(std::vector<T> &container) {
   AOStoSOA<Dim>(container.begin(), container.end());
 }
 
-template<unsigned Dim, class T>
-inline void AOStoSOA(data_t<T,Dim> &container) {
-  AOStoSOA<Dim>(container.begin(),container.end());
+template <unsigned Dim, class T>
+inline void AOStoSOA(data_t<T, Dim> &container) {
+  AOStoSOA<Dim>(container.begin(), container.end());
 }
 
 #endif /* end of guard DATA_T_HPP */

@@ -1,21 +1,24 @@
 #ifndef TESTS_HPP_HHJ8IWSK
 #define TESTS_HPP_HHJ8IWSK
 
-#include <iostream>
 #include "problem.hpp"
+#include <iostream>
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType = float>
 using implementation_algorithm_t =
-    void (Problem<Dim, SOA, DataType>::*)(MY_SIZE, MY_SIZE);
+    void (Problem<PointDim, EdgeDim, SOA, DataType>::*)(MY_SIZE, MY_SIZE);
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType = float>
 void testTwoImplementations(
     MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
-    implementation_algorithm_t<Dim, SOA, DataType> algorithm1,
-    implementation_algorithm_t<Dim, SOA, DataType> algorithm2) {
+    implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType> algorithm1,
+    implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType> algorithm2) {
   std::cout << "========================================" << std::endl;
   std::cout << "Two implementation test" << std::endl;
-  std::cout << "Dim: " << Dim << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
+  std::cout << "PointDim: " << PointDim << ", EdgeDim: " << EdgeDim;
+  std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
   std::cout << " reset: " << reset_every << std::endl;
@@ -28,13 +31,13 @@ void testTwoImplementations(
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<Dim, SOA, DataType> problem(N, M);
-    result1.resize(problem.graph.numPoints() * Dim);
+    Problem<PointDim, EdgeDim, SOA, DataType> problem(N, M);
+    result1.resize(problem.graph.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<PointDim, SOA>(problem.graph.numPoints(), i, d);
         result1[ind] = problem.point_weights[ind];
       }
     }
@@ -44,11 +47,11 @@ void testTwoImplementations(
 
     DataType abs_max = 0;
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      MY_SIZE value_changed = Dim;
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+      MY_SIZE value_changed = PointDim;
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<PointDim, SOA>(problem.graph.numPoints(), i, d);
         if (result1[ind] == problem.point_weights[ind]) {
-          if (value_changed == Dim)
+          if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
@@ -59,7 +62,7 @@ void testTwoImplementations(
           dim_max = d;
         }
       }
-      if (value_changed != Dim && value_changed != 0) {
+      if (value_changed != PointDim && value_changed != 0) {
         single_change_in_node = true;
       }
     }
@@ -81,13 +84,13 @@ void testTwoImplementations(
   single_change_in_node = false;
   {
     srand(1);
-    Problem<Dim, SOA, DataType> problem(N, M);
-    result2.resize(problem.graph.numPoints() * Dim);
+    Problem<PointDim, EdgeDim, SOA, DataType> problem(N, M);
+    result2.resize(problem.graph.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<PointDim, SOA>(problem.graph.numPoints(), i, d);
         result2[ind] = problem.point_weights[ind];
       }
     }
@@ -96,11 +99,11 @@ void testTwoImplementations(
     DataType abs_max = 0;
 
     for (MY_SIZE i = 0; i < problem.graph.numPoints(); ++i) {
-      MY_SIZE value_changed = Dim;
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE ind = index<Dim, SOA>(problem.graph.numPoints(), i, d);
+      MY_SIZE value_changed = PointDim;
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<PointDim, SOA>(problem.graph.numPoints(), i, d);
         if (result2[ind] == problem.point_weights[ind]) {
-          if (value_changed == Dim)
+          if (value_changed == PointDim)
             not_changed2.push_back(i);
           value_changed--;
         }
@@ -118,7 +121,7 @@ void testTwoImplementations(
           dim_max = d;
         }
       }
-      if (value_changed != Dim && value_changed != 0) {
+      if (value_changed != PointDim && value_changed != 0) {
         std::cout << std::endl;
         single_change_in_node = true;
       }
@@ -137,7 +140,7 @@ void testTwoImplementations(
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
               << " dim: " << dim_diff << std::endl;
     MY_SIZE ind =
-        index<Dim, SOA>(problem.graph.numPoints(), ind_diff, dim_diff);
+        index<PointDim, SOA>(problem.graph.numPoints(), ind_diff, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
@@ -184,6 +187,5 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
     std::cout << "RMS: " << rms << std::endl;
   }
 }
-
 
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */

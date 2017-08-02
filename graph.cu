@@ -12,45 +12,75 @@
 #include "problem.hpp"
 #include "tests.hpp"
 
+/* copyKernels {{{1 */
+__global__ void copyKernel(const float *__restrict__ a, float *__restrict__ b,
+                           MY_SIZE size) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  const float4 *__restrict__ a_ = reinterpret_cast<const float4 *>(a);
+  float4 *__restrict__ b_ = reinterpret_cast<float4 *>(b);
+  if (tid * 4 < size) {
+    b_[tid] = a_[tid];
+  }
+}
+
+__global__ void copyKernel(const double *__restrict__ a, double *__restrict__ b,
+                           MY_SIZE size) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  const double2 *__restrict__ a_ = reinterpret_cast<const double2 *>(a);
+  double2 *__restrict__ b_ = reinterpret_cast<double2 *>(b);
+  if (tid * 2 < size) {
+    b_[tid] = a_[tid];
+  }
+}
+/* 1}}} */
+
 /* problem_stepGPU {{{1 */
-template <unsigned Dim = 1, bool SOA = false, typename DataType>
-__global__ void problem_stepGPU(const DataType *__restrict__ point_weights,
-                                const DataType *__restrict__ edge_weights,
-                                const MY_SIZE *__restrict__ edge_list,
-                                const MY_SIZE *__restrict__ edge_inds,
-                                DataType *__restrict__ out,
-                                const MY_SIZE edge_num,
-                                const MY_SIZE num_points) {
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType>
+__global__ void
+problem_stepGPU(const DataType *__restrict__ point_weights,
+                const DataType *__restrict__ edge_weights,
+                const MY_SIZE *__restrict__ edge_list,
+                const MY_SIZE *__restrict__ edge_inds,
+                DataType *__restrict__ out, const MY_SIZE edge_num_in_partition,
+                const MY_SIZE num_points, const MY_SIZE num_edges) {
+  static_assert(
+      EdgeDim == PointDim || EdgeDim == 1,
+      "I know of no reason why EdgeDim should be anything but 1 or PointDim");
+
   MY_SIZE id = blockIdx.x * blockDim.x + threadIdx.x;
-  DataType inc[2 * Dim];
-  if (id < edge_num) {
-    MY_SIZE edge_ind = edge_inds[id];
-    MY_SIZE edge_list_left = edge_list[2 * edge_ind];
-    MY_SIZE edge_list_right = edge_list[2 * edge_ind + 1];
+  DataType inc[2 * PointDim];
+  if (id < edge_num_in_partition) {
+    MY_SIZE edge_ind_base = edge_inds[id];
+    MY_SIZE edge_list_left = edge_list[2 * edge_ind_base];
+    MY_SIZE edge_list_right = edge_list[2 * edge_ind_base + 1];
     #pragma unroll
-    for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE ind_left = index<Dim, SOA>(num_points, edge_list_left, d);
-      MY_SIZE ind_right = index<Dim, SOA>(num_points, edge_list_right, d);
+    for (MY_SIZE d = 0; d < PointDim; ++d) {
+      MY_SIZE ind_left = index<PointDim, SOA>(num_points, edge_list_left, d);
+      MY_SIZE ind_right = index<PointDim, SOA>(num_points, edge_list_right, d);
+      MY_SIZE edge_d = EdgeDim == 1 ? 0 : d;
+      MY_SIZE edge_ind = index<EdgeDim, true>(num_edges, edge_ind_base, edge_d);
       inc[d] =
           out[ind_right] + edge_weights[edge_ind] * point_weights[ind_left];
-      inc[d + Dim] =
+      inc[d + PointDim] =
           out[ind_left] + edge_weights[edge_ind] * point_weights[ind_right];
     }
     #pragma unroll
-    for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE ind_left = index<Dim, SOA>(num_points, edge_list_left, d);
-      MY_SIZE ind_right = index<Dim, SOA>(num_points, edge_list_right, d);
+    for (MY_SIZE d = 0; d < PointDim; ++d) {
+      MY_SIZE ind_left = index<PointDim, SOA>(num_points, edge_list_left, d);
+      MY_SIZE ind_right = index<PointDim, SOA>(num_points, edge_list_right, d);
 
       out[ind_right] = inc[d];
-      out[ind_left] = inc[d + Dim];
+      out[ind_left] = inc[d + PointDim];
     }
   }
 }
 /* 1}}} */
 
 /* problem_stepGPUHierarchical {{{1 */
-template <unsigned Dim = 1, bool SOA = false, bool PerDataCache = false,
-          bool SOAInShared = true, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          bool PerDataCache = false, bool SOAInShared = true,
+          typename DataType = float>
 __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ edge_list,
     const DataType *__restrict__ point_weights,
@@ -63,6 +93,19 @@ __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ block_offsets,
     const MY_SIZE num_threads,
     const MY_SIZE num_points) {
+  static_assert(
+      EdgeDim == PointDim || EdgeDim == 1,
+      "I know of no reason why EdgeDim should be anything but 1 or PointDim");
+
+  const float4 *__restrict__ point_weights2 =
+      reinterpret_cast<const float4 *>(point_weights);
+  float4 *__restrict__ point_weights_out2 =
+      reinterpret_cast<float4 *>(point_weights_out);
+  const double2 *__restrict__ point_weights3 =
+      reinterpret_cast<const double2 *>(point_weights);
+  double2 *__restrict__ point_weights_out3 =
+      reinterpret_cast<double2 *>(point_weights_out);
+
   static_assert(SOA || PerDataCache,
                 "AOS and not per data cache is currently not supported");
   MY_SIZE bid = blockIdx.x;
@@ -74,14 +117,16 @@ __global__ void problem_stepGPUHierarchical(
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
   MY_SIZE shared_num_cached_points;
   if (SOAInShared) {
-    assert(32 % Dim == 0);
-    MY_SIZE needed_offset = 32 / Dim;
+    static_assert(32 % PointDim == 0, "Currently, shared memory bank conflict "
+                                      "avoidance works only if 32 is divisible "
+                                      "by PointDim");
+    MY_SIZE needed_offset = 32 / PointDim;
     if (num_cached_points % 32 <= needed_offset) {
       shared_num_cached_points =
-        num_cached_points - (num_cached_points % 32) + needed_offset;
+          num_cached_points - (num_cached_points % 32) + needed_offset;
     } else {
       shared_num_cached_points =
-        num_cached_points - (num_cached_points % 32) + 32 + needed_offset;
+          num_cached_points - (num_cached_points % 32) + 32 + needed_offset;
     }
     assert(shared_num_cached_points >= num_cached_points);
   } else {
@@ -102,23 +147,65 @@ __global__ void problem_stepGPUHierarchical(
 
   // Cache in
   if (PerDataCache) {
-    for (MY_SIZE i = tid; i < Dim * num_cached_points; i += blockDim.x) {
-      MY_SIZE point_ind = i / Dim;
-      MY_SIZE d = i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(
-          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind =
-          index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
-      point_cache[c_ind] = point_weights[g_ind];
+    if (!SOA && PointDim % 4 == 0 && std::is_same<DataType, float>::value) {
+      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 4;
+           i += blockDim.x) {
+        MY_SIZE point_ind = i * 4 / PointDim;
+        MY_SIZE d = (i * 4) % PointDim;
+        MY_SIZE g_ind = index<PointDim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind],
+            d);
+        MY_SIZE c_ind0 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 0);
+        MY_SIZE c_ind1 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 1);
+        MY_SIZE c_ind2 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 2);
+        MY_SIZE c_ind3 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 3);
+        float4 tmp = point_weights2[g_ind / 4];
+        point_cache[c_ind0] = tmp.x;
+        point_cache[c_ind1] = tmp.y;
+        point_cache[c_ind2] = tmp.z;
+        point_cache[c_ind3] = tmp.w;
+      }
+    } else if (!SOA && PointDim % 2 == 0 &&
+               std::is_same<DataType, double>::value) {
+      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 2;
+           i += blockDim.x) {
+        MY_SIZE point_ind = i * 2 / PointDim;
+        MY_SIZE d = (i * 2) % PointDim;
+        MY_SIZE g_ind = index<PointDim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind],
+            d);
+        MY_SIZE c_ind0 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 0);
+        MY_SIZE c_ind1 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 1);
+        double2 tmp = point_weights3[g_ind / 2];
+        point_cache[c_ind0] = tmp.x;
+        point_cache[c_ind1] = tmp.y;
+      }
+    } else {
+      for (MY_SIZE i = tid; i < PointDim * num_cached_points; i += blockDim.x) {
+        MY_SIZE point_ind = i / PointDim;
+        MY_SIZE d = i % PointDim;
+        MY_SIZE g_ind = index<PointDim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind],
+            d);
+        MY_SIZE c_ind = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                     point_ind, d);
+        point_cache[c_ind] = point_weights[g_ind];
+      }
     }
   } else {
     for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
       MY_SIZE g_point_to_be_cached =
           points_to_be_cached[cache_points_offset + i];
-      for (MY_SIZE d = 0; d < Dim; ++d) {
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE c_ind, g_ind;
-        g_ind = index<Dim, SOA>(num_points, g_point_to_be_cached, d);
-        c_ind = index<Dim, SOAInShared>(shared_num_cached_points, i, d);
+        g_ind = index<PointDim, SOA>(num_points, g_point_to_be_cached, d);
+        c_ind = index<PointDim, SOAInShared>(shared_num_cached_points, i, d);
 
         point_cache[c_ind] = point_weights[g_ind];
       }
@@ -128,27 +215,30 @@ __global__ void problem_stepGPUHierarchical(
   __syncthreads();
 
   // Computation
-  DataType increment[Dim * 2];
+  DataType increment[PointDim * 2];
   MY_SIZE edge_list_left;
   MY_SIZE edge_list_right;
   if (tid < block_size) {
-    edge_list_left = edge_list[index<2,true>(num_threads,thread_ind,0)];
-    edge_list_right = edge_list[index<2,true>(num_threads,thread_ind,1)];
-    for (MY_SIZE d = 0; d < Dim; ++d) {
-      MY_SIZE left_ind =
-          index<Dim, SOAInShared>(shared_num_cached_points, edge_list_left, d);
-      MY_SIZE right_ind =
-          index<Dim, SOAInShared>(shared_num_cached_points, edge_list_right, d);
+    edge_list_left = edge_list[index<2, true>(num_threads, thread_ind, 0)];
+    edge_list_right = edge_list[index<2, true>(num_threads, thread_ind, 1)];
+    for (MY_SIZE d = 0; d < PointDim; ++d) {
+      MY_SIZE left_ind = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      edge_list_left, d);
+      MY_SIZE right_ind = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                       edge_list_right, d);
+      MY_SIZE edge_d = EdgeDim == 1 ? 0 : d;
+      MY_SIZE edge_ind = index<EdgeDim, true>(num_threads, thread_ind, edge_d);
 
-      increment[d] = point_cache[left_ind] * edge_weights[thread_ind];
-      increment[d + Dim] = point_cache[right_ind] * edge_weights[thread_ind];
+      increment[d] = point_cache[left_ind] * edge_weights[edge_ind];
+      increment[d + PointDim] = point_cache[right_ind] * edge_weights[edge_ind];
     }
   }
 
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = tid; i < shared_num_cached_points * Dim; i += blockDim.x) {
+  for (MY_SIZE i = tid; i < shared_num_cached_points * PointDim;
+       i += blockDim.x) {
     point_cache[i] = 0;
   }
 
@@ -157,14 +247,14 @@ __global__ void problem_stepGPUHierarchical(
   // Accumulate increment
   for (MY_SIZE i = 0; i < num_edge_colours[bid]; ++i) {
     if (our_colour == i) {
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        MY_SIZE left_ind = index<Dim, SOAInShared>(shared_num_cached_points,
-                                                   edge_list_left, d);
-        MY_SIZE right_ind = index<Dim, SOAInShared>(shared_num_cached_points,
-                                                    edge_list_right, d);
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE left_ind = index<PointDim, SOAInShared>(
+            shared_num_cached_points, edge_list_left, d);
+        MY_SIZE right_ind = index<PointDim, SOAInShared>(
+            shared_num_cached_points, edge_list_right, d);
 
         point_cache[right_ind] += increment[d];
-        point_cache[left_ind] += increment[d + Dim];
+        point_cache[left_ind] += increment[d + PointDim];
       }
     }
     __syncthreads();
@@ -172,34 +262,78 @@ __global__ void problem_stepGPUHierarchical(
 
   // Cache out
   if (PerDataCache) {
-    for (MY_SIZE i = tid; i < num_cached_points * Dim; i += blockDim.x) {
-      MY_SIZE point_ind = i / Dim;
-      MY_SIZE d = i % Dim;
-      MY_SIZE g_ind = index<Dim, SOA>(
-          num_points, points_to_be_cached[cache_points_offset + point_ind], d);
-      MY_SIZE c_ind =
-          index<Dim, SOAInShared>(shared_num_cached_points, point_ind, d);
-      DataType result = point_weights_out[g_ind] + point_cache[c_ind];
-      point_weights_out[g_ind] = result;
+    if (!SOA && PointDim % 4 == 0 && std::is_same<DataType, float>::value) {
+      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 4;
+           i += blockDim.x) {
+        MY_SIZE point_ind = i * 4 / PointDim;
+        MY_SIZE d = (i * 4) % PointDim;
+        MY_SIZE g_ind = index<PointDim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind],
+            d);
+        MY_SIZE c_ind0 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 0);
+        MY_SIZE c_ind1 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 1);
+        MY_SIZE c_ind2 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 2);
+        MY_SIZE c_ind3 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 3);
+        float4 result = point_weights_out2[g_ind / 4];
+        result.x += point_cache[c_ind0];
+        result.y += point_cache[c_ind1];
+        result.z += point_cache[c_ind2];
+        result.w += point_cache[c_ind3];
+        point_weights_out2[g_ind / 4] = result;
+      }
+    } else if (!SOA && PointDim % 2 == 0 &&
+               std::is_same<DataType, double>::value) {
+      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 2;
+           i += blockDim.x) {
+        MY_SIZE point_ind = i * 2 / PointDim;
+        MY_SIZE d = (i * 2) % PointDim;
+        MY_SIZE g_ind = index<PointDim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind],
+            d);
+        MY_SIZE c_ind0 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 0);
+        MY_SIZE c_ind1 = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                      point_ind, d + 1);
+        double2 result = point_weights_out3[g_ind / 2];
+        result.x += point_cache[c_ind0];
+        result.y += point_cache[c_ind1];
+        point_weights_out3[g_ind / 2] = result;
+      }
+    } else {
+      for (MY_SIZE i = tid; i < num_cached_points * PointDim; i += blockDim.x) {
+        MY_SIZE point_ind = i / PointDim;
+        MY_SIZE d = i % PointDim;
+        MY_SIZE g_ind = index<PointDim, SOA>(
+            num_points, points_to_be_cached[cache_points_offset + point_ind],
+            d);
+        MY_SIZE c_ind = index<PointDim, SOAInShared>(shared_num_cached_points,
+                                                     point_ind, d);
+        DataType result = point_weights_out[g_ind] + point_cache[c_ind];
+        point_weights_out[g_ind] = result;
+      }
     }
   } else {
     for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
       MY_SIZE g_point_to_be_cached =
           points_to_be_cached[cache_points_offset + i];
-      DataType result[Dim];
+      DataType result[PointDim];
       #pragma unroll
-      for (MY_SIZE d = 0; d < Dim; ++d) {
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE write_g_ind =
-            index<Dim, SOA>(num_points, g_point_to_be_cached, d);
+            index<PointDim, SOA>(num_points, g_point_to_be_cached, d);
         MY_SIZE write_c_ind =
-            index<Dim, SOAInShared>(shared_num_cached_points, i, d);
+            index<PointDim, SOAInShared>(shared_num_cached_points, i, d);
 
         result[d] = point_weights_out[write_g_ind] + point_cache[write_c_ind];
       }
       #pragma unroll
-      for (MY_SIZE d = 0; d < Dim; ++d) {
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE write_g_ind =
-            index<Dim, SOA>(num_points, g_point_to_be_cached, d);
+            index<PointDim, SOA>(num_points, g_point_to_be_cached, d);
         point_weights_out[write_g_ind] = result[d];
       }
     }
@@ -208,9 +342,9 @@ __global__ void problem_stepGPUHierarchical(
 /* 1}}} */
 
 /* loopGPUEdgeCentred {{{1 */
-template <unsigned Dim, bool SOA, typename DataType>
-void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
-                                                     MY_SIZE reset_every) {
+template <unsigned PointDim, unsigned EdgeDim, bool SOA, typename DataType>
+void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred(
+    MY_SIZE num, MY_SIZE reset_every) {
   std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
   MY_SIZE num_of_colours = partition.size();
   assert(num_of_colours > 0);
@@ -222,8 +356,7 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
                                ->size();
   MY_SIZE num_blocks = static_cast<MY_SIZE>(
       std::ceil(double(max_thread_num) / static_cast<double>(block_size)));
-  DataType *d_edge_weights;
-  data_t<DataType, Dim> point_weights2(point_weights.getSize());
+  data_t<DataType, PointDim> point_weights2(point_weights.getSize());
   std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
   std::vector<MY_SIZE *> d_partition;
   for (const std::vector<MY_SIZE> &colour : partition) {
@@ -236,21 +369,16 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
   }
   point_weights.initDeviceMemory();
   point_weights2.initDeviceMemory();
-  checkCudaErrors(cudaMalloc((void **)&d_edge_weights,
-                             sizeof(DataType) * graph.numEdges()));
-  checkCudaErrors(cudaMemcpy(d_edge_weights, edge_weights,
-                             sizeof(DataType) * graph.numEdges(),
-                             cudaMemcpyHostToDevice));
+  edge_weights.initDeviceMemory();
   graph.edge_to_node.initDeviceMemory();
-  // Timer t;
-  TIMER_START(t);
+  CUDA_TIMER_START(t);
   for (MY_SIZE i = 0; i < num; ++i) {
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
-      problem_stepGPU<Dim, SOA><<<num_blocks, block_size>>>(
-          point_weights.getDeviceData(), d_edge_weights,
+      problem_stepGPU<PointDim, EdgeDim, SOA><<<num_blocks, block_size>>>(
+          point_weights.getDeviceData(), edge_weights.getDeviceData(),
           graph.edge_to_node.getDeviceData(), d_partition[c],
           point_weights2.getDeviceData(), partition[c].size(),
-          graph.numPoints());
+          graph.numPoints(), graph.numEdges());
       checkCudaErrors(cudaDeviceSynchronize());
     }
     TIMER_TOGGLE(t);
@@ -262,24 +390,25 @@ void Problem<Dim, SOA, DataType>::loopGPUEdgeCentred(MY_SIZE num,
                 point_weights2.begin());
       point_weights2.flushToDevice();
     }
-    checkCudaErrors(cudaMemcpy(
-        point_weights.getDeviceData(), point_weights2.getDeviceData(),
-        sizeof(DataType) * graph.numPoints() * Dim, cudaMemcpyDeviceToDevice));
+    checkCudaErrors(cudaMemcpy(point_weights.getDeviceData(),
+                               point_weights2.getDeviceData(),
+                               sizeof(DataType) * graph.numPoints() * PointDim,
+                               cudaMemcpyDeviceToDevice));
     TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
       t, "loopGPUEdgeCentred",
-      (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
+      (sizeof(DataType) *
+           (2.0 * PointDim * graph.numPoints() + EdgeDim * graph.numEdges()) +
        2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
           num,
-      (sizeof(DataType) * graph.numPoints() * Dim * 2.0 + // point_weights
-       sizeof(DataType) * graph.numEdges() * 1.0 +        // d_edge_weights
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +         // d_edge_list
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0           // d_partition
+      (sizeof(DataType) * graph.numPoints() * PointDim * 2.0 + // point_weights
+       sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 +   // d_edge_weights
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +              // d_edge_list
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0                // d_partition
        ) * num);
   std::cout << " Needed " << num_of_colours << " colours" << std::endl;
   point_weights.flushToHost();
-  checkCudaErrors(cudaFree(d_edge_weights));
   for (MY_SIZE i = 0; i < num_of_colours; ++i) {
     checkCudaErrors(cudaFree(d_partition[i]));
   }
@@ -318,14 +447,14 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
 }
 
 /* loopGPUHierarchical {{{1 */
-template <unsigned Dim, bool SOA, typename DataType>
-void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
-                                                      MY_SIZE reset_every) {
+template <unsigned PointDim, unsigned EdgeDim, bool SOA, typename DataType>
+void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical(
+    MY_SIZE num, MY_SIZE reset_every) {
   TIMER_START(t_colouring);
-  HierarchicalColourMemory<Dim, SOA, DataType> memory(*this);
+  HierarchicalColourMemory<PointDim, EdgeDim, SOA, DataType> memory(*this);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
-  data_t<DataType, Dim> point_weights_out(point_weights.getSize());
+  data_t<DataType, PointDim> point_weights_out(point_weights.getSize());
   std::copy(point_weights.begin(), point_weights.end(),
             point_weights_out.begin());
   point_weights.initDeviceMemory();
@@ -336,9 +465,9 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   MY_SIZE total_shared_size = 0;
   size_t total_num_cache_lines = 0;
   for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {
-    const typename HierarchicalColourMemory<
-        Dim, SOA, DataType>::MemoryOfOneColour &memory_of_one_colour =
-        memory.colours[i];
+    const typename HierarchicalColourMemory<PointDim, EdgeDim, SOA,
+                                            DataType>::MemoryOfOneColour
+        &memory_of_one_colour = memory.colours[i];
     MY_SIZE num_threads = memory_of_one_colour.edge_list.size() / 2;
     MY_SIZE num_blocks = static_cast<MY_SIZE>(
         std::ceil(static_cast<double>(num_threads) / block_size));
@@ -351,7 +480,7 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
     for (MY_SIZE j = 0;
          j < memory_of_one_colour.points_to_be_cached_offsets.size() - 1; ++j) {
       total_num_cache_lines +=
-          countCacheLinesForBlock<Dim, SOA, DataType,
+          countCacheLinesForBlock<PointDim, SOA, DataType,
                                   std::vector<MY_SIZE>::const_iterator>(
               memory_of_one_colour.points_to_be_cached.begin() +
                   memory_of_one_colour.points_to_be_cached_offsets[j],
@@ -362,7 +491,10 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
   // -----------------------
   // -  Start computation  -
   // -----------------------
-  TIMER_START(t);
+  CUDA_TIMER_START(timer_calc);
+  TIMER_TOGGLE(timer_calc);
+  CUDA_TIMER_START(timer_copy);
+  TIMER_TOGGLE(timer_copy);
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
@@ -371,22 +503,12 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
       MY_SIZE num_blocks = static_cast<MY_SIZE>(
           std::ceil(static_cast<double>(num_threads) / block_size));
       assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
+      assert(num_blocks == memory.colours[colour_ind].block_offsets.size() - 1);
       // + 32 in case it needs to avoid shared mem bank collisions
       MY_SIZE cache_size =
-          sizeof(DataType) * (d_memory[colour_ind].shared_size + 32) * Dim;
-      data_t<MY_SIZE,1> d_block_offsets (num_blocks + 1);
-      d_block_offsets[0] = 0;
-      for (MY_SIZE i = 0; i < num_blocks - 1; ++i) {
-        d_block_offsets[i+1] = d_block_offsets[i] + block_size;
-      }
-      assert(num_blocks > 0);
-      d_block_offsets[num_blocks] =
-          d_block_offsets[num_blocks - 1] + (num_threads % block_size == 0 ?
-              block_size : num_threads % block_size);
-      assert(d_block_offsets[num_blocks]
-          == memory.colours[colour_ind].edge_colours.size());
-      d_block_offsets.initDeviceMemory();
-      problem_stepGPUHierarchical<Dim, SOA, !SOA, true, DataType>
+          sizeof(DataType) * (d_memory[colour_ind].shared_size + 32) * PointDim;
+      TIMER_TOGGLE(timer_calc);
+      problem_stepGPUHierarchical<PointDim, EdgeDim, SOA, !SOA, true, DataType>
           <<<num_blocks, block_size, cache_size>>>(
               static_cast<MY_SIZE *>(d_memory[colour_ind].edge_list),
               point_weights.getDeviceData(), point_weights_out.getDeviceData(),
@@ -397,14 +519,18 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
               static_cast<std::uint8_t *>(d_memory[colour_ind].edge_colours),
               static_cast<std::uint8_t *>(
                   d_memory[colour_ind].num_edge_colours),
-              d_block_offsets.getDeviceData(), num_threads,
-              graph.numPoints());
+              static_cast<MY_SIZE *>(d_memory[colour_ind].block_offsets),
+              num_threads, graph.numPoints());
+      TIMER_TOGGLE(timer_calc);
       checkCudaErrors(cudaDeviceSynchronize());
     }
-    TIMER_TOGGLE(t);
-    checkCudaErrors(cudaMemcpy(
-        point_weights.getDeviceData(), point_weights_out.getDeviceData(),
-        sizeof(DataType) * graph.numPoints() * Dim, cudaMemcpyDeviceToDevice));
+    MY_SIZE copy_size = graph.numPoints() * PointDim;
+    TIMER_TOGGLE(timer_copy);
+    MY_SIZE num_copy_blocks = std::ceil(static_cast<float>(copy_size) / 512.0);
+    copyKernel<<<num_copy_blocks, 512>>>(point_weights_out.getDeviceData(),
+                                         point_weights.getDeviceData(),
+                                         copy_size);
+    TIMER_TOGGLE(timer_copy);
     if (reset_every && iteration % reset_every == reset_every - 1) {
       reset();
       point_weights.flushToDevice();
@@ -412,22 +538,26 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
                 point_weights_out.begin());
       point_weights_out.flushToDevice();
     }
-    TIMER_TOGGLE(t);
   }
   PRINT_BANDWIDTH(
-      t, "GPU HierarchicalColouring",
-      num * ((2.0 * Dim * graph.numPoints() + graph.numEdges()) *
+      timer_calc, "GPU HierarchicalColouring",
+      num * ((2.0 * PointDim * graph.numPoints() + EdgeDim * graph.numEdges()) *
                  sizeof(DataType) +
              2.0 * graph.numEdges() * sizeof(MY_SIZE)),
-      num * (sizeof(DataType) * graph.numPoints() * Dim * 2.0 + // point_weights
-             sizeof(DataType) * graph.numEdges() * 1.0 +        // edge_weights
-             sizeof(MY_SIZE) * graph.numEdges() * 2.0 +         // edge_list
-             sizeof(MY_SIZE) * total_cache_size * 1.0 +
-             sizeof(MY_SIZE) *
-                 (total_num_blocks * 1.0 +
-                  memory.colours.size()) + // points_to_be_cached_offsets
-             sizeof(std::uint8_t) * graph.numEdges() // edge_colours
-             ));
+      num *
+          (sizeof(DataType) * graph.numPoints() * PointDim *
+               2.0 + // point_weights
+           sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 + // edge_weights
+           sizeof(MY_SIZE) * graph.numEdges() * 2.0 +            // edge_list
+           sizeof(MY_SIZE) * total_cache_size * 1.0 +
+           sizeof(MY_SIZE) *
+               (total_num_blocks * 1.0 +
+                memory.colours.size()) + // points_to_be_cached_offsets
+           sizeof(std::uint8_t) * graph.numEdges() // edge_colours
+           ));
+  PRINT_BANDWIDTH(timer_copy, " -copy",
+                  2.0 * num * sizeof(DataType) * PointDim * graph.numPoints(),
+                  2.0 * num * sizeof(DataType) * PointDim * graph.numPoints());
   std::cout << "  reuse factor: "
             << static_cast<double>(total_cache_size) / (2 * graph.numEdges())
             << std::endl;
@@ -449,76 +579,85 @@ void Problem<Dim, SOA, DataType>::loopGPUHierarchical(MY_SIZE num,
 }
 /* 1}}} */
 
-template <unsigned Dim = 1, bool SOA = false, bool RunCPU = true,
-          typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          bool RunCPU = true, typename DataType = float>
 void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
             << "::::" << std::endl
-            << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
-            << "\n     Data type: "
+            << "     Dimension: " << PointDim << " SOA: " << std::boolalpha
+            << SOA << "\n     Data type: "
             << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
-  std::function<void(implementation_algorithm_t<Dim, SOA, DataType>, MY_SIZE)>
-      run = [&in_file](implementation_algorithm_t<Dim, SOA, DataType> algo,
-                       MY_SIZE num) {
+  std::function<void(
+      implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType>, MY_SIZE)>
+      run = [&in_file](
+          implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType> algo,
+          MY_SIZE num) {
         std::ifstream f(in_file);
-        Problem<Dim, SOA, DataType> problem(f);
+        Problem<PointDim, EdgeDim, SOA, DataType> problem(f);
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<Dim, SOA, DataType>::loopCPUEdgeCentred, RunCPU ? num : 1);
-  run(&Problem<Dim, SOA, DataType>::loopCPUEdgeCentredOMP, RunCPU ? num : 1);
-  run(&Problem<Dim, SOA, DataType>::loopGPUEdgeCentred, num);
-  run(&Problem<Dim, SOA, DataType>::loopGPUHierarchical, num);
+  run(&Problem<PointDim, EdgeDim, SOA, DataType>::loopCPUEdgeCentred,
+      RunCPU ? num : 1);
+  run(&Problem<PointDim, EdgeDim, SOA, DataType>::loopCPUEdgeCentredOMP,
+      RunCPU ? num : 1);
+  run(&Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred, num);
+  run(&Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical, num);
   std::cout << "Finished." << std::endl;
 }
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType = float>
 void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
                                 std::pair<MY_SIZE, MY_SIZE> block_dims) {
-  constexpr MY_SIZE num = 0;
+  constexpr MY_SIZE num = 500;
   MY_SIZE block_size = block_dims.first == 0
                            ? block_dims.second
                            : block_dims.first * block_dims.second * 2;
   std::cout << ":::: Generating problems with block size: " << block_dims.first
             << "x" << block_dims.second << " (= " << block_size << ")"
             << "::::" << std::endl
-            << "     Dimension: " << Dim << " SOA: " << std::boolalpha << SOA
-            << "\n     Data type: "
+            << "     Dimension: " << PointDim << " SOA: " << std::boolalpha
+            << SOA << "\n     Data type: "
             << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
-  std::function<void(implementation_algorithm_t<Dim, SOA, DataType>)> run =
-      [&](implementation_algorithm_t<Dim, SOA, DataType> algo) {
-        Problem<Dim, SOA, DataType> problem(N, M, block_dims);
+  std::function<void(
+      implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType>)>
+      run = [&](
+          implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType> algo) {
+        Problem<PointDim, EdgeDim, SOA, DataType> problem(N, M, block_dims);
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<Dim, SOA, DataType>::loopGPUEdgeCentred);
-  run(&Problem<Dim, SOA, DataType>::loopGPUHierarchical);
+  run(&Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred);
+  run(&Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical);
   std::cout << "Finished." << std::endl;
 }
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType = float>
 void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 32});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 8});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 4});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 128});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 32});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 16});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {8, 8});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 288});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 72});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 36});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {12, 12});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {0, 512});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {2, 128});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {4, 64});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {8, 32});
-  generateTimesWithBlockDims<Dim, SOA, DataType>(N, M, {16, 16});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {0, 32});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {2, 8});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {4, 4});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {0, 128});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {2, 32});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {4, 16});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {8, 8});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {0, 288});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {2, 72});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {4, 36});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {12, 12});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {9, 8});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {0, 512});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {2, 128});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {4, 64});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {8, 32});
+  generateTimesWithBlockDims<PointDim, EdgeDim, SOA, DataType>(N, M, {16, 16});
 }
 
 void generateTimesFromFile(int argc, const char **argv) {
@@ -527,23 +666,39 @@ void generateTimesFromFile(int argc, const char **argv) {
     std::exit(1);
   }
   // AOS
-  generateTimes<1, false, false>(argv[1]);
-  generateTimes<4, false, false>(argv[1]);
-  generateTimes<8, false, false>(argv[1]);
-  generateTimes<16, false, false>(argv[1]);
-  generateTimes<1, false, false, double>(argv[1]);
-  generateTimes<4, false, false, double>(argv[1]);
-  generateTimes<8, false, false, double>(argv[1]);
-  generateTimes<16, false, false, double>(argv[1]);
+  generateTimes<1, 1, false, false>(argv[1]);
+  generateTimes<4, 1, false, false>(argv[1]);
+  generateTimes<8, 1, false, false>(argv[1]);
+  generateTimes<16, 1, false, false>(argv[1]);
+  generateTimes<1, 1, false, false>(argv[1]);
+  generateTimes<4, 4, false, false>(argv[1]);
+  generateTimes<8, 8, false, false>(argv[1]);
+  generateTimes<16, 16, false, false>(argv[1]);
+  generateTimes<1, 1, false, false, double>(argv[1]);
+  generateTimes<4, 1, false, false, double>(argv[1]);
+  generateTimes<8, 1, false, false, double>(argv[1]);
+  generateTimes<16, 1, false, false, double>(argv[1]);
+  generateTimes<1, 1, false, false, double>(argv[1]);
+  generateTimes<4, 4, false, false, double>(argv[1]);
+  generateTimes<8, 8, false, false, double>(argv[1]);
+  generateTimes<16, 16, false, false, double>(argv[1]);
   // SOA
-  generateTimes<1, true, false>(argv[1]);
-  generateTimes<4, true, false>(argv[1]);
-  generateTimes<8, true, false>(argv[1]);
-  generateTimes<16, true, false>(argv[1]);
-  generateTimes<1, true, false, double>(argv[1]);
-  generateTimes<4, true, false, double>(argv[1]);
-  generateTimes<8, true, false, double>(argv[1]);
-  generateTimes<16, true, false, double>(argv[1]);
+  generateTimes<1, 1, true, false>(argv[1]);
+  generateTimes<4, 1, true, false>(argv[1]);
+  generateTimes<8, 1, true, false>(argv[1]);
+  generateTimes<16, 1, true, false>(argv[1]);
+  generateTimes<1, 1, true, false>(argv[1]);
+  generateTimes<4, 4, true, false>(argv[1]);
+  generateTimes<8, 8, true, false>(argv[1]);
+  generateTimes<16, 16, true, false>(argv[1]);
+  generateTimes<1, 1, true, false, double>(argv[1]);
+  generateTimes<4, 1, true, false, double>(argv[1]);
+  generateTimes<8, 1, true, false, double>(argv[1]);
+  generateTimes<16, 1, true, false, double>(argv[1]);
+  generateTimes<1, 1, true, false, double>(argv[1]);
+  generateTimes<4, 4, true, false, double>(argv[1]);
+  generateTimes<8, 8, true, false, double>(argv[1]);
+  generateTimes<16, 16, true, false, double>(argv[1]);
 }
 
 void test() {
@@ -551,44 +706,42 @@ void test() {
   MY_SIZE N = 100, M = 200;
   MY_SIZE reset_every = 0;
   constexpr unsigned TEST_DIM = 4;
-  testTwoImplementations<TEST_DIM, false, float>(
+  constexpr unsigned TEST_EDGE_DIM = 4;
+  testTwoImplementations<TEST_DIM, TEST_EDGE_DIM, false, float>(
       num, N, M, reset_every,
-      &Problem<TEST_DIM, false, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, false, float>::loopGPUHierarchical);
-  testTwoImplementations<TEST_DIM, true, float>(
+      &Problem<TEST_DIM, TEST_EDGE_DIM, false, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, TEST_EDGE_DIM, false, float>::loopGPUHierarchical);
+  testTwoImplementations<TEST_DIM, TEST_EDGE_DIM, true, float>(
       num, N, M, reset_every,
-      &Problem<TEST_DIM, true, float>::loopCPUEdgeCentredOMP,
-      &Problem<TEST_DIM, true, float>::loopGPUHierarchical);
+      &Problem<TEST_DIM, TEST_EDGE_DIM, true, float>::loopCPUEdgeCentredOMP,
+      &Problem<TEST_DIM, TEST_EDGE_DIM, true, float>::loopGPUHierarchical);
 }
 
-void generateTimesDifferentBlockDims () {
+void generateTimesDifferentBlockDims() {
   // SOA
-  generateTimesDifferentBlockDims<1, true, float>(1153, 1153);
-  generateTimesDifferentBlockDims<2, true, float>(1153, 1153);
-  generateTimesDifferentBlockDims<4, true, float>(1153, 1153);
-  generateTimesDifferentBlockDims<8, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, true, float>(1153, 1153);
   // AOS
-  generateTimesDifferentBlockDims<1, false, float>(1153, 1153);
-  generateTimesDifferentBlockDims<2, false, float>(1153, 1153);
-  generateTimesDifferentBlockDims<4, false, float>(1153, 1153);
-  generateTimesDifferentBlockDims<8, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, false, float>(1153, 1153);
   // SOA
-  generateTimesDifferentBlockDims<1, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<2, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<4, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<8, true, double>(1153, 1153);
-  // AOS
-  generateTimesDifferentBlockDims<1, false, double>(1153, 1153);
-  generateTimesDifferentBlockDims<2, false, double>(1153, 1153);
-  generateTimesDifferentBlockDims<4, false, double>(1153, 1153);
-  generateTimesDifferentBlockDims<8, false, double>(1153, 1153);
-}
-
-int main(int argc, const char **argv) {
-  /*generateTimesFromFile(argc, argv);*/
-  /*test();*/
-  generateTimesDifferentBlockDims();
-  return 0;
-}
-
-// vim:set et sw=2 ts=2 fdm=marker:
+  generateTimesDifferentBlockDims<1, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, true, double>(1153, 
