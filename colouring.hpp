@@ -14,7 +14,8 @@
 
 #include "problem.hpp"
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType = float>
 struct HierarchicalColourMemory {
   // I assume 64 colour is enough
   using colourset_t = Graph::colourset_t;
@@ -36,7 +37,8 @@ struct HierarchicalColourMemory {
   };
   std::vector<MemoryOfOneColour> colours;
 
-  HierarchicalColourMemory(const Problem<Dim, SOA, DataType> &problem) {
+  HierarchicalColourMemory(
+      const Problem<PointDim, EdgeDim, SOA, DataType> &problem) {
     /* Algorithm:
      *   - loop through `block_size` blocks
      *     - determine the points written to (not the same as points used)
@@ -57,6 +59,9 @@ struct HierarchicalColourMemory {
     std::vector<colourset_t> point_colours(graph.numPoints(), 0);
     colourset_t used_colours;
     std::vector<MY_SIZE> set_sizes;
+    std::vector<std::uint8_t> block_colours(graph.numEdges());
+    std::vector<DataType> tmp_edge_weights(problem.edge_weights.cbegin(),
+                                           problem.edge_weights.cend());
     for (MY_SIZE block_from = 0; block_from < graph.numEdges();
          block_from += block_size) {
       MY_SIZE block_to = std::min(graph.numEdges(), block_from + block_size);
@@ -74,9 +79,10 @@ struct HierarchicalColourMemory {
       }
       MY_SIZE colour = Graph::getAvailableColour(available_colours, set_sizes);
       ++set_sizes[colour];
-      colourBlock(block_from, block_to, colour, point_colours, problem,
-                  colours);
+      colourBlock(block_from, block_to, colour, point_colours, problem, colours,
+                  block_colours, tmp_edge_weights);
     }
+    copyEdgeWeights(problem, block_colours, tmp_edge_weights);
     edgeListSOA();
   }
 
@@ -101,8 +107,10 @@ private:
    */
   void colourBlock(MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
                    std::vector<colourset_t> &point_colours,
-                   const Problem<Dim, SOA, DataType> &problem,
-                   std::vector<MemoryOfOneColour> &colours) {
+                   const Problem<PointDim, EdgeDim, SOA, DataType> &problem,
+                   std::vector<MemoryOfOneColour> &colours,
+                   std::vector<std::uint8_t> &block_colours,
+                   std::vector<DataType> &tmp_edge_weights) {
     const Graph &graph = problem.graph;
     const data_t<MY_SIZE, 2> &edge_to_node = graph.edge_to_node;
     colourset_t colourset(1ull << colour_ind);
@@ -115,7 +123,7 @@ private:
       MY_SIZE point_left = edge_to_node[2 * i];
       point_colours[point_right] |= colourset;
       point_colours[point_left] |= colourset;
-      colour.edge_weights.push_back(problem.edge_weights[i]);
+      block_colours[i] = colour_ind;
       points_to_edges[point_right].emplace_back(i, 1);
       points_to_edges[point_left].emplace_back(i, 0);
     }
@@ -135,9 +143,10 @@ private:
                             c_edge_list.end());
     colourEdges(to - from, colour, c_edge_list, points_to_be_cached.size());
     const MY_SIZE colour_to = colour.edge_colours.size();
-    sortEdgesByColours(colour_from, colour_to, colour_ind);
-    //permuteCachedPoints(points_to_be_cached, colour_from, colour_to,
-                        //colour_ind);
+    sortEdgesByColours(colour_from, colour_to, from, to, colour_ind,
+                       tmp_edge_weights);
+    // permuteCachedPoints(points_to_be_cached, colour_from, colour_to,
+    // colour_ind);
     colour.points_to_be_cached.insert(colour.points_to_be_cached.end(),
                                       points_to_be_cached.begin(),
                                       points_to_be_cached.end());
@@ -175,15 +184,16 @@ private:
     block.num_edge_colours.push_back(num_edge_colours);
   }
 
-  void sortEdgesByColours(MY_SIZE from, MY_SIZE to, MY_SIZE block_colour) {
-    std::vector<std::tuple<std::uint8_t, MY_SIZE, MY_SIZE, DataType>> tmp(to -
-                                                                          from);
+  void sortEdgesByColours(MY_SIZE colour_from, MY_SIZE colour_to, MY_SIZE from,
+                          MY_SIZE to, MY_SIZE block_colour,
+                          std::vector<DataType> &tmp_edge_weights) {
+    std::vector<std::tuple<std::uint8_t, MY_SIZE, MY_SIZE, DataType>> tmp(
+        colour_to - colour_from);
     MemoryOfOneColour &memory = colours[block_colour];
-    for (MY_SIZE i = 0; i < to - from; ++i) {
-      const MY_SIZE j = i + from;
-      tmp[i] =
-          std::make_tuple(memory.edge_colours[j], memory.edge_list[2 * j],
-                          memory.edge_list[2 * j + 1], memory.edge_weights[j]);
+    for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
+      const MY_SIZE j = i + colour_from;
+      tmp[i] = std::make_tuple(memory.edge_colours[j], memory.edge_list[2 * j],
+                               memory.edge_list[2 * j + 1], i);
     }
     std::stable_sort(
         tmp.begin(), tmp.end(),
@@ -191,11 +201,22 @@ private:
            const std::tuple<std::uint8_t, MY_SIZE, MY_SIZE, DataType> &b) {
           return std::get<0>(a) < std::get<0>(b);
         });
-    for (MY_SIZE i = 0; i < to - from; ++i) {
-      const MY_SIZE j = i + from;
+    std::vector<MY_SIZE> inverse_permutation(colour_to - colour_from);
+    for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
+      const MY_SIZE j = i + colour_from;
       std::tie(memory.edge_colours[j], memory.edge_list[2 * j],
-               memory.edge_list[2 * j + 1], memory.edge_weights[j]) = tmp[i];
+               memory.edge_list[2 * j + 1], inverse_permutation[i]) = tmp[i];
     }
+    std::array<typename std::vector<DataType>::iterator, EdgeDim> begins;
+    for (MY_SIZE i = 0; i < EdgeDim; ++i) {
+      MY_SIZE dim_pos =
+          index<EdgeDim, true>(tmp_edge_weights.size() / EdgeDim, from, i);
+      begins[i] = std::next(tmp_edge_weights.begin(), dim_pos);
+    }
+    typename std::vector<DataType>::iterator end_first =
+        std::next(tmp_edge_weights.begin(), to);
+    reorderDataInverseVectorSOA<EdgeDim, DataType, MY_SIZE>(
+        begins, end_first, inverse_permutation);
   }
 
   void permuteCachedPoints(std::vector<MY_SIZE> &points_to_be_cached,
@@ -226,6 +247,22 @@ private:
   void edgeListSOA() {
     for (MemoryOfOneColour &memory : colours) {
       AOStoSOA<2>(memory.edge_list);
+    }
+  }
+
+  void copyEdgeWeights(const Problem<PointDim, EdgeDim, SOA, DataType> &problem,
+                       const std::vector<std::uint8_t> &block_colours,
+                       const std::vector<DataType> &tmp_edge_weights) {
+    for (MY_SIZE i = 0; i < colours.size(); ++i) {
+      colours[i].edge_weights.reserve(colours[i].edge_list.size() / 2);
+    }
+    for (MY_SIZE d = 0; d < EdgeDim; ++d) {
+      for (MY_SIZE i = 0; i < problem.graph.numEdges(); ++i) {
+        MY_SIZE colour = block_colours[i];
+        DataType weight = tmp_edge_weights[index<EdgeDim, true>(
+            problem.graph.numEdges(), i, d)];
+        colours[colour].edge_weights.push_back(weight);
+      }
     }
   }
 

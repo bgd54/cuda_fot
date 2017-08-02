@@ -13,11 +13,15 @@
 
 constexpr MY_SIZE DEFAULT_BLOCK_SIZE = 128;
 
-template <unsigned Dim = 1, bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned EdgeDim = 1, bool SOA = false,
+          typename DataType = float>
 struct Problem {
+  static_assert(
+      EdgeDim == PointDim || EdgeDim == 1,
+      "I know of no reason why EdgeDim should be anything but 1 or PointDim");
   Graph graph;
-  DataType *edge_weights;
-  data_t<DataType, Dim> point_weights;
+  data_t<DataType, EdgeDim> edge_weights;
+  data_t<DataType, PointDim> point_weights;
   const MY_SIZE block_size; // GPU block size
 
   /* ctor/dtor {{{1 */
@@ -30,19 +34,19 @@ struct Problem {
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
       : graph(grid_dim, block_dims, use_coordinates),
+        edge_weights(graph.numEdges()),
         point_weights(graph.numPoints()), block_size{
                                               calculateBlockSize(block_dims)} {
-    edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
-    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-      edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
-      edge_weights[i] *= 0.001;
+    for (DataType &weight : edge_weights) {
+      weight = DataType(rand() % 10000 + 1) / 5000.0;
+      weight *= 0.001;
     }
     reset();
   }
 
   Problem(std::istream &is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
-      : graph(is), point_weights(graph.numPoints()), block_size{_block_size} {
-    edge_weights = (DataType *)malloc(sizeof(DataType) * graph.numEdges());
+      : graph(is), edge_weights(graph.numEdges()),
+        point_weights(graph.numPoints()), block_size{_block_size} {
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
       edge_weights[i] *= 0.001;
@@ -57,23 +61,28 @@ struct Problem {
     }
   }
 
-  ~Problem() { free(edge_weights); }
+  ~Problem() {}
   /* 1}}} */
 
   void loopGPUEdgeCentred(MY_SIZE num, MY_SIZE reset_every = 0);
   void loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every = 0);
 
   void stepCPUEdgeCentred(DataType *temp) { /*{{{*/
-    for (MY_SIZE edge_ind = 0; edge_ind < graph.numEdges(); ++edge_ind) {
+    for (MY_SIZE edge_ind_base = 0; edge_ind_base < graph.numEdges();
+         ++edge_ind_base) {
       MY_SIZE ind_left_base =
-          graph.edge_to_node[graph.edge_to_node.dim * edge_ind];
+          graph.edge_to_node[graph.edge_to_node.dim * edge_ind_base];
       MY_SIZE ind_right_base =
-          graph.edge_to_node[graph.edge_to_node.dim * edge_ind + 1];
+          graph.edge_to_node[graph.edge_to_node.dim * edge_ind_base + 1];
       MY_SIZE w_ind_left = 0, w_ind_right = 0;
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        w_ind_left = index<Dim, SOA>(graph.numPoints(), ind_left_base, d);
-        w_ind_right = index<Dim, SOA>(graph.numPoints(), ind_right_base, d);
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        w_ind_left = index<PointDim, SOA>(graph.numPoints(), ind_left_base, d);
+        w_ind_right =
+            index<PointDim, SOA>(graph.numPoints(), ind_right_base, d);
+        MY_SIZE edge_d = EdgeDim == 1 ? 0 : d;
 
+        MY_SIZE edge_ind =
+            index<EdgeDim, true>(graph.numEdges(), edge_ind_base, edge_d);
         point_weights[w_ind_right] += edge_weights[edge_ind] * temp[w_ind_left];
         point_weights[w_ind_left] += edge_weights[edge_ind] * temp[w_ind_right];
       }
@@ -95,19 +104,20 @@ struct Problem {
         TIMER_TOGGLE(t);
       }
     }
-    PRINT_BANDWIDTH(
-        t, "loopCPUEdgeCentred",
-        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
-         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
-            num,
-        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
-         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
-            num);
+    PRINT_BANDWIDTH(t, "loopCPUEdgeCentred",
+                    (sizeof(DataType) * (2.0 * PointDim * graph.numPoints() +
+                                         graph.numEdges()) +
+                     2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
+                        num,
+                    (sizeof(DataType) * (2.0 * PointDim * graph.numPoints() +
+                                         graph.numEdges()) +
+                     2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
+                        num);
     free(temp);
   } /*}}}*/
 
   void stepCPUEdgeCentredOMP(const std::vector<MY_SIZE> &inds,
-                             data_t<DataType, Dim> &out) { /*{{{*/
+                             data_t<DataType, PointDim> &out) { /*{{{*/
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
@@ -116,18 +126,21 @@ struct Problem {
           graph.edge_to_node[graph.edge_to_node.dim * ind + 1];
 
       MY_SIZE w_ind_left = 0, w_ind_right = 0;
-      for (MY_SIZE d = 0; d < Dim; ++d) {
-        w_ind_left = index<Dim, SOA>(graph.numPoints(), ind_left_base, d);
-        w_ind_right = index<Dim, SOA>(graph.numPoints(), ind_right_base, d);
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        w_ind_left = index<PointDim, SOA>(graph.numPoints(), ind_left_base, d);
+        w_ind_right =
+            index<PointDim, SOA>(graph.numPoints(), ind_right_base, d);
+        MY_SIZE edge_d = EdgeDim == 1 ? 0 : d;
 
-        point_weights[w_ind_right] += edge_weights[ind] * out[w_ind_left];
-        point_weights[w_ind_left] += edge_weights[ind] * out[w_ind_right];
+        MY_SIZE edge_ind = index<EdgeDim, true>(graph.numEdges(), ind, edge_d);
+        point_weights[w_ind_right] += edge_weights[edge_ind] * out[w_ind_left];
+        point_weights[w_ind_left] += edge_weights[edge_ind] * out[w_ind_right];
       }
     }
   } /*}}}*/
 
   void loopCPUEdgeCentredOMP(MY_SIZE num, MY_SIZE reset_every = 0) { /*{{{*/
-    data_t<DataType, Dim> temp(point_weights.getSize());
+    data_t<DataType, PointDim> temp(point_weights.getSize());
     std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
     MY_SIZE num_of_colours = partition.size();
     TIMER_START(t);
@@ -148,24 +161,26 @@ struct Problem {
         TIMER_TOGGLE(t);
       }
     }
-    PRINT_BANDWIDTH(
-        t, "loopCPUEdgeCentredOMP",
-        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
-         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
-            num,
-        (sizeof(DataType) * (2.0 * Dim * graph.numPoints() + graph.numEdges()) +
-         2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
-            num);
+    PRINT_BANDWIDTH(t, "loopCPUEdgeCentredOMP",
+                    (sizeof(DataType) * (2.0 * PointDim * graph.numPoints() +
+                                         graph.numEdges()) +
+                     2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
+                        num,
+                    (sizeof(DataType) * (2.0 * PointDim * graph.numPoints() +
+                                         graph.numEdges()) +
+                     2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
+                        num);
   } /*}}}*/
 
   void reorder() {
-    graph.reorderScotch<DataType, Dim, SOA>(edge_weights, &point_weights);
+    graph.reorderScotch<DataType, PointDim, EdgeDim, SOA>(&edge_weights,
+                                                          &point_weights);
   }
 
   static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
     if (block_dims.first == 0) {
       return block_dims.second;
-    } else if (block_dims == {9, 8}) {
+    } else if (block_dims == std::pair<MY_SIZE, MY_SIZE>{9, 8}) {
       return 9 * 8 * 2 * 2;
     } else {
       return block_dims.first * block_dims.second * 2;

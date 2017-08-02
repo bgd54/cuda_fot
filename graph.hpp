@@ -484,12 +484,13 @@ public:
     }
   }
 
-  template <typename DataType = float, unsigned DataDim = 1, bool SOA = false>
-  void reorderScotch(DataType *edge_data = nullptr,
+  template <typename DataType = float, unsigned DataDim = 1,
+            unsigned EdgeDim = 1, bool SOA = false>
+  void reorderScotch(data_t<DataType, EdgeDim> *edge_data = nullptr,
                      data_t<DataType, DataDim> *point_data = nullptr) {
     ScotchReorder reorder(*this);
     std::vector<SCOTCH_Num> permutation = reorder.reorder();
-    this->template reorder<SCOTCH_Num, DataType, DataDim, SOA>(
+    this->template reorder<SCOTCH_Num, DataType, DataDim, EdgeDim, SOA>(
         permutation, edge_data, point_data);
   }
 
@@ -500,9 +501,9 @@ public:
    * length `numEdges()` and `numPoints()`, respectively.
    */
   template <typename UnsignedType, typename DataType = float,
-            unsigned DataDim = 1, bool SOA = false>
+            unsigned DataDim = 1, unsigned EdgeDim = 1, bool SOA = false>
   void reorder(const std::vector<UnsignedType> &point_permutation,
-               DataType *edge_data = nullptr,
+               data_t<DataType, EdgeDim> *edge_data = nullptr,
                data_t<DataType, DataDim> *point_data = nullptr) {
     // Permute points
     if (point_data) {
@@ -518,16 +519,18 @@ public:
         edge_to_node.begin(), edge_to_node.end(),
         [&point_permutation](MY_SIZE &a) { a = point_permutation[a]; });
     if (edge_data) {
-      std::vector<std::tuple<MY_SIZE, MY_SIZE, DataType>> edge_tmp(numEdges());
+      std::vector<std::tuple<MY_SIZE, MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        edge_tmp[i] = std::make_tuple(edge_to_node[2 * i],
-                                      edge_to_node[2 * i + 1], edge_data[i]);
+        edge_tmp[i] =
+            std::make_tuple(edge_to_node[2 * i], edge_to_node[2 * i + 1], i);
       }
       std::sort(edge_tmp.begin(), edge_tmp.end());
+      std::vector<MY_SIZE> inv_permutation(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
-        std::tie(edge_to_node[2 * i], edge_to_node[2 * i + 1], edge_data[i]) =
-            edge_tmp[i];
+        std::tie(edge_to_node[2 * i], edge_to_node[2 * i + 1],
+                 inv_permutation[i]) = edge_tmp[i];
       }
+      reorderDataInverse<EdgeDim, true>(*edge_data, inv_permutation);
     } else {
       std::vector<std::tuple<MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
