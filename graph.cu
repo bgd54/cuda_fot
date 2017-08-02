@@ -665,19 +665,35 @@ void generateTimesFromFile(int argc, const char **argv) {
   generateTimes<4, 1, false, false>(argv[1]);
   generateTimes<8, 1, false, false>(argv[1]);
   generateTimes<16, 1, false, false>(argv[1]);
+  generateTimes<1, 1, false, false>(argv[1]);
+  generateTimes<4, 4, false, false>(argv[1]);
+  generateTimes<8, 8, false, false>(argv[1]);
+  generateTimes<16, 16, false, false>(argv[1]);
   generateTimes<1, 1, false, false, double>(argv[1]);
   generateTimes<4, 1, false, false, double>(argv[1]);
   generateTimes<8, 1, false, false, double>(argv[1]);
   generateTimes<16, 1, false, false, double>(argv[1]);
+  generateTimes<1, 1, false, false, double>(argv[1]);
+  generateTimes<4, 4, false, false, double>(argv[1]);
+  generateTimes<8, 8, false, false, double>(argv[1]);
+  generateTimes<16, 16, false, false, double>(argv[1]);
   // SOA
   generateTimes<1, 1, true, false>(argv[1]);
   generateTimes<4, 1, true, false>(argv[1]);
   generateTimes<8, 1, true, false>(argv[1]);
   generateTimes<16, 1, true, false>(argv[1]);
+  generateTimes<1, 1, true, false>(argv[1]);
+  generateTimes<4, 4, true, false>(argv[1]);
+  generateTimes<8, 8, true, false>(argv[1]);
+  generateTimes<16, 16, true, false>(argv[1]);
   generateTimes<1, 1, true, false, double>(argv[1]);
   generateTimes<4, 1, true, false, double>(argv[1]);
   generateTimes<8, 1, true, false, double>(argv[1]);
   generateTimes<16, 1, true, false, double>(argv[1]);
+  generateTimes<1, 1, true, false, double>(argv[1]);
+  generateTimes<4, 4, true, false, double>(argv[1]);
+  generateTimes<8, 8, true, false, double>(argv[1]);
+  generateTimes<16, 16, true, false, double>(argv[1]);
 }
 
 void test() {
@@ -702,27 +718,43 @@ void generateTimesDifferentBlockDims() {
   generateTimesDifferentBlockDims<2, 1, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<4, 1, true, float>(1153, 1153);
   generateTimesDifferentBlockDims<8, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, true, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, true, float>(1153, 1153);
   // AOS
   generateTimesDifferentBlockDims<1, 1, false, float>(1153, 1153);
   generateTimesDifferentBlockDims<2, 1, false, float>(1153, 1153);
   generateTimesDifferentBlockDims<4, 1, false, float>(1153, 1153);
   generateTimesDifferentBlockDims<8, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, false, float>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, false, float>(1153, 1153);
   // SOA
   generateTimesDifferentBlockDims<1, 1, true, double>(1153, 1153);
   generateTimesDifferentBlockDims<2, 1, true, double>(1153, 1153);
   generateTimesDifferentBlockDims<4, 1, true, double>(1153, 1153);
   generateTimesDifferentBlockDims<8, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, true, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, true, double>(1153, 1153);
   // AOS
   generateTimesDifferentBlockDims<1, 1, false, double>(1153, 1153);
   generateTimesDifferentBlockDims<2, 1, false, double>(1153, 1153);
   generateTimesDifferentBlockDims<4, 1, false, double>(1153, 1153);
   generateTimesDifferentBlockDims<8, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, false, double>(1153, 1153);
 }
 
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
-  test();
-  /*generateTimesDifferentBlockDims();*/
+  /*test();*/
+  generateTimesDifferentBlockDims();
   return 0;
 }
 
