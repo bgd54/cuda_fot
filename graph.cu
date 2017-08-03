@@ -90,8 +90,7 @@ __global__ void problem_stepGPUHierarchical(
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
     const std::uint8_t *__restrict__ edge_colours,
     const std::uint8_t *__restrict__ num_edge_colours,
-    const MY_SIZE *__restrict__ block_offsets,
-    const MY_SIZE num_threads,
+    const MY_SIZE *__restrict__ block_offsets, const MY_SIZE num_threads,
     const MY_SIZE num_points) {
   static_assert(
       EdgeDim == PointDim || EdgeDim == 1,
@@ -500,9 +499,7 @@ void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical(
          ++colour_ind) {
       assert(memory.colours[colour_ind].edge_list.size() % 2 == 0);
       MY_SIZE num_threads = memory.colours[colour_ind].edge_list.size() / 2;
-      MY_SIZE num_blocks = static_cast<MY_SIZE>(
-          std::ceil(static_cast<double>(num_threads) / block_size));
-      assert(num_blocks == memory.colours[colour_ind].num_edge_colours.size());
+      MY_SIZE num_blocks = memory.colours[colour_ind].num_edge_colours.size();
       assert(num_blocks == memory.colours[colour_ind].block_offsets.size() - 1);
       // + 32 in case it needs to avoid shared mem bank collisions
       MY_SIZE cache_size =
@@ -585,7 +582,8 @@ void generateTimes(std::string in_file) {
   constexpr MY_SIZE num = 500;
   std::cout << ":::: Generating problems from file: " << in_file
             << "::::" << std::endl
-            << "     Dimension: " << PointDim << " SOA: " << std::boolalpha
+            << "     Point dimension: " << PointDim
+            << " Edge dimension: " << EdgeDim << " SOA: " << std::boolalpha
             << SOA << "\n     Data type: "
             << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
@@ -620,7 +618,8 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
   std::cout << ":::: Generating problems with block size: " << block_dims.first
             << "x" << block_dims.second << " (= " << block_size << ")"
             << "::::" << std::endl
-            << "     Dimension: " << PointDim << " SOA: " << std::boolalpha
+            << "     Point dimension: " << PointDim
+            << " Edge dimension: " << EdgeDim << " SOA: " << std::boolalpha
             << SOA << "\n     Data type: "
             << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
@@ -744,4 +743,23 @@ void generateTimesDifferentBlockDims() {
   generateTimesDifferentBlockDims<1, 1, true, double>(1153, 1153);
   generateTimesDifferentBlockDims<2, 2, true, double>(1153, 1153);
   generateTimesDifferentBlockDims<4, 4, true, double>(1153, 1153);
-  generateTimesDifferentBlockDims<8, 8, true, double>(1153, 
+  generateTimesDifferentBlockDims<8, 8, true, double>(1153, 1153);
+  // AOS
+  generateTimesDifferentBlockDims<1, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<1, 1, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<2, 2, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<4, 4, false, double>(1153, 1153);
+  generateTimesDifferentBlockDims<8, 8, false, double>(1153, 1153);
+}
+
+int main(int argc, const char **argv) {
+  /*generateTimesFromFile(argc, argv);*/
+  test();
+  /*generateTimesDifferentBlockDims();*/
+  return 0;
+}
+
+// vim:set et sw=2 ts=2 fdm=marker:

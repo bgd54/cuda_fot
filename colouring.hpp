@@ -67,7 +67,7 @@ struct HierarchicalColourMemory {
                                            problem.edge_weights.cend());
     std::vector<MY_SIZE> blocks;
     std::vector<std::pair<MY_SIZE, MY_SIZE>> partition_to_edge;
-    std::vector<MY_SIZE> edge_inverse_permutation(partition_vector.size());
+    std::vector<MY_SIZE> edge_inverse_permutation(graph.numEdges());
     if (partition_vector.size() == problem.graph.numEdges()) {
       for (MY_SIZE i = 0; i < partition_vector.size(); ++i) {
         partition_to_edge.push_back(std::make_pair(partition_vector[i], i));
@@ -137,9 +137,6 @@ struct HierarchicalColourMemory {
       colours[colour].block_offsets.push_back(
           colours[colour].block_offsets.back() + block_to - block_from);
     }
-    reorderDataInverseVectorSOA<1, std::uint8_t, MY_SIZE>(
-        {{block_colours.begin()}}, block_colours.end(),
-        edge_inverse_permutation);
     copyEdgeWeights(problem, block_colours, tmp_edge_weights);
     edgeListSOA();
   }
@@ -167,7 +164,7 @@ private:
   void
   colourBlock(MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
               std::vector<colourset_t> &point_colours,
-              const Problem<Dim, EdgeDim, SOA, DataType> &problem,
+              const Problem<PointDim, EdgeDim, SOA, DataType> &problem,
               std::vector<MemoryOfOneColour> &colours,
               const std::vector<std::pair<MY_SIZE, MY_SIZE>> &partition_to_edge,
               std::vector<std::uint8_t> &block_colours,
@@ -186,8 +183,8 @@ private:
       point_colours[point_right] |= colourset;
       point_colours[point_left] |= colourset;
       block_colours[i] = colour_ind;
-      points_to_edges[point_right].emplace_back(edge_ind, 1);
-      points_to_edges[point_left].emplace_back(edge_ind, 0);
+      points_to_edges[point_right].emplace_back(i - from, 1);
+      points_to_edges[point_left].emplace_back(i - from, 0);
     }
     std::vector<MY_SIZE> c_edge_list(2 * (to - from));
     std::vector<MY_SIZE> points_to_be_cached;
@@ -197,7 +194,7 @@ private:
       for (const std::pair<MY_SIZE, MY_SIZE> e : edge_inds) {
         MY_SIZE ind = e.first;
         MY_SIZE offset = e.second;
-        c_edge_list[2 * (ind - from) + offset] = points_to_be_cached.size();
+        c_edge_list[2 * ind + offset] = points_to_be_cached.size();
       }
       points_to_be_cached.push_back(point_ind);
     }
