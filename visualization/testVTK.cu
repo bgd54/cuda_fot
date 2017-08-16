@@ -70,27 +70,23 @@ void writeHierarchicalColouringVTK(const std::string &filename,
 void writePartitionVTK(const std::string &filename, const Graph &graph,
                        MY_SIZE block_size) {
   std::vector<std::vector<std::uint16_t>> data(3);
-  std::vector<idx_t> partition = partitionMetis(graph, block_size);
+  std::vector<idx_t> partition =
+      partitionMetisEnh(graph.getLineGraph(), block_size, 1.016);
   data[VTK_IND_BLK_ID].resize(graph.numEdges());
+  assert(partition.size() == graph.numEdges());
   for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
-    std::uint16_t left_colour = partition[graph.edge_to_node[2 * i]];
-    std::uint16_t right_colour = partition[graph.edge_to_node[2 * i + 1]];
-    data[VTK_IND_BLK_ID][i] = left_colour + right_colour;
+    data[VTK_IND_BLK_ID][i] = partition[i];
   }
-  data[VTK_IND_THR_COL].resize(graph.numEdges());
-  std::vector<idx_t> edge_partition =
-      partitionMetis(graph.getLineGraph(), block_size);
-  std::copy(edge_partition.begin(), edge_partition.end(),
-            data[VTK_IND_THR_COL].begin());
   writeGraphToVTKAscii(filename, graph.edge_to_node, graph.point_coordinates,
                        data);
 }
 
 int main() {
-  Problem<> problem(19, 17, {9, 8}, true);
+  srand(1);
+  Problem<> problem(1025, 1025, {0, 128}, true);
   /*writeGlobalColouringVTK("graph_global.vtk", problem.graph, 16);*/
-  writeHierarchicalColouringVTK("graph_hier.vtk", problem);
-  /*writePartitionVTK("graph_part.vtk", problem.graph, 16);*/
+  /*writeHierarchicalColouringVTK("graph_hier.vtk", problem);*/
+  writePartitionVTK("graph_part.vtk", problem.graph, 128);
 
   return 0;
 }

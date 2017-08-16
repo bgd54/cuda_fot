@@ -450,7 +450,8 @@ template <unsigned PointDim, unsigned EdgeDim, bool SOA, typename DataType>
 void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical(
     MY_SIZE num, MY_SIZE reset_every) {
   TIMER_START(t_colouring);
-  HierarchicalColourMemory<PointDim, EdgeDim, SOA, DataType> memory(*this);
+  HierarchicalColourMemory<PointDim, EdgeDim, SOA, DataType> memory(
+      *this, partition_vector);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
   data_t<DataType, PointDim> point_weights_out(point_weights.getSize());
@@ -550,7 +551,8 @@ void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical(
            sizeof(MY_SIZE) *
                (total_num_blocks * 1.0 +
                 memory.colours.size()) + // points_to_be_cached_offsets
-           sizeof(std::uint8_t) * graph.numEdges() // edge_colours
+           sizeof(MY_SIZE) * (total_num_blocks * 1.0) + // block_offsets
+           sizeof(std::uint8_t) * graph.numEdges()      // edge_colours
            ));
   PRINT_BANDWIDTH(timer_copy, " -copy",
                   2.0 * num * sizeof(DataType) * PointDim * graph.numPoints(),
@@ -716,6 +718,18 @@ void test() {
       &Problem<TEST_DIM, TEST_EDGE_DIM, true, float>::loopGPUHierarchical);
 }
 
+void testPartitioning() {
+  MY_SIZE num = 500;
+  MY_SIZE N = 100, M = 200;
+  MY_SIZE reset_every = 0;
+  constexpr unsigned TEST_DIM = 4;
+  constexpr unsigned TEST_EDGE_DIM = 4;
+  testPartitioning<TEST_DIM, TEST_EDGE_DIM, false, float>(num, N, M,
+                                                          reset_every);
+  testPartitioning<TEST_DIM, TEST_EDGE_DIM, true, float>(num, N, M,
+                                                         reset_every);
+}
+
 void generateTimesDifferentBlockDims() {
   // SOA
   generateTimesDifferentBlockDims<1, 1, true, float>(1153, 1153);
@@ -757,8 +771,9 @@ void generateTimesDifferentBlockDims() {
 
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
-  test();
+  /*test();*/
   /*generateTimesDifferentBlockDims();*/
+  testPartitioning();
   return 0;
 }
 

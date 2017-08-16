@@ -246,12 +246,7 @@ public:
         }
       }
     }
-    std::vector<MY_SIZE> permutation = renumberPoints();
-    std::for_each(edge_to_node.begin(), edge_to_node.end(),
-                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
-    if (point_coordinates.getSize() > 0) {
-      reorderData<3, false, float, MY_SIZE>(point_coordinates, permutation);
-    }
+    renumberPoints();
   }
 
   void fillEdgeList3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3) {
@@ -544,7 +539,27 @@ public:
     }
   }
 
-  std::vector<MY_SIZE> renumberPoints() const {
+  template <unsigned EdgeDim, class DataType>
+  void reorderToPartition(std::vector<MY_SIZE> &partition_vector,
+                          data_t<DataType, EdgeDim> &edge_weights) {
+    assert(numEdges() == partition_vector.size());
+    assert(numEdges() == edge_weights.getSize());
+    std::vector<std::tuple<MY_SIZE, MY_SIZE, MY_SIZE, MY_SIZE>> tmp(numEdges());
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      tmp[i] = std::make_tuple(partition_vector[i], i, edge_to_node[2 * i],
+                               edge_to_node[2 * i + 1]);
+    }
+    std::sort(tmp.begin(), tmp.end());
+    std::vector<MY_SIZE> permutation(numEdges());
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      std::tie(partition_vector[i], permutation[i], edge_to_node[2 * i],
+               edge_to_node[2 * i + 1]) = tmp[i];
+    }
+    reorderDataInverse<EdgeDim, true, DataType, MY_SIZE>(edge_weights,
+                                                         permutation);
+  }
+
+  std::vector<MY_SIZE> getPointRenumberingPermutation() const {
     std::vector<MY_SIZE> permutation(numPoints(), numPoints());
     MY_SIZE new_ind = 0;
     for (MY_SIZE i = 0; i < 2 * numEdges(); ++i) {
@@ -556,6 +571,16 @@ public:
     assert(std::all_of(
         permutation.begin(), permutation.end(),
         [&permutation](MY_SIZE a) { return a < permutation.size(); }));
+    return permutation;
+  }
+
+  std::vector<MY_SIZE> renumberPoints() {
+    std::vector<MY_SIZE> permutation = getPointRenumberingPermutation();
+    std::for_each(edge_to_node.begin(), edge_to_node.end(),
+                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
+    if (point_coordinates.getSize() > 0) {
+      reorderData<3, false, float, MY_SIZE>(point_coordinates, permutation);
+    }
     return permutation;
   }
 

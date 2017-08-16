@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "graph.hpp"
+#include "partition.hpp"
 #include "timer.hpp"
 
 constexpr MY_SIZE DEFAULT_BLOCK_SIZE = 128;
@@ -44,12 +45,25 @@ struct Problem {
     reset();
   }
 
-  Problem(std::istream &is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
-      : graph(is), edge_weights(graph.numEdges()),
+  Problem(std::istream &graph_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE,
+          std::istream *partition_is = nullptr)
+      : graph(graph_is), edge_weights(graph.numEdges()),
         point_weights(graph.numPoints()), block_size{_block_size} {
+    if (partition_is != nullptr) {
+      if (!(*partition_is)) {
+        throw InvalidInputFile{graph.numEdges()};
+      }
+      partition_vector.resize(graph.numEdges());
+    }
     for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
       edge_weights[i] = DataType(rand() % 10000 + 1) / 5000.0;
       edge_weights[i] *= 0.001;
+      if (partition_is != nullptr) {
+        *partition_is >> partition_vector[i];
+        if (!(*partition_is)) {
+          throw InvalidInputFile{graph.numEdges() + i};
+        }
+      }
     }
     reset();
   }
@@ -177,6 +191,23 @@ struct Problem {
                                                           &point_weights);
   }
 
+  void partition(float tolerance, idx_t options[METIS_NOPTIONS] = NULL) {
+    std::vector<idx_t> _partition_vector =
+        partitionMetisEnh(graph.getLineGraph(), block_size, tolerance, options);
+    partition_vector.resize(_partition_vector.size());
+    std::copy(_partition_vector.begin(), _partition_vector.end(),
+              partition_vector.begin());
+  }
+
+  void reorderToPartition() {
+    graph.reorderToPartition<EdgeDim, DataType>(partition_vector, edge_weights);
+  }
+
+  void renumberPoints() {
+    std::vector<MY_SIZE> permutation = graph.renumberPoints();
+    reorderData<PointDim, SOA, DataType, MY_SIZE>(point_weights, permutation);
+  }
+
   static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
     if (block_dims.first == 0) {
       return block_dims.second;
@@ -186,6 +217,15 @@ struct Problem {
       return block_dims.first * block_dims.second * 2;
     }
   }
+
+  void writePartition(std::ostream &os) const {
+    for (MY_SIZE p : partition_vector) {
+      os << p << std::endl;
+    }
+  }
+
+private:
+  std::vector<MY_SIZE> partition_vector;
 };
 
 #endif /* end of include guard: PROBLEM_HPP_CGW3IDMV */
