@@ -24,6 +24,7 @@ struct Problem {
   data_t<DataType, EdgeDim> edge_weights;
   data_t<DataType, PointDim> point_weights;
   const MY_SIZE block_size; // GPU block size
+  std::vector<MY_SIZE> partition_vector;
 
   /* ctor/dtor {{{1 */
   Problem(MY_SIZE N, MY_SIZE M,
@@ -223,9 +224,6 @@ struct Problem {
       os << p << std::endl;
     }
   }
-
-private:
-  std::vector<MY_SIZE> partition_vector;
 };
 
 #endif /* end of include guard: PROBLEM_HPP_CGW3IDMV */

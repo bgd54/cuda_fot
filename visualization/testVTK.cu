@@ -32,8 +32,7 @@ void writeGlobalColouringVTK(const std::string &filename, const Graph &graph,
 
 void writeHierarchicalColouringVTK(const std::string &filename,
                                    const Problem<> &problem) {
-  const HierarchicalColourMemory<> memory(problem);
-  const MY_SIZE block_size = problem.block_size;
+  const HierarchicalColourMemory<> memory(problem,problem.partition_vector);
   data_t<MY_SIZE, 2> edge_list(problem.graph.numEdges());
   std::vector<std::vector<std::uint16_t>> data(3);
   MY_SIZE blk_col_ind = 0, blk_ind = 0;
@@ -44,11 +43,14 @@ void writeHierarchicalColouringVTK(const std::string &filename,
     data[VTK_IND_BLK_COL].insert(data[VTK_IND_BLK_COL].end(),
                                  m.edge_colours.size(), blk_col_ind++);
     assert(2 * m.edge_colours.size() == m.edge_list.size());
+    MY_SIZE local_block_id = 0;
     for (MY_SIZE i = 0; i < m.edge_colours.size(); ++i) {
-      data[VTK_IND_BLK_ID].push_back(blk_ind / block_size);
-      ++blk_ind;
+      data[VTK_IND_BLK_ID].push_back(blk_ind);
 
-      MY_SIZE local_block_id = i / block_size;
+      if (m.block_offsets[local_block_id + 1] <= i) {
+        ++local_block_id;
+        ++blk_ind;
+      }
       MY_SIZE offset = m.points_to_be_cached_offsets[local_block_id];
       MY_SIZE left_point =
           m.points_to_be_cached[offset + m.edge_list[i]];
@@ -58,9 +60,7 @@ void writeHierarchicalColouringVTK(const std::string &filename,
       edge_list[2 * edge_ind + 1] = right_point;
       ++edge_ind;
     }
-    if (blk_ind % block_size != 0) {
-      blk_ind += block_size - (blk_ind % block_size);
-    }
+    ++blk_ind;
   }
   assert(edge_ind == edge_list.getSize());
   writeGraphToVTKAscii(filename, edge_list, problem.graph.point_coordinates,
