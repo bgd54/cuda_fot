@@ -51,9 +51,9 @@ void writeHierarchicalColouringVTK(const std::string &filename,
       MY_SIZE local_block_id = i / block_size;
       MY_SIZE offset = m.points_to_be_cached_offsets[local_block_id];
       MY_SIZE left_point =
-          m.points_to_be_cached[offset + m.edge_list[2 * i + 0]];
+          m.points_to_be_cached[offset + m.edge_list[i]];
       MY_SIZE right_point =
-          m.points_to_be_cached[offset + m.edge_list[2 * i + 1]];
+          m.points_to_be_cached[offset + m.edge_list[m.edge_colours.size() + i]];
       edge_list[2 * edge_ind] = left_point;
       edge_list[2 * edge_ind + 1] = right_point;
       ++edge_ind;
