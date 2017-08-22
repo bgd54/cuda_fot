@@ -47,12 +47,12 @@ struct Problem {
   }
 
   Problem(std::istream &graph_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE,
-          std::istream *partition_is = nullptr)
-      : graph(graph_is), edge_weights(graph.numEdges()),
+          std::istream *coord_is = nullptr, std::istream *partition_is = nullptr)
+      : graph(graph_is, coord_is), edge_weights(graph.numEdges()),
         point_weights(graph.numPoints()), block_size{_block_size} {
     if (partition_is != nullptr) {
       if (!(*partition_is)) {
-        throw InvalidInputFile{graph.numEdges()};
+        throw InvalidInputFile{"partition input",0};
       }
       partition_vector.resize(graph.numEdges());
     }
@@ -62,7 +62,7 @@ struct Problem {
       if (partition_is != nullptr) {
         *partition_is >> partition_vector[i];
         if (!(*partition_is)) {
-          throw InvalidInputFile{graph.numEdges() + i};
+          throw InvalidInputFile{"partition input",i};
         }
       }
     }
@@ -222,6 +222,19 @@ struct Problem {
   void writePartition(std::ostream &os) const {
     for (MY_SIZE p : partition_vector) {
       os << p << std::endl;
+    }
+  }
+
+  void readPartition(std::istream &partition_is) {
+    if (!partition_is) {
+      throw InvalidInputFile{"partition input",0};
+    }
+    partition_vector.resize(graph.numEdges());
+    for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
+      partition_is >> partition_vector[i];
+      if (!partition_is) {
+        throw InvalidInputFile{"partition input",i};
+      }
     }
   }
 };

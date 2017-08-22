@@ -11,10 +11,12 @@
 #include <fstream>
 #include <iostream>
 #include <ostream>
+#include <set>
 #include <tuple>
 #include <vector>
 
 struct InvalidInputFile {
+  std::string input_type;
   MY_SIZE line;
 };
 
@@ -88,17 +90,31 @@ public:
    * If the reading is broken for some reason, the succesfully read edges are
    * kept and num_edges is set accordingly.
    */
-  Graph(std::istream &is)
+  Graph(std::istream &is, std::istream *coord_is = nullptr)
       : num_points{0}, num_edges{0},
         edge_to_node((is >> num_points >> num_edges, num_edges)),
-        point_coordinates() {
+        point_coordinates(coord_is == nullptr ? 0 : num_points) {
     if (!is) {
-      throw InvalidInputFile{0};
+      throw InvalidInputFile{"graph input", 0};
+    }
+    if (coord_is != nullptr) {
+      if (!(*coord_is)) {
+        throw InvalidInputFile{"coordinate input", 0};
+      }
     }
     for (MY_SIZE i = 0; i < num_edges; ++i) {
       is >> edge_to_node[2 * i] >> edge_to_node[2 * i + 1];
       if (!is) {
-        throw InvalidInputFile{i};
+        throw InvalidInputFile{"graph input", i};
+      }
+    }
+    if (coord_is != nullptr) {
+      for (MY_SIZE i = 0; i < numPoints(); ++i) {
+        *coord_is >> point_coordinates[3 * i + 0] >>
+            point_coordinates[3 * i + 1] >> point_coordinates[3 * i + 2];
+        if (!(*coord_is)) {
+          throw InvalidInputFile{"coordinate input", i};
+        }
       }
     }
   }
@@ -476,6 +492,14 @@ public:
     os << numPoints() << " " << numEdges() << std::endl;
     for (std::size_t i = 0; i < numEdges(); ++i) {
       os << edge_to_node[2 * i] << " " << edge_to_node[2 * i + 1] << std::endl;
+    }
+  }
+
+  void writeCoordinates(std::ostream &os) const {
+    assert(point_coordinates.getSize() == numPoints());
+    for (MY_SIZE i = 0; i < numPoints(); ++i) {
+      os << point_coordinates[3 * i + 0] << " " << point_coordinates[3 * i + 1]
+         << " " << point_coordinates[3 * i + 2] << std::endl;
     }
   }
 
