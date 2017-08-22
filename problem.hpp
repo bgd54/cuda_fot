@@ -205,7 +205,9 @@ struct Problem {
   }
 
   void renumberPoints() {
-    std::vector<MY_SIZE> permutation = graph.renumberPoints();
+    std::vector<MY_SIZE> permutation = graph.getPointRenumberingPermutation2(
+        graph.getPointToPartition(partition_vector));
+    graph.renumberPoints(permutation);
     reorderData<PointDim, SOA, DataType, MY_SIZE>(point_weights, permutation);
   }
 

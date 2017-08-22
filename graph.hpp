@@ -262,7 +262,7 @@ public:
         }
       }
     }
-    renumberPoints();
+    renumberPoints(getPointRenumberingPermutation());
   }
 
   void fillEdgeList3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3) {
@@ -598,8 +598,7 @@ public:
     return permutation;
   }
 
-  std::vector<MY_SIZE> renumberPoints() {
-    std::vector<MY_SIZE> permutation = getPointRenumberingPermutation();
+  std::vector<MY_SIZE> renumberPoints(const std::vector<MY_SIZE> &permutation) {
     std::for_each(edge_to_node.begin(), edge_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     if (point_coordinates.getSize() > 0) {
@@ -648,6 +647,42 @@ public:
     }
     return Graph(numEdges(), new_edge_to_point.size() / 2,
                  new_edge_to_point.data());
+  }
+
+  std::vector<std::vector<MY_SIZE>>
+  getPointToPartition(const std::vector<MY_SIZE> &partition) const {
+    std::vector<std::set<MY_SIZE>> _result(num_points);
+    for (MY_SIZE i = 0; i < edge_to_node.getSize(); ++i) {
+      _result[edge_to_node[2 * i + 0]].insert(partition[i]);
+      _result[edge_to_node[2 * i + 1]].insert(partition[i]);
+    }
+    std::vector<std::vector<MY_SIZE>> result(num_points);
+    std::transform(_result.begin(), _result.end(), result.begin(),
+                   [](const std::set<MY_SIZE> &a) {
+                     return std::vector<MY_SIZE>(a.begin(), a.end());
+                   });
+    return result;
+  }
+
+  std::vector<MY_SIZE> getPointRenumberingPermutation2(
+      const std::vector<std::vector<MY_SIZE>> &point_to_partition) const {
+    std::vector<MY_SIZE> inverse_permutation(point_to_partition.size());
+    data_t<MY_SIZE, 1> permutation(point_to_partition.size());
+    for (MY_SIZE i = 0; i < point_to_partition.size(); ++i) {
+      inverse_permutation[i] = i;
+      permutation[i] = i;
+    }
+    std::stable_sort(
+        inverse_permutation.begin(), inverse_permutation.end(),
+        [&point_to_partition](MY_SIZE a, MY_SIZE b) {
+          if (point_to_partition[a].size() != point_to_partition[b].size()) {
+            return point_to_partition[a].size() > point_to_partition[b].size();
+          } else {
+            return point_to_partition[a] > point_to_partition[b];
+          }
+        });
+    reorderData<1, false>(permutation, inverse_permutation);
+    return std::vector<MY_SIZE>(permutation.begin(), permutation.end());
   }
 };
 
