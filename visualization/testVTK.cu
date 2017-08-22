@@ -33,6 +33,7 @@ void writeGlobalColouringVTK(const std::string &filename, const Graph &graph,
 void writeHierarchicalColouringVTK(const std::string &filename,
                                    const Problem<> &problem) {
   const HierarchicalColourMemory<> memory(problem,problem.partition_vector);
+  std::cout << "Number of block colours: " << memory.colours.size() << std::endl;
   data_t<MY_SIZE, 2> edge_list(problem.graph.numEdges());
   std::vector<std::vector<std::uint16_t>> data(3);
   MY_SIZE blk_col_ind = 0, blk_ind = 0;
@@ -83,10 +84,19 @@ void writePartitionVTK(const std::string &filename, const Graph &graph,
 
 int main() {
   srand(1);
-  Problem<> problem(1025, 1025, {0, 128}, true);
+  /*Problem<> problem(17, 17, {1,8}, true);*/
+  std::ifstream f ("/home/asulyok/graphs/grid_1153x1153_row_major2.gps"),
+           f_coord("/home/asulyok/graphs/grid_1153x1153_row_major2.gps_coord");
+  Problem<> problem(f,288,&f_coord);
+  /*int options [METIS_NOPTIONS];*/
+  /*METIS_SetDefaultOptions(options);*/
+  /*options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;*/
+  /*problem.partition(1.001,options);*/
+  /*problem.reorderToPartition();*/
+  /*problem.renumberPoints();*/
   /*writeGlobalColouringVTK("graph_global.vtk", problem.graph, 16);*/
-  /*writeHierarchicalColouringVTK("graph_hier.vtk", problem);*/
-  writePartitionVTK("graph_part.vtk", problem.graph, 128);
+  writeHierarchicalColouringVTK("graph_hier.vtk", problem);
+  /*writePartitionVTK("graph_part.vtk", problem.graph, 128);*/
 
   return 0;
 }
