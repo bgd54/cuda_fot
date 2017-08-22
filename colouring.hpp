@@ -234,7 +234,7 @@ private:
         available_colours = ~occupied_colours & used_colours;
       }
       std::uint8_t colour =
-          Graph::getAvailableColour(available_colours, set_sizes);
+          Graph::getAvailableColour<false>(available_colours, set_sizes);
       block.edge_colours.push_back(colour);
       ++set_sizes[colour];
       colourset_t colourset(1ull << colour);

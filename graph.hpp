@@ -584,14 +584,19 @@ public:
     return permutation;
   }
 
+  template <bool MinimiseColourSizes = true>
   static MY_SIZE getAvailableColour(colourset_t available_colours,
                                     const std::vector<MY_SIZE> &set_sizes) {
     assert(set_sizes.size() > 0);
     MY_SIZE colour = set_sizes.size();
     for (MY_SIZE i = 0; i < set_sizes.size(); ++i) {
       if (available_colours[i]) {
-        if (colour >= set_sizes.size() || set_sizes[colour] > set_sizes[i]) {
-          colour = i;
+        if (MinimiseColourSizes) {
+          if (colour >= set_sizes.size() || set_sizes[colour] > set_sizes[i]) {
+            colour = i;
+          }
+        } else {
+          return i;
         }
       }
     }
