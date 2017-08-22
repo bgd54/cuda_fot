@@ -33,6 +33,18 @@ void testReordering() {
 
 int main() {
   //testReordering();
-  Graph graph(2049,1025,true);
+  Graph graph({1153,1153},{0,0},true);
+  std::ifstream f_("/home/asulyok/graphs/wave");
+  /*Problem<> problem(f_,288);*/
+  std::ofstream f  ("/home/asulyok/graphs/grid_1153x1153_row_major2.gps_coord");
+  std::ofstream f2 ("/home/asulyok/graphs/grid_1153x1153_row_major2.gps");
+  /*std::ofstream f3 ("/home/asulyok/graphs/wave.gps.metis_part");*/
+  /*problem.*/graph.reorderScotch();
+  /*problem.partition(1.01);*/
+  /*problem.reorderToPartition();*/
+  /*problem.renumberPoints();*/
+  /*problem.*/graph.writeCoordinates(f);
+  /*problem.*/graph.writeEdgeList(f2);
+  /*problem.writePartition(f3);*/
   return 0;
 }
