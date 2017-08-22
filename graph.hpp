@@ -145,8 +145,8 @@ public:
     MY_SIZE array_ind = 0, upper_point_ind = 0, lower_point_ind = M;
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
-        edge_to_node[array_ind++] = lower_point_ind;
         edge_to_node[array_ind++] = upper_point_ind;
+        edge_to_node[array_ind++] = lower_point_ind;
         edge_to_node[array_ind++] = upper_point_ind;
         edge_to_node[array_ind++] = ++upper_point_ind;
         ++lower_point_ind;
