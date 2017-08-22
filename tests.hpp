@@ -335,3 +335,5 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
 }
 
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */
+
+// vim:set et sts=2 sw=2 ts=2:
