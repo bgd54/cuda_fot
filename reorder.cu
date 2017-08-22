@@ -1,5 +1,5 @@
-#include "reorder.hpp"
 #include "graph.hpp"
+#include "reorder.hpp"
 
 /*
  * Throw if the Scotch command `cmd` returns an error.
@@ -22,8 +22,8 @@ ScotchReorder::ScotchReorder(const Graph &_graph)
                                  csr.edgeEndpoints(), NULL));
   SCOTCH_THROW(SCOTCH_graphCheck(&graph));
   try {
-	  SCOTCH_THROW(SCOTCH_stratInit(&strategy));
-	  SCOTCH_THROW(SCOTCH_stratGraphOrder(&strategy,strategy_string));
+    SCOTCH_THROW(SCOTCH_stratInit(&strategy));
+    SCOTCH_THROW(SCOTCH_stratGraphOrder(&strategy, strategy_string));
   } catch (ScotchError &) {
     SCOTCH_graphExit(&graph);
     throw;
@@ -32,7 +32,9 @@ ScotchReorder::ScotchReorder(const Graph &_graph)
 
 std::vector<SCOTCH_Num> ScotchReorder::reorder() {
   std::vector<SCOTCH_Num> permutation(num_points);
-  SCOTCH_THROW(
-      SCOTCH_graphOrder(&graph, &strategy, permutation.data(), NULL, NULL, NULL, NULL));
+  SCOTCH_THROW(SCOTCH_graphOrder(&graph, &strategy, permutation.data(), NULL,
+                                 NULL, NULL, NULL));
   return permutation;
 }
+
+// vim:set et sts=2 sw=2 ts=2:
