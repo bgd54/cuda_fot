@@ -534,9 +534,13 @@ public:
                                                  point_permutation);
     }
     // Permute edge_to_node
-    std::for_each(
-        edge_to_node.begin(), edge_to_node.end(),
-        [&point_permutation](MY_SIZE &a) { a = point_permutation[a]; });
+    for (MY_SIZE i = 0; i < numEdges(); ++i) {
+      edge_to_node[2 * i] = point_permutation[edge_to_node[2 * i]];
+      edge_to_node[2 * i + 1] = point_permutation[edge_to_node[2 * i + 1]];
+      if (edge_to_node[2 * i] > edge_to_node[2 * i + 1]) {
+        std::swap(edge_to_node[2 * i], edge_to_node[2 * i + 1]);
+      }
+    }
     if (edge_data) {
       std::vector<std::tuple<MY_SIZE, MY_SIZE, MY_SIZE>> edge_tmp(numEdges());
       for (MY_SIZE i = 0; i < numEdges(); ++i) {
