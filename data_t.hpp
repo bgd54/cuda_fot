@@ -90,6 +90,8 @@ template <typename T, unsigned Dim> data_t<T, Dim>::~data_t() {
 
 template <typename T, unsigned Dim>
 data_t<T, Dim>::data_t(data_t<T, Dim> &&other) {
+  size = other.size;
+  other.size = 0;
   data = other.data;
   other.data = nullptr;
   data_d = other.data_d;
@@ -98,6 +100,7 @@ data_t<T, Dim>::data_t(data_t<T, Dim> &&other) {
 
 template <typename T, unsigned Dim>
 data_t<T, Dim> &data_t<T, Dim>::operator=(data_t<T, Dim> &&rhs) {
+  std::swap(size, rhs.size);
   std::swap(data, rhs.data);
   std::swap(data_d, rhs.data_d);
   return *this;
