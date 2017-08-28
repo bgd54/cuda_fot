@@ -57,7 +57,8 @@ problem_stepGPU(const DataType *__restrict__ point_weights,
       MY_SIZE ind_left = index<PointDim, SOA>(num_points, edge_list_left, d);
       MY_SIZE ind_right = index<PointDim, SOA>(num_points, edge_list_right, d);
       MY_SIZE edge_d = EdgeDim == 1 ? 0 : d;
-      MY_SIZE edge_ind = index<EdgeDim, true>(edge_num_in_partition, id, edge_d);
+      MY_SIZE edge_ind =
+          index<EdgeDim, true>(edge_num_in_partition, id, edge_d);
       inc[d] =
           out[ind_right] + edge_weights[edge_ind] * point_weights[ind_left];
       inc[d + PointDim] =
@@ -338,79 +339,6 @@ __global__ void problem_stepGPUHierarchical(
 }
 /* 1}}} */
 
-/* loopGPUEdgeCentred {{{1 */
-template <unsigned PointDim, unsigned EdgeDim, bool SOA, typename DataType>
-void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred(
-    MY_SIZE num, MY_SIZE reset_every) {
-  std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
-  MY_SIZE num_of_colours = partition.size();
-  assert(num_of_colours > 0);
-  data_t<DataType, PointDim> point_weights2(point_weights.getSize());
-  std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
-  std::vector<data_t<MY_SIZE, 2>> d_edge_lists;
-  std::vector<data_t<DataType, EdgeDim>> d_edge_weights;
-  for (const std::vector<MY_SIZE> &colour : partition) {
-    d_edge_lists.emplace_back(colour.size());
-    d_edge_weights.emplace_back(colour.size());
-    for (std::size_t i = 0; i < colour.size(); ++i) {
-      d_edge_lists.back()[2 * i] = graph.edge_to_node[2 * colour[i]];
-      d_edge_lists.back()[2 * i + 1] = graph.edge_to_node[2 * colour[i] + 1];
-      for (unsigned d = 0; d < EdgeDim; ++d) {
-        d_edge_weights.back()[index<EdgeDim, true>(colour.size(), i, d)]
-          = edge_weights[index<EdgeDim, true>(graph.numEdges(), colour[i], d)];
-      }
-    }
-    d_edge_lists.back().initDeviceMemory();
-    d_edge_weights.back().initDeviceMemory();
-  }
-  point_weights.initDeviceMemory();
-  point_weights2.initDeviceMemory();
-  CUDA_TIMER_START(t);
-  for (MY_SIZE i = 0; i < num; ++i) {
-    for (MY_SIZE c = 0; c < num_of_colours; ++c) {
-      MY_SIZE num_blocks = std::ceil(static_cast<double>(partition[c].size())
-          / static_cast<double>(block_size));
-      problem_stepGPU<PointDim, EdgeDim, SOA><<<num_blocks, block_size>>>(
-          point_weights.getDeviceData(), d_edge_weights[c].getDeviceData(),
-          d_edge_lists[c].getDeviceData(),
-          point_weights2.getDeviceData(), partition[c].size(),
-          graph.numPoints(), graph.numEdges());
-      checkCudaErrors(cudaDeviceSynchronize());
-    }
-    TIMER_TOGGLE(t);
-    if (reset_every && i % reset_every == reset_every - 1) {
-      reset();
-      // Copy to point_weights2 that is currently holding the result, the next
-      // copy will put it into point_weights also.
-      std::copy(point_weights.begin(), point_weights.end(),
-                point_weights2.begin());
-      point_weights2.flushToDevice();
-    }
-    checkCudaErrors(cudaMemcpy(point_weights.getDeviceData(),
-                               point_weights2.getDeviceData(),
-                               sizeof(DataType) * graph.numPoints() * PointDim,
-                               cudaMemcpyDeviceToDevice));
-    TIMER_TOGGLE(t);
-  }
-  PRINT_BANDWIDTH(
-      t, "loopGPUEdgeCentred",
-      (sizeof(DataType) *
-           (2.0 * PointDim * graph.numPoints() + EdgeDim * graph.numEdges()) +
-       2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
-          num,
-      (sizeof(DataType) * graph.numPoints() * PointDim * 2.0 + // point_weights
-       sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 +   // d_edge_weights
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +              // d_edge_list
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0                // d_partition
-       ) * num);
-  std::cout << " Needed " << num_of_colours << " colours" << std::endl;
-  point_weights.flushToHost();
-  for (MY_SIZE i = 0; i < num_of_colours; ++i) {
-    checkCudaErrors(cudaFree(d_partition[i]));
-  }
-}
-/* 1}}} */
-
 template <unsigned Dim = 1, bool SOA = false, typename DataType = float,
           class ForwardIterator>
 size_t countCacheLinesForBlock(ForwardIterator block_begin,
@@ -441,6 +369,91 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
   }
   return (SOA ? Dim : 1) * cache_lines.size();
 }
+
+/* loopGPUEdgeCentred {{{1 */
+template <unsigned PointDim, unsigned EdgeDim, bool SOA, typename DataType>
+void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred(
+    MY_SIZE num, MY_SIZE reset_every) {
+  std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
+  MY_SIZE num_of_colours = partition.size();
+  assert(num_of_colours > 0);
+  data_t<DataType, PointDim> point_weights2(point_weights.getSize());
+  std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
+  std::vector<data_t<MY_SIZE, 2>> d_edge_lists;
+  std::vector<data_t<DataType, EdgeDim>> d_edge_weights;
+  MY_SIZE total_num_cache_lines = 0;
+  MY_SIZE total_num_blocks = 0;
+  for (const std::vector<MY_SIZE> &colour : partition) {
+    d_edge_lists.emplace_back(colour.size());
+    d_edge_weights.emplace_back(colour.size());
+    for (std::size_t i = 0; i < colour.size(); ++i) {
+      d_edge_lists.back()[2 * i] = graph.edge_to_node[2 * colour[i]];
+      d_edge_lists.back()[2 * i + 1] = graph.edge_to_node[2 * colour[i] + 1];
+      for (unsigned d = 0; d < EdgeDim; ++d) {
+        d_edge_weights.back()[index<EdgeDim, true>(colour.size(), i, d)] =
+            edge_weights[index<EdgeDim, true>(graph.numEdges(), colour[i], d)];
+      }
+    }
+    d_edge_lists.back().initDeviceMemory();
+    d_edge_weights.back().initDeviceMemory();
+    MY_SIZE num_blocks = std::ceil(static_cast<double>(colour.size()) /
+                                   static_cast<double>(block_size));
+    total_num_blocks += num_blocks;
+    for (MY_SIZE i = 0; i < num_blocks; ++i) {
+      total_num_cache_lines += countCacheLinesForBlock<PointDim, SOA, DataType>(
+          d_edge_lists.back().begin() + 2 * block_size * i,
+          d_edge_lists.back().begin() +
+              2 * std::min<MY_SIZE>(colour.size(), block_size * (i + 1)));
+    }
+  }
+  point_weights.initDeviceMemory();
+  point_weights2.initDeviceMemory();
+  CUDA_TIMER_START(t);
+  for (MY_SIZE i = 0; i < num; ++i) {
+    for (MY_SIZE c = 0; c < num_of_colours; ++c) {
+      MY_SIZE num_blocks = std::ceil(static_cast<double>(partition[c].size()) /
+                                     static_cast<double>(block_size));
+      problem_stepGPU<PointDim, EdgeDim, SOA><<<num_blocks, block_size>>>(
+          point_weights.getDeviceData(), d_edge_weights[c].getDeviceData(),
+          d_edge_lists[c].getDeviceData(), point_weights2.getDeviceData(),
+          partition[c].size(), graph.numPoints(), graph.numEdges());
+      checkCudaErrors(cudaDeviceSynchronize());
+    }
+    TIMER_TOGGLE(t);
+    if (reset_every && i % reset_every == reset_every - 1) {
+      reset();
+      // Copy to point_weights2 that is currently holding the result, the next
+      // copy will put it into point_weights also.
+      std::copy(point_weights.begin(), point_weights.end(),
+                point_weights2.begin());
+      point_weights2.flushToDevice();
+    }
+    checkCudaErrors(cudaMemcpy(point_weights.getDeviceData(),
+                               point_weights2.getDeviceData(),
+                               sizeof(DataType) * graph.numPoints() * PointDim,
+                               cudaMemcpyDeviceToDevice));
+    TIMER_TOGGLE(t);
+  }
+  PRINT_BANDWIDTH(
+      t, "loopGPUEdgeCentred",
+      (sizeof(DataType) *
+           (2.0 * PointDim * graph.numPoints() + EdgeDim * graph.numEdges()) +
+       2.0 * sizeof(MY_SIZE) * graph.numEdges()) *
+          num,
+      (sizeof(DataType) * graph.numPoints() * PointDim * 2.0 + // point_weights
+       sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 +   // d_edge_weights
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +              // d_edge_list
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0                // d_partition
+       ) * num);
+  std::cout << " Needed " << num_of_colours << " colours" << std::endl;
+  std::cout << "  average cache_line / block: "
+            << static_cast<double>(total_num_cache_lines) / total_num_blocks
+            << std::endl;
+  PRINT_BANDWIDTH(t, "-cache line", total_num_cache_lines * 32.0,
+                  total_num_cache_lines * 32.0);
+  point_weights.flushToHost();
+}
+/* 1}}} */
 
 /* loopGPUHierarchical {{{1 */
 template <unsigned PointDim, unsigned EdgeDim, bool SOA, typename DataType>
@@ -565,6 +578,8 @@ void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical(
   std::cout << "  average cache_line / block: "
             << static_cast<double>(total_num_cache_lines) / total_num_blocks
             << std::endl;
+  PRINT_BANDWIDTH(timer_calc, "-cache line", total_num_cache_lines * 32.0,
+                  total_num_cache_lines * 32.0);
   avg_num_edge_colours /= total_num_blocks;
   std::cout << "  average number of colours used: " << avg_num_edge_colours
             << std::endl;
