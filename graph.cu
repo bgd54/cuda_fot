@@ -41,7 +41,6 @@ __global__ void
 problem_stepGPU(const DataType *__restrict__ point_weights,
                 const DataType *__restrict__ edge_weights,
                 const MY_SIZE *__restrict__ edge_list,
-                const MY_SIZE *__restrict__ edge_inds,
                 DataType *__restrict__ out, const MY_SIZE edge_num_in_partition,
                 const MY_SIZE num_points, const MY_SIZE num_edges) {
   static_assert(
@@ -51,15 +50,14 @@ problem_stepGPU(const DataType *__restrict__ point_weights,
   MY_SIZE id = blockIdx.x * blockDim.x + threadIdx.x;
   DataType inc[2 * PointDim];
   if (id < edge_num_in_partition) {
-    MY_SIZE edge_ind_base = edge_inds[id];
-    MY_SIZE edge_list_left = edge_list[2 * edge_ind_base];
-    MY_SIZE edge_list_right = edge_list[2 * edge_ind_base + 1];
+    MY_SIZE edge_list_left = edge_list[2 * id];
+    MY_SIZE edge_list_right = edge_list[2 * id + 1];
     #pragma unroll
     for (MY_SIZE d = 0; d < PointDim; ++d) {
       MY_SIZE ind_left = index<PointDim, SOA>(num_points, edge_list_left, d);
       MY_SIZE ind_right = index<PointDim, SOA>(num_points, edge_list_right, d);
       MY_SIZE edge_d = EdgeDim == 1 ? 0 : d;
-      MY_SIZE edge_ind = index<EdgeDim, true>(num_edges, edge_ind_base, edge_d);
+      MY_SIZE edge_ind = index<EdgeDim, true>(edge_num_in_partition, id, edge_d);
       inc[d] =
           out[ind_right] + edge_weights[edge_ind] * point_weights[ind_left];
       inc[d + PointDim] =
@@ -347,35 +345,34 @@ void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred(
   std::vector<std::vector<MY_SIZE>> partition = graph.colourEdges();
   MY_SIZE num_of_colours = partition.size();
   assert(num_of_colours > 0);
-  MY_SIZE max_thread_num = std::max_element(partition.begin(), partition.end(),
-                                            [](const std::vector<MY_SIZE> &a,
-                                               const std::vector<MY_SIZE> &b) {
-                                              return a.size() < b.size();
-                                            })
-                               ->size();
-  MY_SIZE num_blocks = static_cast<MY_SIZE>(
-      std::ceil(double(max_thread_num) / static_cast<double>(block_size)));
   data_t<DataType, PointDim> point_weights2(point_weights.getSize());
   std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
-  std::vector<MY_SIZE *> d_partition;
+  std::vector<data_t<MY_SIZE, 2>> d_edge_lists;
+  std::vector<data_t<DataType, EdgeDim>> d_edge_weights;
   for (const std::vector<MY_SIZE> &colour : partition) {
-    MY_SIZE *d_colour;
-    MY_SIZE mem_size = sizeof(MY_SIZE) * colour.size();
-    checkCudaErrors(cudaMalloc((void **)&d_colour, mem_size));
-    checkCudaErrors(
-        cudaMemcpy(d_colour, colour.data(), mem_size, cudaMemcpyHostToDevice));
-    d_partition.push_back(d_colour);
+    d_edge_lists.emplace_back(colour.size());
+    d_edge_weights.emplace_back(colour.size());
+    for (std::size_t i = 0; i < colour.size(); ++i) {
+      d_edge_lists.back()[2 * i] = graph.edge_to_node[2 * colour[i]];
+      d_edge_lists.back()[2 * i + 1] = graph.edge_to_node[2 * colour[i] + 1];
+      for (unsigned d = 0; d < EdgeDim; ++d) {
+        d_edge_weights.back()[index<EdgeDim, true>(colour.size(), i, d)]
+          = edge_weights[index<EdgeDim, true>(graph.numEdges(), colour[i], d)];
+      }
+    }
+    d_edge_lists.back().initDeviceMemory();
+    d_edge_weights.back().initDeviceMemory();
   }
   point_weights.initDeviceMemory();
   point_weights2.initDeviceMemory();
-  edge_weights.initDeviceMemory();
-  graph.edge_to_node.initDeviceMemory();
   CUDA_TIMER_START(t);
   for (MY_SIZE i = 0; i < num; ++i) {
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
+      MY_SIZE num_blocks = std::ceil(static_cast<double>(partition[c].size())
+          / static_cast<double>(block_size));
       problem_stepGPU<PointDim, EdgeDim, SOA><<<num_blocks, block_size>>>(
-          point_weights.getDeviceData(), edge_weights.getDeviceData(),
-          graph.edge_to_node.getDeviceData(), d_partition[c],
+          point_weights.getDeviceData(), d_edge_weights[c].getDeviceData(),
+          d_edge_lists[c].getDeviceData(),
           point_weights2.getDeviceData(), partition[c].size(),
           graph.numPoints(), graph.numEdges());
       checkCudaErrors(cudaDeviceSynchronize());
