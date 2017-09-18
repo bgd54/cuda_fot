@@ -123,7 +123,6 @@ void testTwoImplementations(
         }
       }
       if (value_changed != PointDim && value_changed != 0) {
-        std::cout << std::endl;
         single_change_in_node = true;
       }
     }
@@ -168,6 +167,9 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
   {
     srand(1);
     Problem<PointDim, EdgeDim, SOA, DataType> problem(N, M);
+    //std::ifstream f ("/data/mgiles/asulyok/grid_100x200_row_major.gps.metis");
+    //Problem<PointDim, EdgeDim, SOA, DataType> problem(f);
+    assert(problem.graph.numPoints() == N*M);
     result1.resize(problem.graph.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
@@ -183,6 +185,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
 
     // Partition after
     problem.partition(1.01);
+    //std::ifstream f_part ("/data/mgiles/asulyok/grid_100x200_row_major.gps.metis_part");
+    //problem.readPartition(f_part);
     problem.reorderToPartition();
     problem.renumberPoints();
 
@@ -225,7 +229,9 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
   single_change_in_node = false;
   {
     srand(1);
+    //std::ifstream f ("/data/mgiles/asulyok/grid_100x200_row_major.gps.metis");
     Problem<PointDim, EdgeDim, SOA, DataType> problem(N, M);
+    //Problem<PointDim, EdgeDim, SOA, DataType> problem(f);
     result2.resize(problem.graph.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
@@ -237,6 +243,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
     }
     // Create partitioning
     problem.partition(1.01);
+    //std::ifstream f_part ("/data/mgiles/asulyok/grid_100x200_row_major.gps.metis_part");
+    //problem.readPartition(f_part);
     problem.reorderToPartition();
     problem.renumberPoints();
 
@@ -268,7 +276,6 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
         }
       }
       if (value_changed != PointDim && value_changed != 0) {
-        std::cout << std::endl;
         single_change_in_node = true;
       }
     }
