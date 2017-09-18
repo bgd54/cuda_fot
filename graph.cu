@@ -442,15 +442,22 @@ void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUEdgeCentred(
           num,
       (sizeof(DataType) * graph.numPoints() * PointDim * 2.0 + // point_weights
        sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 +   // d_edge_weights
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0 +              // d_edge_list
-       sizeof(MY_SIZE) * graph.numEdges() * 2.0                // d_partition
+       sizeof(MY_SIZE) * graph.numEdges() * 2.0                // d_edge_list
        ) * num);
   std::cout << " Needed " << num_of_colours << " colours" << std::endl;
   std::cout << "  average cache_line / block: "
             << static_cast<double>(total_num_cache_lines) / total_num_blocks
             << std::endl;
-  PRINT_BANDWIDTH(t, "-cache line", total_num_cache_lines * 32.0,
-                  total_num_cache_lines * 32.0);
+  PRINT_BANDWIDTH(
+      t, " -cache line",
+      num * (total_num_cache_lines * 32.0 * 2 +
+             1.0 * EdgeDim * graph.numEdges() * sizeof(DataType) +
+             2.0 * graph.numEdges() * sizeof(MY_SIZE)),
+      num *
+          (2 * 32.0 * total_num_cache_lines + // indirect accessed cache lines
+           sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 + // edge_weights
+           sizeof(MY_SIZE) * graph.numEdges() * 2.0              // edge_list
+           ));
   point_weights.flushToHost();
 }
 /* 1}}} */
@@ -578,8 +585,22 @@ void Problem<PointDim, EdgeDim, SOA, DataType>::loopGPUHierarchical(
   std::cout << "  average cache_line / block: "
             << static_cast<double>(total_num_cache_lines) / total_num_blocks
             << std::endl;
-  PRINT_BANDWIDTH(timer_calc, "-cache line", total_num_cache_lines * 32.0,
-                  total_num_cache_lines * 32.0);
+  PRINT_BANDWIDTH(
+      timer_calc, " -cache line",
+      num * (total_num_cache_lines * 32.0 * 2 +
+             1.0 * EdgeDim * graph.numEdges() * sizeof(DataType) +
+             2.0 * graph.numEdges() * sizeof(MY_SIZE)),
+      num *
+          (2 * 32.0 * total_num_cache_lines + // indirect accessed cache lines
+           sizeof(DataType) * graph.numEdges() * EdgeDim * 1.0 + // edge_weights
+           sizeof(MY_SIZE) * graph.numEdges() * 2.0 +            // edge_list
+           sizeof(MY_SIZE) * total_cache_size * 1.0 +
+           sizeof(MY_SIZE) *
+               (total_num_blocks * 1.0 +
+                memory.colours.size()) + // points_to_be_cached_offsets
+           sizeof(MY_SIZE) * (total_num_blocks * 1.0) + // block_offsets
+           sizeof(std::uint8_t) * graph.numEdges()      // edge_colours
+           ));
   avg_num_edge_colours /= total_num_blocks;
   std::cout << "  average number of colours used: " << avg_num_edge_colours
             << std::endl;
