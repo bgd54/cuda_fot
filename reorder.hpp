@@ -26,9 +26,9 @@ template <class UnsignedType> struct GraphCSR {
   explicit GraphCSR(MY_SIZE _num_points, MY_SIZE _num_edges,
                     const data_t<MY_SIZE, 2> &edge_to_node)
       : num_points(_num_points), num_edges(_num_edges) {
-    static_assert(std::size_t(std::numeric_limits<UnsignedType>::max()) <=
-                      std::size_t(std::numeric_limits<MY_SIZE>::max()),
-                  "GraphCSR: UnsignedType too small.");
+    // static_assert(std::size_t(std::numeric_limits<UnsignedType>::max()) >=
+    // std::size_t(std::numeric_limits<MY_SIZE>::max()),
+    //"GraphCSR: UnsignedType too small.");
     point_indices = new UnsignedType[num_points + 1];
     UnsignedType point_ind = 0;
     point_indices[0] = 0;
