@@ -628,7 +628,13 @@ void generateTimes(std::string in_file) {
           implementation_algorithm_t<PointDim, EdgeDim, SOA, DataType> algo,
           MY_SIZE num) {
         std::ifstream f(in_file);
-        Problem<PointDim, EdgeDim, SOA, DataType> problem(f);
+        Problem<PointDim, EdgeDim, SOA, DataType> problem(f, 288);
+        if (in_file.find("metis") < in_file.size()) {
+          std::ifstream f_part(in_file + "_part");
+          problem.readPartition(f_part);
+          problem.reorderToPartition();
+          problem.renumberPoints();
+        }
         std::cout << "--Problem created" << std::endl;
         (problem.*algo)(num, 0);
         std::cout << "--Problem finished." << std::endl;
