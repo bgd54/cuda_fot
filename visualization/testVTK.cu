@@ -7,13 +7,14 @@
 
 using namespace std;
 
-void writeGlobalColouringVTK(const std::string &filename, const Graph &graph,
+template <unsigned MeshDim>
+void writeGlobalColouringVTK(const std::string &filename, const Mesh<MeshDim> &mesh,
                              MY_SIZE block_size) {
   std::vector<std::vector<MY_SIZE>> partition =
-      std::move(graph.colourEdges<>());
+    std::move(mesh.template colourEdges<>());
   std::vector<std::vector<std::uint16_t>> data(3);
-  data[VTK_IND_THR_COL].resize(graph.numEdges());
-  data[VTK_IND_BLK_ID].resize(graph.numEdges());
+  data[VTK_IND_THR_COL].resize(mesh.numEdges());
+  data[VTK_IND_BLK_ID].resize(mesh.numEdges());
   // TODO optimise
   MY_SIZE num_colours = partition.size();
   MY_SIZE bid = 0;
@@ -26,68 +27,75 @@ void writeGlobalColouringVTK(const std::string &filename, const Graph &graph,
     }
     bid++;
   }
-  writeGraphToVTKAscii(filename, graph.edge_to_node, graph.point_coordinates,
+  writeMeshToVTKAscii(filename, mesh.mesh_to_node, mesh.point_coordinates,
                        data);
 }
 
+
 void writeHierarchicalColouringVTK(const std::string &filename,
                                    const Problem<> &problem) {
-  const HierarchicalColourMemory<> memory(problem,problem.partition_vector);
+  const HierarchicalColourMemory<Problem<>::MESH_DIM> memory(problem,problem.partition_vector);
+  constexpr unsigned MESH_DIM = Problem<>::MESH_DIM;
   std::cout << "Number of block colours: " << memory.colours.size() << std::endl;
-  data_t<MY_SIZE, 2> edge_list(problem.graph.numEdges());
+  data_t<MY_SIZE, MESH_DIM> cell_list(problem.mesh.numCells());
   std::vector<std::vector<std::uint16_t>> data(3);
   MY_SIZE blk_col_ind = 0, blk_ind = 0;
-  MY_SIZE edge_ind = 0;
+  MY_SIZE cell_ind = 0;
   for (const auto &m : memory.colours) {
     data[VTK_IND_THR_COL].insert(data[VTK_IND_THR_COL].end(),
-                                 m.edge_colours.begin(), m.edge_colours.end());
+                                 m.cell_colours.begin(), m.cell_colours.end());
     data[VTK_IND_BLK_COL].insert(data[VTK_IND_BLK_COL].end(),
-                                 m.edge_colours.size(), blk_col_ind++);
-    assert(2 * m.edge_colours.size() == m.edge_list.size());
+                                 m.cell_colours.size(), blk_col_ind++);
+    assert(MESH_DIM * m.cell_colours.size() == m.cell_list.size());
     MY_SIZE local_block_id = 0;
-    for (MY_SIZE i = 0; i < m.edge_colours.size(); ++i) {
-      data[VTK_IND_BLK_ID].push_back(blk_ind);
+    MY_SIZE num_cells = m.cell_colours.size();
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      assert(local_block_id + 1 < m.block_offsets.size());
+      assert(m.block_offsets[local_block_id] !=
+          m.block_offsets[local_block_id + 1]);
 
       if (m.block_offsets[local_block_id + 1] <= i) {
         ++local_block_id;
         ++blk_ind;
       }
+      data[VTK_IND_BLK_ID].push_back(blk_ind);
+
       MY_SIZE offset = m.points_to_be_cached_offsets[local_block_id];
-      MY_SIZE left_point =
-          m.points_to_be_cached[offset + m.edge_list[i]];
-      MY_SIZE right_point =
-          m.points_to_be_cached[offset + m.edge_list[m.edge_colours.size() + i]];
-      edge_list[2 * edge_ind] = left_point;
-      edge_list[2 * edge_ind + 1] = right_point;
-      ++edge_ind;
+      for (MY_SIZE j = 0; j < MESH_DIM; ++j) {
+        MY_SIZE m_cell_ind = index<MESH_DIM, true>(num_cells, i, j);
+        MY_SIZE point_ind = m.points_to_be_cached[offset + m.cell_list[m_cell_ind]];
+        cell_list[MESH_DIM * cell_ind + j] = point_ind;
+      }
+      ++cell_ind;
     }
     ++blk_ind;
   }
-  assert(edge_ind == edge_list.getSize());
-  writeGraphToVTKAscii(filename, edge_list, problem.graph.point_coordinates,
+  assert(cell_ind == cell_list.getSize());
+  writeMeshToVTKAscii(filename, cell_list, problem.mesh.point_coordinates,
                        data);
 }
 
-void writePartitionVTK(const std::string &filename, const Graph &graph,
+template <unsigned MeshDim>
+void writePartitionVTK(const std::string &filename, const Mesh<MeshDim> &mesh,
                        MY_SIZE block_size) {
   std::vector<std::vector<std::uint16_t>> data(3);
   std::vector<idx_t> partition =
-      partitionMetisEnh(graph.getLineGraph(), block_size, 1.016);
-  data[VTK_IND_BLK_ID].resize(graph.numEdges());
-  assert(partition.size() == graph.numEdges());
-  for (MY_SIZE i = 0; i < graph.numEdges(); ++i) {
+      partitionMetisEnh(mesh.getLineGraph(), block_size, 1.001);
+  data[VTK_IND_BLK_ID].resize(mesh.numCells());
+  assert(partition.size() == mesh.numCells());
+  for (MY_SIZE i = 0; i < mesh.numCells(); ++i) {
     data[VTK_IND_BLK_ID][i] = partition[i];
   }
-  writeGraphToVTKAscii(filename, graph.edge_to_node, graph.point_coordinates,
+  writeMeshToVTKAscii(filename, mesh.cell_to_node, mesh.point_coordinates,
                        data);
 }
 
 int main() {
   srand(1);
-  /*Problem<> problem(17, 17, {1,8}, true);*/
-  std::ifstream f ("/home/asulyok/graphs/grid_1153x1153_row_major2.gps"),
-           f_coord("/home/asulyok/graphs/grid_1153x1153_row_major2.gps_coord");
-  Problem<> problem(f,288,&f_coord);
+  Problem<> problem({4,8,3}, {0,4}, true);
+  /*std::ifstream f ("/home/asulyok/graphs/grid_1153x1153_row_major2.gps"),*/
+           /*f_coord("/home/asulyok/graphs/grid_1153x1153_row_major2.gps_coord");*/
+  /*Problem<> problem(f,288,&f_coord);*/
   /*int options [METIS_NOPTIONS];*/
   /*METIS_SetDefaultOptions(options);*/
   /*options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;*/

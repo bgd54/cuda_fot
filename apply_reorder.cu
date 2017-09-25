@@ -51,9 +51,9 @@ void printUsage(const char *prog_name) {
             << " in_file [--gps <gps_out_file>] [--metis <metis_out_file>]"
             << std::endl;
   std::cerr << std::endl
-            << "--gps <gps_out_file>            writes GPS reordered graph "
+            << "--gps <gps_out_file>            writes GPS reordered mesh "
                "to the file\n"
-               "--metis <metis_out_file>        writes METIS partitioned graph "
+               "--metis <metis_out_file>        writes METIS partitioned mesh "
                "to the file\n"
                "                                writes partition to the file "
                "with suffix\n"
@@ -75,24 +75,24 @@ int main(int argc, char **argv) {
     }
     if (!arguments[METIS].empty()) {
       Problem<> problem(f, 288);
-      problem.graph.reorderScotch();
+      problem.mesh.reorderScotch();
       if (!arguments[GPS].empty()) {
         std::ofstream f_gps_out(arguments[GPS]);
-        problem.graph.writeEdgeList(f_gps_out);
+        problem.mesh.writeCellList(f_gps_out);
       }
       std::ofstream f_metis_out(arguments[METIS]);
       std::ofstream f_metis_out_part(arguments[METIS] + "_part");
       problem.partition(PARTITION_TOLERANCE);
       problem.reorderToPartition();
       problem.renumberPoints();
-      problem.graph.writeEdgeList(f_metis_out);
+      problem.mesh.writeCellList(f_metis_out);
       problem.writePartition(f_metis_out_part);
     } else {
-      Graph graph(f);
+      Mesh<MESH_DIM_MACRO> mesh(f);
       if (!arguments[GPS].empty()) {
-        graph.reorderScotch();
+        mesh.reorderScotch();
         std::ofstream f_out(arguments[GPS]);
-        graph.writeEdgeList(f_out);
+        mesh.writeCellList(f_out);
       }
     }
   } catch (ScotchError &e) {
