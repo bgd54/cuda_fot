@@ -6,11 +6,12 @@ AUX_SRC =
 HDR = $(wildcard *.hpp)
 TGT = $(patsubst %.cu,%,$(MAIN_SRC))
 
-NVCCFLAGS	:= -lineinfo -arch=sm_35 --ptxas-options=-v --use_fast_math
+NVCCFLAGS	:= -arch=sm_60 --use_fast_math
 NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
+#NVCCFLAGS   += --ptxas-options=-v
 
-OPTIMIZATION_FLAGS := -g
-#OPTIMIZATION_FLAGS := -g -pg -Xcompiler=-fno-inline
+OPTIMIZATION_FLAGS := -g -lineinfo
+#OPTIMIZATION_FLAGS := -g -pg -Xcompiler=-fno-inline -lineinfo
 #OPTIMIZATION_FLAGS := -O3 -DNDEBUG
 
 SCOTCH_FLAGS := -lscotch -lscotcherr -lm -I/home/software/scotch_5.1.12/include/
