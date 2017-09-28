@@ -1,7 +1,7 @@
 INC	:= -I$(CUDA_HOME)/include -I. -I ..
 LIB	:= -L$(CUDA_HOME)/lib64 -lcudart
 
-MAIN_SRC = graph.cu test_scotch.cu apply_reorder.cu
+MAIN_SRC = graph.cu generate_grid.cu apply_reorder.cu
 AUX_SRC =
 HDR = $(wildcard *.hpp)
 TGT = $(patsubst %.cu,%,$(MAIN_SRC))
