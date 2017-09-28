@@ -221,8 +221,17 @@ struct Problem {
   }
 
   void partition(float tolerance, idx_t options[METIS_NOPTIONS] = NULL) {
-    std::vector<idx_t> _partition_vector = partitionMetisEnh(
-        mesh.getCellToCellGraph(), block_size, tolerance, options);
+    std::vector<idx_t> _partition_vector;
+    if (options == NULL) {
+      idx_t _options[METIS_NOPTIONS];
+      METIS_SetDefaultOptions(_options);
+      _options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;
+      _partition_vector = std::move(partitionMetisEnh(
+          mesh.getCellToCellGraph(), block_size, tolerance, options));
+    } else {
+      _partition_vector = std::move(partitionMetisEnh(mesh.getCellToCellGraph(),
+                                            block_size, tolerance, options));
+    }
     partition_vector.resize(_partition_vector.size());
     std::copy(_partition_vector.begin(), _partition_vector.end(),
               partition_vector.begin());
