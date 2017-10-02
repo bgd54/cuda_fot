@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "mesh.hpp"
+#include "grid.hpp"
 #include "partition.hpp"
 #include "timer.hpp"
 
@@ -41,7 +41,7 @@ struct Problem {
   Problem(const std::vector<MY_SIZE> &grid_dim,
           std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
           bool use_coordinates = false)
-      : mesh(grid_dim, block_dims, use_coordinates),
+      : mesh{Grid<MESH_DIM>(grid_dim, block_dims, use_coordinates)},
         cell_weights(mesh.numCells()), point_weights(mesh.numPoints()),
         block_size{calculateBlockSize(block_dims)} {
     for (DataType &weight : cell_weights) {
@@ -52,9 +52,8 @@ struct Problem {
   }
 
   Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE,
-          std::istream *coord_is = nullptr,
           std::istream *partition_is = nullptr)
-      : mesh(mesh_is, coord_is), cell_weights(mesh.numCells()),
+      : mesh(mesh_is), cell_weights(mesh.numCells()),
         point_weights(mesh.numPoints()), block_size{_block_size} {
     if (partition_is != nullptr) {
       if (!(*partition_is)) {
@@ -229,8 +228,8 @@ struct Problem {
       _partition_vector = std::move(partitionMetisEnh(
           mesh.getCellToCellGraph(), block_size, tolerance, options));
     } else {
-      _partition_vector = std::move(partitionMetisEnh(mesh.getCellToCellGraph(),
-                                            block_size, tolerance, options));
+      _partition_vector = std::move(partitionMetisEnh(
+          mesh.getCellToCellGraph(), block_size, tolerance, options));
     }
     partition_vector.resize(_partition_vector.size());
     std::copy(_partition_vector.begin(), _partition_vector.end(),

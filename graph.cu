@@ -848,10 +848,10 @@ void generateTimesDifferentBlockDims() {
 
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
-  /*test();*/
-  /*testReordering();*/
-  /*generateTimesDifferentBlockDims();*/
+  test();
+  testReordering();
   testPartitioning();
+  /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
   return 0;
 }
