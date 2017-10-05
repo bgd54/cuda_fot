@@ -15,129 +15,96 @@
 
 constexpr MY_SIZE DEFAULT_BLOCK_SIZE = 128;
 
-template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          typename DataType = float>
-struct Problem {
-  static_assert(
-      CellDim == PointDim || CellDim == 1,
-      "I know of no reason why CellDim should be anything but 1 or PointDim");
-  static constexpr unsigned MESH_DIM = MESH_DIM_MACRO;
-  // And because nvcc doesn't compile the above, we need the following hack:
-  // using _MESH_DIM_T = std::integral_constant<unsigned, MESH_DIM_MACRO>;
-  // static constexpr _MESH_DIM_T MESH_DIM {};
+template <bool SOA, class IndirectDataParams, class DirectDataParams,
+          unsigned... MeshDims>
+class Problem {
+protected:
+  using indirect_type_generator = generate_data_set_t<IndirectDataParams>;
+  using direct_type_generator = generate_data_set_t<DirectDataParams>;
 
-  Mesh<MESH_DIM> mesh;
-  data_t<DataType, CellDim> cell_weights;
-  data_t<DataType, PointDim> point_weights;
+public:
+  using indirect_data_set_t = typename indirect_type_generator::data_set_type;
+  using direct_data_set_t = typename direct_type_generator::data_set_type;
+  using written_indirect_data_set_t =
+      typename indirect_type_generator::written_data_set_type;
+  // using written_direct_data_set_t =
+  //    typename indirect_type_generator::written_data_set_type;
+  using written_indirect_data_set_mapping =
+      typename indirect_type_generator::written_data_set_mapping;
+  static constexpr unsigned NUM_MAPPINGS = Mesh<MeshDims...>::NUM_MAPPINGS;
+
+  Mesh<MeshDims...> mesh;
+  direct_data_set_t cell_weights;
+  indirect_data_set_t point_weights;
   const MY_SIZE block_size; // GPU block size
-  std::vector<MY_SIZE> partition_vector;
+  std::vector<MY_SIZE> partition_vector{};
 
-  /* ctor/dtor {{{1 */
-  Problem(MY_SIZE N, MY_SIZE M,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-          bool use_coordinates = false)
-      : Problem({N, M}, block_dims, use_coordinates) {}
+protected:
+  Problem(Mesh<MeshDims...> &&mesh_, MY_SIZE block_size_)
+      : mesh{mesh_},
+        cell_weights{initMapping<direct_data_set_t>(mesh.numCells())},
+        point_weights{
+            initTupleFromArray<indirect_data_set_t>(mesh.numPoints())},
+        block_size{block_size_} {}
 
-  Problem(const std::vector<MY_SIZE> &grid_dim,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-          bool use_coordinates = false)
-      : mesh{Grid<MESH_DIM>(grid_dim, block_dims, use_coordinates)},
-        cell_weights(mesh.numCells()), point_weights(mesh.numPoints()),
-        block_size{calculateBlockSize(block_dims)} {
-    for (DataType &weight : cell_weights) {
-      weight = DataType(rand() % 10000 + 1) / 5000.0;
-      weight *= 0.001;
-    }
-    reset();
-  }
-
-  Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE,
-          std::istream *partition_is = nullptr)
-      : mesh(mesh_is), cell_weights(mesh.numCells()),
-        point_weights(mesh.numPoints()), block_size{_block_size} {
-    if (partition_is != nullptr) {
-      if (!(*partition_is)) {
-        throw InvalidInputFile{"partition input", 0};
-      }
-      partition_vector.resize(mesh.numCells());
-      MY_SIZE read_block_size;
-      *partition_is >> read_block_size;
-      if (!(*partition_is)) {
-        throw InvalidInputFile{"partition input", 1};
-      }
-      if (read_block_size != block_size) {
-        std::cerr << "Warning: block size in file (" << read_block_size
-                  << ") doesn't equal used block size (" << block_size << ")"
-                  << std::endl;
-      }
-      for (MY_SIZE i = 0; i < mesh.numCells(); ++i) {
-        *partition_is >> partition_vector[i];
-        if (!(*partition_is)) {
-          throw InvalidInputFile{"partition input", i + 1};
-        }
-      }
-    }
-    for (DataType &weight : cell_weights) {
-      weight = DataType(rand() % 10000 + 1) / 5000.0;
-      weight *= 0.001;
-    }
-    reset();
-  }
-
-  void reset() {
-    for (DataType &w : point_weights) {
-      w = DataType(rand() % 10000) / 5000.f;
-      w *= 0.001;
-    }
-  }
+public:
+  Problem(MY_SIZE num_cells,
+          const std::array<MY_SIZE, NUM_MAPPINGS> &num_points,
+          const std::array<std::istream *, NUM_MAPPINGS> &mesh_is,
+          MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
+      : mesh(num_cells, num_points, mesh_is),
+        cell_weights(initMapping<direct_data_set_t>(num_cells)),
+        point_weights(initTupleFromArray<indirect_data_set_t>(num_points)) {}
 
   ~Problem() {}
-  /* 1}}} */
 
   void loopGPUCellCentred(MY_SIZE num, MY_SIZE reset_every = 0);
   void loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every = 0);
 
-  void stepCPUCellCentred(DataType *temp) { /*{{{*/
-    for (MY_SIZE cell_ind_base = 0; cell_ind_base < mesh.numCells();
-         ++cell_ind_base) {
-      for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
-        MY_SIZE ind_left_base =
-            mesh.cell_to_node[mesh.cell_to_node.dim * cell_ind_base + offset];
-        MY_SIZE ind_right_base =
-            mesh.cell_to_node[mesh.cell_to_node.dim * cell_ind_base +
-                              (offset == MESH_DIM - 1 ? 0 : offset + 1)];
-        MY_SIZE w_ind_left = 0, w_ind_right = 0;
-        for (MY_SIZE d = 0; d < PointDim; ++d) {
-          w_ind_left = index<PointDim, SOA>(mesh.numPoints(), ind_left_base, d);
-          w_ind_right =
-              index<PointDim, SOA>(mesh.numPoints(), ind_right_base, d);
-          MY_SIZE cell_d = CellDim == 1 ? 0 : d;
+  template <class LoopBodyFunc>
+  void stepCPUCellCentred(written_indirect_data_set_t &point_weights_out) {
+    for (MY_SIZE cell_ind = 0; cell_ind < mesh.numCells(); ++cell_ind) {
+      static_assert(SOA == false, "SOA is not yet supported");
+      call_with_pointers<LoopBodyFunc, written_indirect_data_set_mapping>(
+          mesh.mappings, cell_ind, point_weights, point_weights_out,
+          cell_weights);
+      // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
+      //  MY_SIZE ind_left_base =
+      //      mesh.cell_to_node[mesh.cell_to_node.dim * cell_ind_base + offset];
+      //  MY_SIZE ind_right_base =
+      //      mesh.cell_to_node[mesh.cell_to_node.dim * cell_ind_base +
+      //                        (offset == MESH_DIM - 1 ? 0 : offset + 1)];
+      //  MY_SIZE w_ind_left = 0, w_ind_right = 0;
+      //  for (MY_SIZE d = 0; d < PointDim; ++d) {
+      //    w_ind_left = index<PointDim, SOA>(mesh.numPoints(), ind_left_base,
+      //    d);
+      //    w_ind_right =
+      //        index<PointDim, SOA>(mesh.numPoints(), ind_right_base, d);
+      //    MY_SIZE cell_d = CellDim == 1 ? 0 : d;
 
-          MY_SIZE cell_weight_ind =
-              index<CellDim, true>(mesh.numCells(), cell_ind_base, cell_d);
-          point_weights[w_ind_right] +=
-              cell_weights[cell_weight_ind] * temp[w_ind_left];
-          point_weights[w_ind_left] +=
-              cell_weights[cell_weight_ind] * temp[w_ind_right];
-        }
-      }
+      //    MY_SIZE cell_weight_ind =
+      //        index<CellDim, true>(mesh.numCells(), cell_ind_base, cell_d);
+      //    point_weights[w_ind_right] +=
+      //        cell_weights[cell_weight_ind] * temp[w_ind_left];
+      //    point_weights[w_ind_left] +=
+      //        cell_weights[cell_weight_ind] * temp[w_ind_right];
+      //  }
+      //}
     }
-  } /*}}}*/
+  }
 
-  void loopCPUCellCentred(MY_SIZE num, MY_SIZE reset_every = 0) { /*{{{*/
-    DataType *temp = (DataType *)malloc(sizeof(DataType) * mesh.numPoints() *
-                                        point_weights.dim);
+  template <class LoopBodyFunc> void loopCPUCellCentred(MY_SIZE num) { /*{{{*/
+    // DataType *temp = (DataType *)malloc(sizeof(DataType) * mesh.numPoints() *
+    //                                    point_weights.dim);
+    //written_indirect_data_set_t point_weights_out(point_weights);
+    // TODO: can't simply copy these
     TIMER_START(t);
+    TIMER_TOGGLE(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
-      std::copy(point_weights.begin(), point_weights.end(), temp);
+      stepCPUCellCentred(point_weights_out);
+      // TODO copy
       TIMER_TOGGLE(t);
-      stepCPUCellCentred(temp);
-      if (reset_every && i % reset_every == reset_every - 1) {
-        TIMER_TOGGLE(t);
-        reset();
-        TIMER_TOGGLE(t);
-      }
     }
     PRINT_BANDWIDTH(t, "loopCPUCellCentred",
                     (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
@@ -153,7 +120,7 @@ struct Problem {
 
   void stepCPUCellCentredOMP(const std::vector<MY_SIZE> &inds,
                              data_t<DataType, PointDim> &out) { /*{{{*/
-    #pragma omp parallel for
+#pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
       for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
@@ -188,7 +155,7 @@ struct Problem {
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
-      #pragma omp parallel for
+#pragma omp parallel for
       for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.dim;
            ++e) {
         temp[e] = point_weights[e];
@@ -215,8 +182,11 @@ struct Problem {
   } /*}}}*/
 
   void reorder() {
-    mesh.reorderScotch<DataType, PointDim, CellDim, SOA>(&cell_weights,
-                                                         &point_weights);
+    static_assert(NUM_MAPPINGS > 0, "Assuming here that NUM_MAPPINGS > 0");
+    ScotchReorder reorder(mesh.numPoints(0), mesh.numCells(),
+                          std::get<0>(mesh.mappings));
+    std::vector<SCOTCH_Num> permutation = reorder.reorder();
+    mesh.template reorder<>(permutation, cell_data, point_data);
   }
 
   void partition(float tolerance, idx_t options[METIS_NOPTIONS] = NULL) {
@@ -237,30 +207,13 @@ struct Problem {
   }
 
   void reorderToPartition() {
-    mesh.reorderToPartition<CellDim, DataType>(partition_vector, cell_weights);
+    std::vector<MY_SIZE> inverse_permutation =
+        mesh.reorderToPartition(partition_vector);
+    for_each(cell_weights, ReorderDataSet{inverse_permutation});
   }
 
-  void renumberPoints() {
-    std::vector<MY_SIZE> permutation = mesh.getPointRenumberingPermutation2(
-        mesh.getPointToPartition(partition_vector));
-    mesh.renumberPoints(permutation);
-    reorderData<PointDim, SOA, DataType, MY_SIZE>(point_weights, permutation);
-  }
-
-  static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
-    if (MESH_DIM == 2) {
-      if (block_dims.first == 0) {
-        return block_dims.second;
-      } else if (block_dims == std::pair<MY_SIZE, MY_SIZE>{9, 8}) {
-        return 9 * 8 * 2 * 2;
-      } else {
-        return block_dims.first * block_dims.second * 2;
-      }
-    } else {
-      // Block dims are not yet supported with meshes
-      assert(block_dims.first == 0);
-      return block_dims.second;
-    }
+  void renumberPointsToPartition() {
+    for_each(mappings, RenumberPointsToPartition<MeshDims...>{mesh});
   }
 
   void writePartition(std::ostream &os) const {
@@ -292,6 +245,35 @@ struct Problem {
       }
     }
   }
+
+protected:
+  class ReorderDataSet {
+    const std::vector<MY_SIZE> &inverse_permutation;
+
+  public:
+    ReorderDataSet(const std::vector<MY_SIZE> &inverse_permutation_)
+        : inverse_permutation{inverse_permutation_} {}
+
+    template <unsigned, unsigned Dim, class DataType>
+    void operator()(data_t<DataType, Dim> &mapping) {
+      reorderDataInverse<Dim, false>(mapping, inverse_permutation);
+    }
+  };
+
+  template <class... MeshDims> class RenumberPointsToPartition {
+    const Mesh<MeshDims...> &mesh;
+
+  public:
+    RenumberPointsToPartition(const Mesh<MeshDims...> &mesh_) : mesh{mesh_} {}
+    template <unsigned MapInd, unsigned Dim, class DataType>
+    void operator()(data_t<DataType, Dim> &data) {
+      std::vector<MY_SIZE> permutation = mesh.getPointRenumberingPermutation2(
+          mesh.getPointToPartition<MapInd>());
+      mesh.renumberPoints<MapInd>(permutation);
+      reorderData<Dim, SOA, DataType, MY_SIZE>(data, permutation);
+    }
+  };
+
 };
 
 #endif /* end of include guard: PROBLEM_HPP_CGW3IDMV */

@@ -3,6 +3,7 @@
 
 #include "data_t.hpp"
 #include "reorder.hpp"
+#include "tuple_utils.hpp"
 #include <algorithm>
 #include <bitset>
 #include <cassert>
@@ -17,37 +18,30 @@
 
 struct InvalidInputFile {
   std::string input_type;
-  MY_SIZE line;
+  MY_SIZE file_index, line;
 };
 
-template <unsigned MeshDim = 2> class Mesh {
+template <unsigned... MeshDims> class Mesh {
 public:
-  static_assert(MeshDim == 2 || MeshDim == 4 || MeshDim == 8,
-                "Only supporting MeshDim in {2,4,8}");
   // I assume 64 colour is enough
   using colourset_t = std::bitset<64>;
 
-  static constexpr unsigned MESH_DIM = MeshDim;
+  using mappings_t = generate_mappings_t<MeshDims...>;
+  static constexpr unsigned NUM_MAPPINGS = std::tuple_size<mappings_t>::value;
+  static_assert(NUM_MAPPINGS > 0, "I've assumed there is at least one mapping");
 
   template <unsigned _MeshDim> friend class Mesh;
 
 private:
-  MY_SIZE num_points, num_cells;
+  std::array<MY_SIZE, NUM_MAPPINGS> num_points;
 
 public:
-  data_t<MY_SIZE, MeshDim> cell_to_node;
+  mappings_t mappings;
 
   /* Initialisation {{{1 */
 protected:
-  Mesh(MY_SIZE _num_points, MY_SIZE _num_cells,
-       const MY_SIZE *_cell_to_node = nullptr)
-      : num_points{_num_points}, num_cells{_num_cells},
-        cell_to_node(num_cells) {
-    if (_cell_to_node) {
-      std::copy(_cell_to_node, _cell_to_node + MeshDim * num_cells,
-                cell_to_node.begin());
-    }
-  }
+  Mesh(MY_SIZE num_cells, const std::array<MY_SIZE, NUM_MAPPINGS> &num_points_)
+      : mappings{initMapping<mappings_t>(num_cells)}, num_points{num_points_} {}
 
 public:
   /**
@@ -55,24 +49,19 @@ public:
    *
    * Format:
    *   - first line: num_points and num_cells ("\d+\s+\d+")
-   *   - next num_cells line: an cell, denoted by MeshDim numbers, the start-
-   * and
-   *     endpoint respectively ("\d+\s+\d+")
+   *   - next num_cells line: an cell, denoted by MeshDim numbers, the points
+   *     accessed by the cell, separated by space
    */
-  Mesh(std::istream &is)
-      : num_points{0}, num_cells{0},
-        cell_to_node((is >> num_points >> num_cells, num_cells)) {
-    if (!is) {
-      throw InvalidInputFile{"graph input", 0};
-    }
-    for (MY_SIZE i = 0; i < num_cells; ++i) {
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        is >> cell_to_node[MeshDim * i + j];
+  Mesh(MY_SIZE num_cells, const std::array<MY_SIZE, NUM_MAPPINGS> &num_points_,
+       const std::array<std::istream *, NUM_MAPPINGS> &is)
+      : mappings{initMapping<mappings_t>(num_cells)} {
+    for (unsigned i = 0; i < NUM_MAPPINGS; ++i) {
+      if (!(*is[i])) {
+        throw InvalidInputFile{"mapping input", i, 0};
       }
-      if (!is) {
-        throw InvalidInputFile{"graph input", i};
-      }
+      num_points[i] = num_points_[i];
     }
+    for_each(mappings, ReadMappingFromFile{is});
   }
 
   ~Mesh() {}
@@ -80,70 +69,56 @@ public:
   Mesh(const Mesh &) = delete;
   Mesh &operator=(const Mesh &) = delete;
 
-  Mesh(Mesh &&other)
-      : num_points{other.num_points}, num_cells{other.num_cells},
-        cell_to_node{std::move(other.cell_to_node)} {
-    other.num_points = 0;
-    other.num_cells = 0;
-  }
+  Mesh(Mesh &&other) : mappings{std::move(other.mappings)} {}
 
   Mesh &operator=(Mesh &&rhs) {
-    std::swap(num_points, rhs.num_points);
-    std::swap(num_cells, rhs.num_cells);
-    std::swap(cell_to_node, rhs.cell_to_node);
+    std::swap(mappings, rhs.mappings);
     return *this;
   }
 
   /* 1}}} */
 
-  template <bool VTK = false>
-  typename choose_t<VTK, std::vector<std::uint16_t>,
-                    std::vector<std::vector<MY_SIZE>>>::type
+  std::vector<std::vector<MY_SIZE>>
   colourCells(MY_SIZE from = 0, MY_SIZE to = static_cast<MY_SIZE>(-1)) const {
     if (to > numCells()) {
       to = numCells();
     }
     std::vector<std::vector<MY_SIZE>> cell_partitions;
-    std::vector<colourset_t> point_colours(numPoints(), 0);
-    std::vector<MY_SIZE> set_sizes(64, 0);
-    std::vector<std::uint16_t> cell_colours(numCells());
+    std::vector<std::vector<colourset_t>> point_colours(numPoints());
+    for (unsigned i = 0; i < NUM_MAPPINGS; ++i) {
+      point_colours[i].resize(num_points[i]);
+    }
+    std::vector<MY_SIZE> set_sizes(colourset_t{}.size(), 0);
     colourset_t used_colours;
     for (MY_SIZE i = from; i < to; ++i) {
-      colourset_t occupied_colours;
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        occupied_colours |= point_colours[cell_to_node[MeshDim * i + j]];
-      }
+      GatherPointColours gatherPointColours{i, point_colours};
+      for_each(mappings, gatherPointColours);
+      colourset_t occupied_colours = gatherPointColours.getResult;
       colourset_t available_colours = ~occupied_colours & used_colours;
       if (available_colours.none()) {
         used_colours <<= 1;
         used_colours.set(0);
-        if (!VTK) {
-          cell_partitions.emplace_back();
-        }
+        cell_partitions.emplace_back();
         available_colours = ~occupied_colours & used_colours;
       }
       std::uint8_t colour = getAvailableColour(available_colours, set_sizes);
-      if (VTK) {
-        cell_colours[i] = colour;
-      } else {
-        cell_partitions[colour].push_back(i);
-      }
+      cell_partitions[colour].push_back(i);
       colourset_t colourset(1ull << colour);
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        point_colours[cell_to_node[MeshDim * i + j]] |= colourset;
-      }
+      for_each(mappings, UpdatePointColours{i, colourset});
       ++set_sizes[colour];
     }
-    return choose_t<
-        VTK, std::vector<std::uint16_t>,
-        std::vector<std::vector<MY_SIZE>>>::ret_value(std::move(cell_colours),
-                                                      std::move(
-                                                          cell_partitions));
+    return cell_partitions;
   }
 
-  MY_SIZE numCells() const { return num_cells; }
+  MY_SIZE numCells() const { return std::get<0>(mappings).getSize(); }
 
-  MY_SIZE numPoints() const { return num_points; }
+  MY_SIZE numPoints(unsigned mapping_ind) const {
+    return num_points[mapping_ind];
+  }
+
+  const std::array<MY_SIZE, NUM_MAPPINGS> numPoints() const {
+    return num_points;
+  }
 
   /**
    * Writes the cell list in the following format:
@@ -152,96 +127,76 @@ public:
    *   - the following `numCells()` lines contain MeshDim numbers separated
    *     by spaces: the points incident to the cell
    */
-  void writeCellList(std::ostream &os) const {
-    os << numPoints() << " " << numCells() << std::endl;
+  template <unsigned MappingInd> void writeCellList(std::ostream &os) const {
+    os << numPoints(MappingInd) << " " << numCells() << std::endl;
+    unsigned mesh_dim = std::get<MappingInd>(mappings).getSize();
     for (std::size_t i = 0; i < numCells(); ++i) {
-      for (unsigned j = 0; j < MeshDim; ++j) {
-        os << (j > 0 ? " " : "") << cell_to_node[MeshDim * i + j];
+      for (unsigned j = 0; j < mesh_dim; ++j) {
+        os << (j > 0 ? " " : "")
+           << std::get<MappingInd>(mappings)[mesh_dim * i + j];
       }
       os << std::endl;
     }
   }
 
-  template <typename DataType = float, unsigned DataDim = 1,
-            unsigned CellDim = 1, bool SOA = false>
-  void reorderScotch(data_t<DataType, CellDim> *cell_data = nullptr,
-                     data_t<DataType, DataDim> *point_data = nullptr) {
-    ScotchReorder reorder(numPoints(), numCells(), cell_to_node);
-    std::vector<SCOTCH_Num> permutation = reorder.reorder();
-    this->template reorder<SCOTCH_Num, DataType, DataDim, CellDim, SOA>(
-        permutation, cell_data, point_data);
+  void renumberPointsGPS() { for_each(mappings, RenumberPointsGPS{}); }
+
+  void reorderMappings(const std::vector<MY_SIZE> &inverse_permutation) {
+    for_each(mappings, ReorderMapping{inverse_permutation});
   }
 
   /**
-   * Reorders the graph using the point permutation vector.
-   *
-   * Also reorders the cell and point data in the arguments. These must be of
-   * length `numEdges()` and `numPoints()`, respectively.
+   * Reorders the mappings using the point permutation vector that corresponds
+   * to the first mapping. Also renumbers the points in the first mapping.
    */
-  template <typename UnsignedType, typename DataType = float,
-            unsigned DataDim = 1, unsigned CellDim = 1, bool SOA = false>
-  void reorder(const std::vector<UnsignedType> &point_permutation,
-               data_t<DataType, CellDim> *cell_data = nullptr,
-               data_t<DataType, DataDim> *point_data = nullptr) {
-    // Permute points
-    if (point_data) {
-      reorderData<DataDim, SOA, DataType, UnsignedType>(*point_data,
-                                                        point_permutation);
-    }
+  template <typename UnsignedType>
+  void reorder(const std::vector<UnsignedType> &point_permutation) {
     // Permute cell_to_node
+    static_assert(NUM_MAPPINGS > 0, "Assuming here that NUM_MAPPINGS > 0");
+    auto &cell_to_node = std::get<0>(mappings);
+    constexpr unsigned MESH_DIM = cell_to_node.dim;
+    renumberPoints<0>(point_permutation);
+    std::vector<std::array<MY_SIZE, MESH_DIM + 1>> cell_tmp(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        cell_to_node[MeshDim * i + j] =
-            point_permutation[cell_to_node[MeshDim * i + j]];
-      }
-    }
-    std::vector<std::array<MY_SIZE, MeshDim + 1>> cell_tmp(numCells());
-    for (MY_SIZE i = 0; i < numCells(); ++i) {
-      cell_tmp[i][MeshDim] = i;
-      std::copy(cell_to_node.begin() + MeshDim * i,
-                cell_to_node.begin() + MeshDim * (i + 1), cell_tmp[i].begin());
-      std::sort(cell_tmp[i].begin(), cell_tmp[i].begin() + MeshDim);
+      cell_tmp[i][MESH_DIM] = i;
+      std::copy(cell_to_node.begin() + MESH_DIM * i,
+                cell_to_node.begin() + MESH_DIM * (i + 1), cell_tmp[i].begin());
+      std::sort(cell_tmp[i].begin(), cell_tmp[i].begin() + MESH_DIM);
     }
     std::sort(cell_tmp.begin(), cell_tmp.end());
     std::vector<MY_SIZE> inv_permutation(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
-      inv_permutation[i] = cell_tmp[i][MeshDim];
+      inv_permutation[i] = cell_tmp[i][MESH_DIM];
     }
-    if (cell_data) {
-      reorderDataInverse<CellDim, true>(*cell_data, inv_permutation);
-    }
-    reorderDataInverse<MeshDim, false>(cell_to_node, inv_permutation);
+    reorderMappings(inv_permutation);
   }
 
-  template <unsigned CellDim, class DataType>
-  void reorderToPartition(std::vector<MY_SIZE> &partition_vector,
-                          data_t<DataType, CellDim> &cell_weights) {
+  std::vector<MY_SIZE>
+  reorderToPartition(std::vector<MY_SIZE> &partition_vector) {
     assert(numCells() == partition_vector.size());
-    assert(numCells() == cell_weights.getSize());
-    std::vector<std::array<MY_SIZE, MeshDim + 2>> tmp(numCells());
+    std::vector<std::array<MY_SIZE, 2>> tmp(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       tmp[i][0] = partition_vector[i];
       tmp[i][1] = i;
-      std::copy(cell_to_node.begin() + MeshDim * i,
-                cell_to_node.begin() + MeshDim * (i + 1), tmp[i].begin() + 2);
     }
     std::sort(tmp.begin(), tmp.end());
     std::vector<MY_SIZE> permutation(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       partition_vector[i] = tmp[i][0];
       permutation[i] = tmp[i][1];
-      std::copy(tmp[i].begin() + 2, tmp[i].end(),
-                cell_to_node.begin() + MeshDim * i);
     }
-    reorderDataInverse<CellDim, true, DataType, MY_SIZE>(cell_weights,
-                                                         permutation);
+    reorderMappings(permutation);
+    return permutation;
   }
 
+  template <unsigned MapInd>
   std::vector<MY_SIZE> getPointRenumberingPermutation() const {
-    std::vector<MY_SIZE> permutation(numPoints(), numPoints());
+    std::vector<MY_SIZE> permutation(numPoints(MapInd), numPoints(MapInd));
     MY_SIZE new_ind = 0;
-    for (MY_SIZE i = 0; i < MeshDim * numCells(); ++i) {
-      if (permutation[cell_to_node[i]] == numPoints()) {
+    auto &cell_to_node = std::get<MapInd>(mappings);
+    unsigned mesh_dim = cell_to_node.dim;
+    for (MY_SIZE i = 0; i < mesh_dim * numCells(); ++i) {
+      if (permutation[cell_to_node[i]] == numPoints(MapInd)) {
         permutation[cell_to_node[i]] = new_ind++;
       }
     }
@@ -252,10 +207,13 @@ public:
     return permutation;
   }
 
-  std::vector<MY_SIZE> renumberPoints(const std::vector<MY_SIZE> &permutation) {
-    std::for_each(cell_to_node.begin(), cell_to_node.end(),
-                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
-    return permutation;
+  template <unsigned MapInd, class IndexType>
+  std::vector<IndexType>
+  renumberPoints(const std::vector<IndexType> &point_permutation) {
+    for_each(std::get<MapInd>(mappings).begin(),
+             std::get<MapInd>(mappings).end(),
+             [&](MY_SIZE &a) { a = point_permutation[a]; });
+    return point_permutation;
   }
 
   template <bool MinimiseColourSizes = true>
@@ -279,32 +237,22 @@ public:
   }
 
   Mesh<2> getCellToCellGraph() const {
-    const std::multimap<MY_SIZE, MY_SIZE> point_to_cell =
-        GraphCSR<MY_SIZE>::getPointToCell(cell_to_node);
-    // TODO optimise
-    std::vector<MY_SIZE> cell_to_cell;
-    for (MY_SIZE i = 0; i < numCells(); ++i) {
-      for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-        MY_SIZE point = cell_to_node[MeshDim * i + offset];
-        const auto cell_range = point_to_cell.equal_range(point);
-        for (auto it = cell_range.first; it != cell_range.second; ++it) {
-          MY_SIZE other_cell = it->second;
-          if (other_cell > i) {
-            cell_to_cell.push_back(i);
-            cell_to_cell.push_back(other_cell);
-          }
-        }
-      }
-    }
-    return Mesh<2>(numCells(), cell_to_cell.size() / 2, cell_to_cell.data());
+    GetCellToCell reducer{};
+    for_each(mappings, reducer);
+    std::set<std::pair<MY_SIZE, MY_SIZE>> cell_to_cell =
+        reducer.getCellToCell();
+    Mesh<2> result(cell_to_cell.size() / 2, numCells());
   }
 
+  template <unsigned MappingInd>
   std::vector<std::vector<MY_SIZE>>
   getPointToPartition(const std::vector<MY_SIZE> &partition) const {
-    std::vector<std::set<MY_SIZE>> _result(num_points);
+    std::vector<std::set<MY_SIZE>> _result(numPoints(MappingInd));
+    const auto &cell_to_node = std::get<MappingInd>(mappings);
+    MY_SIZE mesh_dim = cell_to_node.dim;
     for (MY_SIZE i = 0; i < cell_to_node.getSize(); ++i) {
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        _result[cell_to_node[MeshDim * i + j]].insert(partition[i]);
+      for (MY_SIZE j = 0; j < mesh_dim; ++j) {
+        _result[cell_to_node[mesh_dim * i + j]].insert(partition[i]);
       }
     }
     std::vector<std::vector<MY_SIZE>> result(num_points);
@@ -315,8 +263,8 @@ public:
     return result;
   }
 
-  std::vector<MY_SIZE> getPointRenumberingPermutation2(
-      const std::vector<std::vector<MY_SIZE>> &point_to_partition) const {
+  static std::vector<MY_SIZE> getPointRenumberingPermutation2(
+      const std::vector<std::vector<MY_SIZE>> &point_to_partition) {
     std::vector<MY_SIZE> inverse_permutation(point_to_partition.size());
     data_t<MY_SIZE, 1> permutation(point_to_partition.size());
     for (MY_SIZE i = 0; i < point_to_partition.size(); ++i) {
@@ -335,83 +283,128 @@ public:
     reorderData<1, false>(permutation, inverse_permutation);
     return std::vector<MY_SIZE>(permutation.begin(), permutation.end());
   }
-};
 
-template <unsigned MeshDim> class VisualisableMesh : public Mesh<MeshDim> {
-public:
-  using Base = Mesh<MeshDim>;
-  using Base::cell_to_node;
-  using Base::reorder;
-  using Base::numPoints;
-  using Base::numCells;
-
-  data_t<float, 3> point_coordinates;
-
-  VisualisableMesh(std::istream &is, std::istream *coord_is = nullptr)
-      : Mesh<MeshDim>(is) {
-    if (coord_is != nullptr) {
-      if (!(*coord_is)) {
-        throw InvalidInputFile{"coordinate input", 0};
+protected:
+  std::array<MY_SIZE, NUM_MAPPINGS>
+  readFirstNumber(const std::array<std::istream *, NUM_MAPPINGS> &is) {
+    std::array<MY_SIZE, NUM_MAPPINGS> result{};
+    for (unsigned i = 0; i < NUM_MAPPINGS; ++i) {
+      if (!(*is)) {
+        throw InvalidInputFile{"mapping input", i, 0};
       }
-      for (MY_SIZE i = 0; i < numPoints(); ++i) {
-        *coord_is >> point_coordinates[3 * i + 0] >>
-            point_coordinates[3 * i + 1] >> point_coordinates[3 * i + 2];
-        if (!(*coord_is)) {
-          throw InvalidInputFile{"coordinate input", i};
+      (*is[i]) >> result[i];
+    }
+  }
+
+  class ReadMappingFromFile {
+    const std::array<std::istream *, NUM_MAPPINGS> &is;
+
+  public:
+    ReadMappingFromFile(const std::array<std::istream *, NUM_MAPPINGS> &is_)
+        : is{is_} {}
+    template <unsigned MappingInd, unsigned Dim>
+    void operator()(data_t<MY_SIZE, Dim> &mapping) {
+      for (MY_SIZE j = 0; j < mapping.getSize(); ++j) {
+        for (MY_SIZE k = 0; k < mapping.dim; ++k) {
+          *is[MappingInd] >> mapping[mapping.dim * j + k];
+        }
+        if (!(*is[MappingInd])) {
+          throw InvalidInputFile{"graph input", MappingInd, j};
         }
       }
     }
-  }
+  };
 
-  VisualisableMesh(const VisualisableMesh &) = delete;
-  VisualisableMesh &operator=(const VisualisableMesh &) = delete;
+  class GatherPointColours {
+    colourset_t result{0};
+    const std::vector<std::vector<MY_SIZE>> &point_colours;
+    MY_SIZE cell_ind;
 
-  VisualisableMesh(VisualisableMesh &&other)
-      : Mesh<MeshDim>(std::move(other)),
-        point_coordinates{std::move(other.point_coordinates)} {}
-
-  VisualisableMesh &operator=(VisualisableMesh &&rhs) {
-    Mesh<MeshDim>::operator=(std::move(rhs));
-    std::swap(point_coordinates, rhs.point_coordinates);
-    return *this;
-  }
-
-  void writeCoordinates(std::ostream &os) const {
-    assert(point_coordinates.getSize() == numPoints());
-    for (MY_SIZE i = 0; i < numPoints(); ++i) {
-      os << point_coordinates[3 * i + 0] << " " << point_coordinates[3 * i + 1]
-         << " " << point_coordinates[3 * i + 2] << std::endl;
+  public:
+    GatherPointColours(MY_SIZE cell_ind_,
+                       const std::vector<std::vector<MY_SIZE>> &point_colours_)
+        : point_colours{point_colours_}, cell_ind{cell_ind_} {}
+    colourset_t getResult() const { return result; }
+    template <unsigned MappingInd, unsigned Dim>
+    void operator()(data_t<MY_SIZE, Dim> &mapping) {
+      for (unsigned i = 0; i < Dim; ++i) {
+        result |= point_colours[MappingInd][mapping[Dim * cell_ind + i]];
+      }
     }
-  }
+  };
 
-  template <typename UnsignedType, typename DataType = float,
-            unsigned DataDim = 1, unsigned CellDim = 1, bool SOA = false>
-  void reorder(const std::vector<UnsignedType> &point_permutation,
-               data_t<DataType, CellDim> *cell_data = nullptr,
-               data_t<DataType, DataDim> *point_data = nullptr) {
-    Mesh<MeshDim>::template reorder<UnsignedType, DataType, DataDim, CellDim,
-                                    SOA>(point_permutation, cell_data,
-                                         point_data);
-    if (point_coordinates.getSize() > 0) {
-      reorderData<3, false, float, UnsignedType>(point_coordinates,
-                                                 point_permutation);
+  class UpdatePointColours {
+    colourset_t colour;
+    std::vector<std::vector<MY_SIZE>> &point_colours;
+    MY_SIZE cell_ind;
+
+  public:
+    UpdatePointColours(colourset_t colour_, MY_SIZE cell_ind_,
+                       const std::vector<std::vector<MY_SIZE>> &point_colours_)
+        : colour{colour_}, point_colours{point_colours_}, cell_ind{cell_ind_} {}
+    template <unsigned MappingInd, unsigned Dim>
+    void operator()(data_t<MY_SIZE, Dim> &mapping) {
+      for (unsigned i = 0; i < Dim; ++i) {
+        point_colours[MappingInd][mapping[Dim * cell_ind + i]] |= colour;
+        ;
+      }
     }
-  }
+  };
 
-  std::vector<MY_SIZE> renumberPoints(const std::vector<MY_SIZE> &permutation) {
-    Mesh<MeshDim>::renumberPoints(permutation);
-    if (point_coordinates.getSize() > 0) {
-      reorderData<3, false, float, MY_SIZE>(point_coordinates, permutation);
+  class RenumberPointsGPS {
+  public:
+    template <unsigned MappingInd, unsigned Dim>
+    void operator()(data_t<MY_SIZE, Dim> &data) {
+      if (MappingInd == 0) {
+        return;
+      }
+      ScotchReorder reorder(numPoints(MapInd), numCells(), data);
+      std::vector<SCOTCH_Num> point_permutation = reorder.reorder();
+      for_each(data.begin(), data.end(),
+               [&](MY_SIZE &a) { a = point_permutation[a]; });
     }
-    return permutation;
-  }
+  };
 
-protected:
-  VisualisableMesh(MY_SIZE _num_points, MY_SIZE _num_cells,
-                   bool use_coordinates = false,
-                   const MY_SIZE *_cell_to_node = nullptr)
-      : Mesh<MeshDim>(_num_points, _num_cells, _cell_to_node),
-        point_coordinates(use_coordinates ? _num_points : 0) {}
+  class ReorderMapping {
+    const std::vector<MY_SIZE> &inverse_permutation;
+
+  public:
+    ReorderMapping(const std::vector<MY_SIZE> &inverse_permutation_)
+        : inverse_permutation{inverse_permutation_} {
+      assert(inverse_permutation.size() == numCells());
+    }
+
+    template <unsigned MapInd, unsigned Dim>
+    void operator()(data_t<MY_SIZE, Dim> &mapping) {
+      reorderDataInverse<Dim, false>(mapping, inverse_permutation);
+    }
+  };
+
+  class GetCellToCell {
+    std::set<std::pair<MY_SIZE, MY_SIZE>> cell_to_cell{};
+
+  public:
+    std::set<std::pair<MY_SIZE, MY_SIZE>> getCellToCell() const {
+      return cell_to_cell;
+    }
+    template <unsigned, unsigned Dim>
+    void operator()(data_t<MY_SIZE, Dim> &mapping) {
+      const std::multimap<MY_SIZE, MY_SIZE> point_to_cell =
+          GraphCSR<MY_SIZE>::getPointToCell(mapping);
+      for (MY_SIZE i = 0; i < mapping.getSize(); ++i) {
+        for (MY_SIZE offset = 0; offset < mapping.dim; ++offset) {
+          MY_SIZE point = mapping[mapping.dim * i + offset];
+          const auto cell_range = point_to_cell.equal_range(point);
+          for (auto it = cell_range.first; it != cell_range.second; ++it) {
+            MY_SIZE other_cell = it->second;
+            if (other_cell > i) {
+              cell_to_cell.insert({i, other_cell});
+            }
+          }
+        }
+      }
+    }
+  };
 };
 
 // vim:set et sw=2 ts=2 fdm=marker:

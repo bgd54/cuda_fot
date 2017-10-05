@@ -1,7 +1,7 @@
 #ifndef GRID_HPP_ZBTKDSNG
 #define GRID_HPP_ZBTKDSNG
 
-#include "mesh.hpp"
+#include "visualisable_mesh.hpp"
 
 template <unsigned MeshDim> class Grid : public VisualisableMesh<MeshDim> {
 public:

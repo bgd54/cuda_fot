@@ -23,7 +23,7 @@ public:
   data_t(MY_SIZE);
 
   data_t(const data_t &) = delete;
-  data_t operator=(const data_t &) = delete;
+  data_t &operator=(data_t) = delete;
   data_t(data_t &&);
   data_t &operator=(data_t &&);
 
@@ -63,17 +63,17 @@ public:
   operator T *() const { return data_d; }
 };
 
-template <bool Cond, typename T1, typename T2> struct choose_t {};
+//template <bool Cond, typename T1, typename T2> struct choose_t {};
 
-template <typename T1, typename T2> struct choose_t<true, T1, T2> {
-  typedef T1 type;
-  static type &&ret_value(T1 &&v, T2 &&) { return std::move(v); }
-};
+//template <typename T1, typename T2> struct choose_t<true, T1, T2> {
+//  typedef T1 type;
+//  static type &&ret_value(T1 &&v, T2 &&) { return std::move(v); }
+//};
 
-template <typename T1, typename T2> struct choose_t<false, T1, T2> {
-  typedef T2 type;
-  static type &&ret_value(T1 &&, T2 &&v) { return std::move(v); }
-};
+//template <typename T1, typename T2> struct choose_t<false, T1, T2> {
+//  typedef T2 type;
+//  static type &&ret_value(T1 &&, T2 &&v) { return std::move(v); }
+//};
 
 template <typename T, unsigned Dim>
 data_t<T, Dim>::data_t(MY_SIZE set_s)
@@ -87,6 +87,23 @@ template <typename T, unsigned Dim> data_t<T, Dim>::~data_t() {
     checkCudaErrors(cudaFree(data_d));
   }
 }
+
+//template <typename T, unsigned Dim>
+//data_t<T, Dim>::data_t(const data_t &other)
+//    : size{other.size}, data_d{nullptr} {
+//  assert(other.data_d == nullptr);
+//  data = new T[size * dim];
+//  std::copy(other.begin(), other.end(), data);
+//}
+
+//template <typename T, unsigned Dim>
+//data_t<T, Dim> &data_t<T, Dim>::operator=(data_t rhs) {
+//  assert(rhs.data_d == nullptr);
+//  assert(data_d == nullptr);
+//  std::swap(size, rhs.size);
+//  std::swap(data, rhs.data);
+//  return *this;
+//}
 
 template <typename T, unsigned Dim>
 data_t<T, Dim>::data_t(data_t<T, Dim> &&other) {
