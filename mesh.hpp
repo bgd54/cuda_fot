@@ -162,39 +162,14 @@ public:
     }
   }
 
-  template <typename DataType = float, unsigned DataDim = 1,
-            unsigned CellDim = 1, bool SOA = false>
-  void reorderScotch(data_t<DataType, CellDim> *cell_data = nullptr,
-                     data_t<DataType, DataDim> *point_data = nullptr) {
-    ScotchReorder reorder(numPoints(), numCells(), cell_to_node);
-    std::vector<SCOTCH_Num> permutation = reorder.reorder();
-    this->template reorder<SCOTCH_Num, DataType, DataDim, CellDim, SOA>(
-        permutation, cell_data, point_data);
-  }
-
   /**
    * Reorders the graph using the point permutation vector.
-   *
-   * Also reorders the cell and point data in the arguments. These must be of
-   * length `numEdges()` and `numPoints()`, respectively.
    */
-  template <typename UnsignedType, typename DataType = float,
-            unsigned DataDim = 1, unsigned CellDim = 1, bool SOA = false>
-  void reorder(const std::vector<UnsignedType> &point_permutation,
-               data_t<DataType, CellDim> *cell_data = nullptr,
-               data_t<DataType, DataDim> *point_data = nullptr) {
-    // Permute points
-    if (point_data) {
-      reorderData<DataDim, SOA, DataType, UnsignedType>(*point_data,
-                                                        point_permutation);
-    }
+  template <typename UnsignedType>
+  std::vector<MY_SIZE>
+  reorder(const std::vector<UnsignedType> &point_permutation) {
     // Permute cell_to_node
-    for (MY_SIZE i = 0; i < numCells(); ++i) {
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        cell_to_node[MeshDim * i + j] =
-            point_permutation[cell_to_node[MeshDim * i + j]];
-      }
-    }
+    renumberPoints(point_permutation);
     std::vector<std::array<MY_SIZE, MeshDim + 1>> cell_tmp(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       cell_tmp[i][MeshDim] = i;
@@ -207,34 +182,28 @@ public:
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       inv_permutation[i] = cell_tmp[i][MeshDim];
     }
-    if (cell_data) {
-      reorderDataInverse<CellDim, true>(*cell_data, inv_permutation);
-    }
     reorderDataInverse<MeshDim, false>(cell_to_node, inv_permutation);
+    return inv_permutation;
   }
 
   template <unsigned CellDim, class DataType>
-  void reorderToPartition(std::vector<MY_SIZE> &partition_vector,
-                          data_t<DataType, CellDim> &cell_weights) {
+  std::vector<MY_SIZE>
+  reorderToPartition(std::vector<MY_SIZE> &partition_vector) {
     assert(numCells() == partition_vector.size());
-    assert(numCells() == cell_weights.getSize());
-    std::vector<std::array<MY_SIZE, MeshDim + 2>> tmp(numCells());
+    std::vector<std::array<MY_SIZE, 2>> tmp(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       tmp[i][0] = partition_vector[i];
       tmp[i][1] = i;
-      std::copy(cell_to_node.begin() + MeshDim * i,
-                cell_to_node.begin() + MeshDim * (i + 1), tmp[i].begin() + 2);
     }
     std::sort(tmp.begin(), tmp.end());
     std::vector<MY_SIZE> permutation(numCells());
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       partition_vector[i] = tmp[i][0];
       permutation[i] = tmp[i][1];
-      std::copy(tmp[i].begin() + 2, tmp[i].end(),
-                cell_to_node.begin() + MeshDim * i);
     }
-    reorderDataInverse<CellDim, true, DataType, MY_SIZE>(cell_weights,
+    reorderDataInverse<MeshDim, false, MY_SIZE, MY_SIZE>(cell_to_node,
                                                          permutation);
+    return permutation;
   }
 
   std::vector<MY_SIZE> getPointRenumberingPermutation() const {
@@ -252,7 +221,8 @@ public:
     return permutation;
   }
 
-  std::vector<MY_SIZE> renumberPoints(const std::vector<MY_SIZE> &permutation) {
+  const std::vector<MY_SIZE> &
+  renumberPoints(const std::vector<MY_SIZE> &permutation) {
     std::for_each(cell_to_node.begin(), cell_to_node.end(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     return permutation;
@@ -315,10 +285,10 @@ public:
     return result;
   }
 
-  std::vector<MY_SIZE> getPointRenumberingPermutation2(
-      const std::vector<std::vector<MY_SIZE>> &point_to_partition) const {
+  static std::vector<MY_SIZE> getPointRenumberingPermutation2(
+      const std::vector<std::vector<MY_SIZE>> &point_to_partition) {
     std::vector<MY_SIZE> inverse_permutation(point_to_partition.size());
-    data_t<MY_SIZE, 1> permutation(point_to_partition.size());
+    std::vector<MY_SIZE> permutation(point_to_partition.size());
     for (MY_SIZE i = 0; i < point_to_partition.size(); ++i) {
       inverse_permutation[i] = i;
       permutation[i] = i;
@@ -333,7 +303,7 @@ public:
           }
         });
     reorderData<1, false>(permutation, inverse_permutation);
-    return std::vector<MY_SIZE>(permutation.begin(), permutation.end());
+    return permutation;
   }
 };
 

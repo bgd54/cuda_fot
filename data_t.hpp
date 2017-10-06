@@ -202,6 +202,22 @@ void reorderData(data_t<T, Dim> &point_data,
   }
 }
 
+template <unsigned Dim, bool SOA, typename T, typename UnsignedType>
+void reorderData(std::vector<T> &point_data,
+                 const std::vector<UnsignedType> &permutation) {
+  std::vector<T> old_data(point_data.begin(), point_data.end());
+  for (MY_SIZE i = 0; i < point_data.size() / Dim; ++i) {
+    for (MY_SIZE d = 0; d < Dim; ++d) {
+      MY_SIZE old_ind = index<Dim, SOA>(point_data.size() / Dim, i, d);
+      MY_SIZE new_ind =
+          index<Dim, SOA>(point_data.getSize() / Dim, permutation[i], d);
+      point_data[new_ind] = old_data[old_ind];
+    }
+  }
+}
+
+
+
 /**
  * Reorders data using the inverse of the permutation given
  */

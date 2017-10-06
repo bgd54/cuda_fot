@@ -35,8 +35,7 @@ struct Problem {
   /* ctor/dtor {{{1 */
   Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
       : mesh(mesh_is), cell_weights(mesh.numCells()),
-        point_weights(mesh.numPoints()), block_size{_block_size} {
-  }
+        point_weights(mesh.numPoints()), block_size{_block_size} {}
 
   ~Problem() {}
   /* 1}}} */
@@ -162,8 +161,11 @@ struct Problem {
   } /*}}}*/
 
   void reorder() {
-    mesh.reorderScotch<DataType, PointDim, CellDim, SOA>(&cell_weights,
-                                                         &point_weights);
+    ScotchReorder reorder(mesh.numPoints(), mesh.numCells(), mesh.cell_to_node);
+    std::vector<SCOTCH_Num> point_permutation = reorder.reorder();
+    std::vector<MY_SIZE> inverse_permutation = mesh.reorder(point_permutation);
+    reorderData<PointDim, SOA>(point_weights, point_permutation);
+    reorderDataInverse<CellDim, true>(cell_weights, inverse_permutation);
   }
 
   void partition(float tolerance, idx_t options[METIS_NOPTIONS] = NULL) {
