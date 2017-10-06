@@ -33,62 +33,9 @@ struct Problem {
   std::vector<MY_SIZE> partition_vector;
 
   /* ctor/dtor {{{1 */
-  Problem(MY_SIZE N, MY_SIZE M,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-          bool use_coordinates = false)
-      : Problem({N, M}, block_dims, use_coordinates) {}
-
-  Problem(const std::vector<MY_SIZE> &grid_dim,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-          bool use_coordinates = false)
-      : mesh{Grid<MESH_DIM>(grid_dim, block_dims, use_coordinates)},
-        cell_weights(mesh.numCells()), point_weights(mesh.numPoints()),
-        block_size{calculateBlockSize(block_dims)} {
-    for (DataType &weight : cell_weights) {
-      weight = DataType(rand() % 10000 + 1) / 5000.0;
-      weight *= 0.001;
-    }
-    reset();
-  }
-
-  Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE,
-          std::istream *partition_is = nullptr)
+  Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
       : mesh(mesh_is), cell_weights(mesh.numCells()),
         point_weights(mesh.numPoints()), block_size{_block_size} {
-    if (partition_is != nullptr) {
-      if (!(*partition_is)) {
-        throw InvalidInputFile{"partition input", 0};
-      }
-      partition_vector.resize(mesh.numCells());
-      MY_SIZE read_block_size;
-      *partition_is >> read_block_size;
-      if (!(*partition_is)) {
-        throw InvalidInputFile{"partition input", 1};
-      }
-      if (read_block_size != block_size) {
-        std::cerr << "Warning: block size in file (" << read_block_size
-                  << ") doesn't equal used block size (" << block_size << ")"
-                  << std::endl;
-      }
-      for (MY_SIZE i = 0; i < mesh.numCells(); ++i) {
-        *partition_is >> partition_vector[i];
-        if (!(*partition_is)) {
-          throw InvalidInputFile{"partition input", i + 1};
-        }
-      }
-    }
-    for (DataType &weight : cell_weights) {
-      weight = DataType(rand() % 10000 + 1) / 5000.0;
-      weight *= 0.001;
-    }
-    reset();
-  }
-
-  void reset() {
-    for (DataType &w : point_weights) {
-      w = DataType(rand() % 10000) / 5000.f;
-      w *= 0.001;
-    }
   }
 
   ~Problem() {}
@@ -245,22 +192,6 @@ struct Problem {
         mesh.getPointToPartition(partition_vector));
     mesh.renumberPoints(permutation);
     reorderData<PointDim, SOA, DataType, MY_SIZE>(point_weights, permutation);
-  }
-
-  static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
-    if (MESH_DIM == 2) {
-      if (block_dims.first == 0) {
-        return block_dims.second;
-      } else if (block_dims == std::pair<MY_SIZE, MY_SIZE>{9, 8}) {
-        return 9 * 8 * 2 * 2;
-      } else {
-        return block_dims.first * block_dims.second * 2;
-      }
-    } else {
-      // Block dims are not yet supported with meshes
-      assert(block_dims.first == 0);
-      return block_dims.second;
-    }
   }
 
   void writePartition(std::ostream &os) const {
