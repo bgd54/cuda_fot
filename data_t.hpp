@@ -160,7 +160,7 @@ template <typename T> const T *data_t::cbegin() const {
 }
 
 template <typename T> const T *data_t::cend() const {
-  return reinterpret_cast<T *>(data + (size * dim));
+  return reinterpret_cast<T *>(data + (size * dim * type_size));
 }
 
 template <typename T>
