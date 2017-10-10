@@ -18,7 +18,7 @@
 template <unsigned MeshDim, unsigned PointDim = 1, unsigned CellDim = 1,
           bool SOA = false, typename DataType = float>
 struct HierarchicalColourMemory {
-  using colourset_t = Mesh<2>::colourset_t;
+  using colourset_t = Mesh::colourset_t;
   static_assert(Problem<PointDim, CellDim, SOA, DataType>::MESH_DIM == MeshDim,
                 "Mesh dimension should be the same as in Problem");
   struct MemoryOfOneColour {
@@ -59,7 +59,9 @@ struct HierarchicalColourMemory {
      *       above
      *   - done
      */
-    const Mesh<MeshDim> &mesh = problem.mesh;
+    const Mesh &mesh = problem.mesh;
+    assert(mesh.cell_to_node.getTypeSize() == sizeof(MY_SIZE));
+    assert(mesh.cell_to_node.getDim() == MeshDim);
     const MY_SIZE block_size = problem.block_size;
     std::vector<colourset_t> point_colours(mesh.numPoints(), 0);
     colourset_t used_colours;
@@ -92,15 +94,15 @@ struct HierarchicalColourMemory {
       }
       assert(blocks.back() != partition_vector.size());
       blocks.push_back(partition_vector.size());
-      std::array<typename std::vector<DataType>::iterator, CellDim> begins;
+      std::vector<typename std::vector<DataType>::iterator> begins(CellDim);
       for (MY_SIZE i = 0; i < CellDim; ++i) {
         begins[i] =
             std::next(tmp_cell_weights.begin(), i * problem.mesh.numCells());
       }
       typename std::vector<DataType>::iterator end_first =
           std::next(tmp_cell_weights.begin(), problem.mesh.numCells());
-      reorderDataInverseVectorSOA<CellDim, DataType, MY_SIZE>(
-          begins, end_first, cell_inverse_permutation);
+      reorderDataInverseVectorSOA<DataType, MY_SIZE>(begins, end_first,
+                                                     cell_inverse_permutation);
     } else {
       for (MY_SIZE i = 0; i < problem.mesh.numCells(); i += block_size) {
         blocks.emplace_back(i);
@@ -132,8 +134,7 @@ struct HierarchicalColourMemory {
         assert(available_colours.any());
         colours.emplace_back();
       }
-      MY_SIZE colour =
-          Mesh<MeshDim>::getAvailableColour(available_colours, set_sizes);
+      MY_SIZE colour = Mesh::getAvailableColour(available_colours, set_sizes);
       ++set_sizes[colour];
       colourBlock(block_from, block_to, colour, point_colours, problem, colours,
                   partition_to_cell, block_colours, tmp_cell_weights);
@@ -146,14 +147,15 @@ struct HierarchicalColourMemory {
 
 private:
   static colourset_t getOccupiedColours(
-      const data_t<MY_SIZE, MeshDim> &cell_to_node, MY_SIZE from, MY_SIZE to,
+      const data_t &cell_to_node, MY_SIZE from, MY_SIZE to,
       const std::vector<colourset_t> &point_colours,
       const std::vector<std::pair<MY_SIZE, MY_SIZE>> &partition_to_cell) {
     colourset_t result;
     for (MY_SIZE i = from; i < to; ++i) {
       MY_SIZE cell_ind = partition_to_cell[i].second;
       for (MY_SIZE j = 0; j < MeshDim; ++j) {
-        result |= point_colours[cell_to_node[MeshDim * cell_ind + j]];
+        result |= point_colours[cell_to_node.operator[]<MY_SIZE>(
+            MeshDim *cell_ind + j)];
       }
     }
     return result;
@@ -171,8 +173,8 @@ private:
               const std::vector<std::pair<MY_SIZE, MY_SIZE>> &partition_to_cell,
               std::vector<std::uint8_t> &block_colours,
               std::vector<DataType> &tmp_cell_weights) {
-    const Mesh<MeshDim> &mesh = problem.mesh;
-    const data_t<MY_SIZE, MeshDim> &cell_to_node = mesh.cell_to_node;
+    const Mesh &mesh = problem.mesh;
+    const data_t &cell_to_node = mesh.cell_to_node;
     colourset_t colourset(1ull << colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
     const MY_SIZE colour_from = colour.cell_colours.size();
@@ -181,9 +183,11 @@ private:
     for (MY_SIZE i = from; i < to; ++i) {
       MY_SIZE cell_ind = partition_to_cell[i].second;
       for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-        point_colours[cell_to_node[MeshDim * cell_ind + offset]] |= colourset;
-        points_to_cells[cell_to_node[MeshDim * cell_ind + offset]].emplace_back(
-            i - from, offset);
+        point_colours[cell_to_node.operator[]<MY_SIZE>(MeshDim *cell_ind +
+                                                       offset)] |= colourset;
+        points_to_cells[cell_to_node.operator[]<MY_SIZE>(MeshDim *cell_ind +
+                                                         offset)]
+            .emplace_back(i - from, offset);
       }
       block_colours[i] = colour_ind;
     }
@@ -234,7 +238,7 @@ private:
         used_colours.set(0);
         available_colours = ~occupied_colours & used_colours;
       }
-      std::uint8_t colour = Mesh<MeshDim>::template getAvailableColour<false>(
+      std::uint8_t colour = Mesh::template getAvailableColour<false>(
           available_colours, set_sizes);
       block.cell_colours.push_back(colour);
       ++set_sizes[colour];
@@ -255,7 +259,7 @@ private:
     for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
       const MY_SIZE j = i + colour_from;
       tmp[i] = std::make_tuple(memory.cell_colours[j],
-                               std::array<MY_SIZE, MeshDim>{}, i);
+                               std::array<MY_SIZE, MeshDim>(), i);
       std::copy(memory.cell_list.begin() + MeshDim * j,
                 memory.cell_list.begin() + MeshDim * (j + 1),
                 std::get<1>(tmp[i]).begin());
@@ -269,22 +273,22 @@ private:
     std::vector<MY_SIZE> inverse_permutation(colour_to - colour_from);
     for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
       const MY_SIZE j = i + colour_from;
-      std::array<MY_SIZE, MeshDim> cell_points{};
+      std::array<MY_SIZE, MeshDim> cell_points;
       std::tie(memory.cell_colours[j], cell_points, inverse_permutation[i]) =
           tmp[i];
       std::copy(cell_points.begin(), cell_points.end(),
                 memory.cell_list.begin() + MeshDim * j);
     }
-    std::array<typename std::vector<DataType>::iterator, CellDim> begins;
+    std::vector<typename std::vector<DataType>::iterator> begins(CellDim);
     for (MY_SIZE i = 0; i < CellDim; ++i) {
       MY_SIZE dim_pos =
-          index<CellDim, true>(tmp_cell_weights.size() / CellDim, from, i);
+          index<true>(tmp_cell_weights.size() / CellDim, from, CellDim, i);
       begins[i] = std::next(tmp_cell_weights.begin(), dim_pos);
     }
     typename std::vector<DataType>::iterator end_first =
         std::next(tmp_cell_weights.begin(), to);
-    reorderDataInverseVectorSOA<CellDim, DataType, MY_SIZE>(
-        begins, end_first, inverse_permutation);
+    reorderDataInverseVectorSOA<DataType, MY_SIZE>(begins, end_first,
+                                                   inverse_permutation);
   }
 
   void permuteCachedPoints(std::vector<MY_SIZE> &points_to_be_cached,
@@ -315,7 +319,7 @@ private:
 
   void cellListSOA() {
     for (MemoryOfOneColour &memory : colours) {
-      AOStoSOA<MeshDim>(memory.cell_list);
+      AOStoSOA(memory.cell_list, MeshDim);
     }
   }
 
@@ -328,8 +332,8 @@ private:
     for (MY_SIZE d = 0; d < CellDim; ++d) {
       for (MY_SIZE i = 0; i < problem.mesh.numCells(); ++i) {
         MY_SIZE colour = block_colours[i];
-        DataType weight = tmp_cell_weights[index<CellDim, true>(
-            problem.mesh.numCells(), i, d)];
+        DataType weight = tmp_cell_weights[index<true>(problem.mesh.numCells(),
+                                                       i, CellDim, d)];
         colours[colour].cell_weights.push_back(weight);
       }
     }
@@ -340,21 +344,24 @@ public:
   *  Device layout  *
   *******************/
   struct DeviceMemoryOfOneColour {
-    device_data_t<DataType> cell_weights;
-    device_data_t<MY_SIZE> points_to_be_cached, points_to_be_cached_offsets;
-    device_data_t<MY_SIZE> cell_list;
-    device_data_t<std::uint8_t> cell_colours;
-    device_data_t<std::uint8_t> num_cell_colours;
-    device_data_t<MY_SIZE> block_offsets;
+    device_data_t cell_weights;
+    device_data_t points_to_be_cached, points_to_be_cached_offsets;
+    device_data_t cell_list;
+    device_data_t cell_colours;
+    device_data_t num_cell_colours;
+    device_data_t block_offsets;
     MY_SIZE shared_size;
 
     DeviceMemoryOfOneColour(const MemoryOfOneColour &memory)
-        : cell_weights(memory.cell_weights),
-          points_to_be_cached(memory.points_to_be_cached),
-          points_to_be_cached_offsets(memory.points_to_be_cached_offsets),
-          cell_list(memory.cell_list), cell_colours(memory.cell_colours),
-          num_cell_colours(memory.num_cell_colours),
-          block_offsets(memory.block_offsets) {
+        : cell_weights(device_data_t::create(memory.cell_weights)),
+          points_to_be_cached(
+              device_data_t::create(memory.points_to_be_cached)),
+          points_to_be_cached_offsets(
+              device_data_t::create(memory.points_to_be_cached_offsets)),
+          cell_list(device_data_t::create(memory.cell_list)),
+          cell_colours(device_data_t::create(memory.cell_colours)),
+          num_cell_colours(device_data_t::create(memory.num_cell_colours)),
+          block_offsets(device_data_t::create(memory.block_offsets)) {
       shared_size = 0;
       for (MY_SIZE i = 1; i < memory.points_to_be_cached_offsets.size(); ++i) {
         shared_size = std::max<MY_SIZE>(

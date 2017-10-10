@@ -20,12 +20,11 @@ const std::map<unsigned, unsigned> VTK_CELL_TYPES{
     {8, 12} // hexahedron
 };
 
-template <unsigned MeshDim>
 void writeMeshToVTKAscii(
-    std::string filename, const data_t<MY_SIZE, MeshDim> &cell_list,
-    const data_t<float, 3> &point_coords,
+    std::string filename, const data_t &cell_list, const data_t &point_coords,
     const std::vector<std::vector<std::uint16_t>> &cell_colors) {
-
+  assert(sizeof(MY_SIZE) == cell_list.getTypeSize());
+  assert(sizeof(float) == point_coords.getTypeSize());
   std::ofstream fout(filename);
   if (!fout.good()) {
     std::cerr << "can't open file for write " << filename << "\n";
@@ -35,37 +34,42 @@ void writeMeshToVTKAscii(
   fout << "ASCII \nDATASET UNSTRUCTURED_GRID\n\n";
   fout << "POINTS " << point_coords.getSize() << " float\n";
   for (MY_SIZE i = 0; i < point_coords.getSize(); ++i) {
-    fout << point_coords[i * point_coords.dim + 0] << " "
-         << point_coords[i * point_coords.dim + 1] << " "
-         << (point_coords.dim == 2 ? 0.0
-                                   : point_coords[i * point_coords.dim + 2])
+    fout << point_coords.operator[]<float>(i *point_coords.getDim() + 0) << " "
+         << point_coords.operator[]<float>(i *point_coords.getDim() + 1) << " "
+         << (point_coords.getDim() == 2
+                 ? 0.0
+                 : point_coords.operator[]<float>(i *point_coords.getDim() + 2))
          << "\n";
   }
   fout << "\nCELLS " << cell_list.getSize() << " "
-       << (cell_list.dim + 1) * cell_list.getSize() << "\n";
+       << (cell_list.getDim() + 1) * cell_list.getSize() << "\n";
   for (MY_SIZE i = 0; i < cell_list.getSize(); ++i) {
-    fout << MeshDim;
-    if (MeshDim == 4) {
-      std::array<float,12> points;
-      for (MY_SIZE j = 0; j < cell_list.dim; ++j) {
-        std::copy_n(point_coords.cbegin() + 3 * cell_list[i * cell_list.dim + j],
+    fout << cell_list.getDim();
+    if (cell_list.getDim() == 4) {
+      std::array<float, 12> points;
+      for (MY_SIZE j = 0; j < cell_list.getDim(); ++j) {
+        std::copy_n(
+            point_coords.cbegin<float>() +
+                3 * cell_list.operator[]<MY_SIZE>(i *cell_list.getDim() + j),
             3, points.begin() + 3 * j);
       }
-      std::array<MY_SIZE,4> permutation = geom::two_d::reorderQuad(points);
-      for (MY_SIZE j = 0; j < cell_list.dim; ++j) {
-        fout << " " << cell_list[i * cell_list.dim + permutation[j]];
+      std::array<MY_SIZE, 4> permutation = geom::two_d::reorderQuad(points);
+      for (MY_SIZE j = 0; j < cell_list.getDim(); ++j) {
+        fout << " "
+             << cell_list.operator[]<MY_SIZE>(i *cell_list.getDim() +
+                                              permutation[j]);
       }
     } else {
-      for (MY_SIZE j = 0; j < cell_list.dim; ++j) {
-        fout << " " << cell_list[i * cell_list.dim + j];
+      for (MY_SIZE j = 0; j < cell_list.getDim(); ++j) {
+        fout << " " << cell_list.operator[]<MY_SIZE>(i *cell_list.getDim() + j);
       }
     }
     fout << "\n";
   }
   fout << "\nCELL_TYPES " << cell_list.getSize() << "\n";
-  assert(VTK_CELL_TYPES.count(MeshDim) == 1);
+  assert(VTK_CELL_TYPES.count(cell_list.getDim()) == 1);
   for (MY_SIZE i = 0; i < cell_list.getSize(); ++i) {
-    fout << VTK_CELL_TYPES.at(MeshDim) << "\n";
+    fout << VTK_CELL_TYPES.at(cell_list.getDim()) << "\n";
   }
   fout << "\n";
 

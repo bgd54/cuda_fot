@@ -1,19 +1,10 @@
 #ifndef GRID_HPP_ZBTKDSNG
 #define GRID_HPP_ZBTKDSNG
 
-#include "mesh.hpp"
+#include "visualisable_mesh.hpp"
 
-template <unsigned MeshDim> class Grid : public VisualisableMesh<MeshDim> {
+class Grid : public VisualisableMesh {
 public:
-  static_assert(MeshDim == 2 || MeshDim == 4 || MeshDim == 8,
-                "Only supporting MeshDim in {2,4,8}");
-
-  using Base = VisualisableMesh<MeshDim>;
-  using Base::cell_to_node;
-  using Base::point_coordinates;
-  using Base::numPoints;
-  using Base::numCells;
-
   static MY_SIZE calcNumPoints(const std::vector<MY_SIZE> &grid_dim) {
     assert(grid_dim.size() >= 2);
     return grid_dim[0] * grid_dim[1] * (grid_dim.size() == 3 ? grid_dim[2] : 1);
@@ -28,8 +19,9 @@ public:
            (grid_dim.size() == 3 ? (grid_dim[2] - 1) * N * M : 0);
   }
 
-  static MY_SIZE calcNumCells(const std::vector<MY_SIZE> &grid_dim) {
-    switch (MeshDim) {
+  static MY_SIZE calcNumCells(const std::vector<MY_SIZE> &grid_dim,
+                              unsigned mesh_dim) {
+    switch (mesh_dim) {
     case 2:
       return calcNumEdges(grid_dim);
     case 4:
@@ -43,15 +35,17 @@ public:
     }
   }
 
-  Grid(const std::vector<MY_SIZE> &grid_dim,
+  Grid(const std::vector<MY_SIZE> &grid_dim, unsigned mesh_dim,
        std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0},
        bool use_coordinates = false)
-      : VisualisableMesh<MeshDim>(calcNumPoints(grid_dim),
-                                  calcNumCells(grid_dim), use_coordinates) {
+      : VisualisableMesh(calcNumPoints(grid_dim),
+                         calcNumCells(grid_dim, mesh_dim), mesh_dim,
+                         use_coordinates) {
+    assert(mesh_dim == 2 || mesh_dim == 4 || mesh_dim == 8);
     assert(grid_dim.size() >= 2);
     MY_SIZE N = grid_dim[0];
     MY_SIZE M = grid_dim[1];
-    if (MeshDim == 2) {
+    if (mesh_dim == 2) {
       if (grid_dim.size() == 2) {
         if (block_sizes.first != 0) {
           fillEdgeListBlock(N, M, block_sizes.first, block_sizes.second);
@@ -61,7 +55,7 @@ public:
       } else {
         fillEdgeList3D(N, M, grid_dim[2]);
       }
-    } else if (MeshDim == 4) {
+    } else if (mesh_dim == 4) {
       assert(grid_dim.size() == 2);
       fillCellList(N, M);
     } else {
@@ -79,26 +73,26 @@ protected:
     MY_SIZE array_ind = 0, upper_point_ind = 0, lower_point_ind = M;
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = lower_point_ind;
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = ++upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = ++upper_point_ind;
         ++lower_point_ind;
       }
-      cell_to_node[array_ind++] = lower_point_ind++;
-      cell_to_node[array_ind++] = upper_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind++;
     }
     for (MY_SIZE c = 0; c < M - 1; ++c) {
-      cell_to_node[array_ind++] = upper_point_ind;
-      cell_to_node[array_ind++] = ++upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = ++upper_point_ind;
     }
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
           MY_SIZE point_ind = r * M + c;
-          point_coordinates[point_ind * 3 + 0] = r;
-          point_coordinates[point_ind * 3 + 1] = c;
-          point_coordinates[point_ind * 3 + 2] = 0;
+          point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+          point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+          point_coordinates.operator[]<float>(point_ind * 3 + 2) = 0;
         }
       }
     }
@@ -114,39 +108,39 @@ protected:
     for (MY_SIZE r = 0; r < N - 1; ++r) {
       for (MY_SIZE c = 0; c < M - 1; ++c) {
         // up-down
-        cell_to_node[array_ind++] = lower_point_ind;
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = lower_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind;
         // right-left
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = upper_point_ind + 1;
-        cell_to_node[array_ind++] = upper_point_ind + 1;
-        cell_to_node[array_ind++] = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind + 1;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind + 1;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
         ++lower_point_ind;
         ++upper_point_ind;
       }
       // Last up-down
-      cell_to_node[array_ind++] = lower_point_ind;
-      cell_to_node[array_ind++] = upper_point_ind;
-      cell_to_node[array_ind++] = upper_point_ind++;
-      cell_to_node[array_ind++] = lower_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind++;
     }
     // Last horizontal
     for (MY_SIZE c = 0; c < M - 1; ++c) {
-      cell_to_node[array_ind++] = upper_point_ind;
-      cell_to_node[array_ind++] = upper_point_ind + 1;
-      cell_to_node[array_ind++] = upper_point_ind + 1;
-      cell_to_node[array_ind++] = upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind + 1;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind + 1;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
       ++upper_point_ind;
     }
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
           MY_SIZE point_ind = r * M + c;
-          point_coordinates[point_ind * 3 + 0] = r;
-          point_coordinates[point_ind * 3 + 1] = c;
-          point_coordinates[point_ind * 3 + 2] = 0;
+          point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+          point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+          point_coordinates.operator[]<float>(point_ind * 3 + 2) = 0;
         }
       }
     }
@@ -171,38 +165,41 @@ protected:
         for (MY_SIZE k = 0; k < block_h; ++k) {
           for (MY_SIZE l = 0; l < block_w; ++l) {
             // Down
-            cell_to_node[ind++] = (block_h * i + k) * M + (block_w * j + l);
-            cell_to_node[ind++] = (block_h * i + k + 1) * M + (block_w * j + l);
+            cell_to_node.operator[]<MY_SIZE>(ind++) =
+                (block_h * i + k) * M + (block_w * j + l);
+            cell_to_node.operator[]<MY_SIZE>(ind++) =
+                (block_h * i + k + 1) * M + (block_w * j + l);
             // Right
-            cell_to_node[ind++] = (block_h * i + k) * M + (block_w * j + l);
-            cell_to_node[ind++] = (block_h * i + k) * M + (block_w * j + l + 1);
+            cell_to_node.operator[]<MY_SIZE>(ind++) =
+                (block_h * i + k) * M + (block_w * j + l);
+            cell_to_node.operator[]<MY_SIZE>(ind++) =
+                (block_h * i + k) * M + (block_w * j + l + 1);
           }
         }
       }
     }
     for (MY_SIZE i = 0; i < N - 1; ++i) {
       // Right side, edges directed downwards
-      cell_to_node[ind++] = i * M + (M - 1);
-      cell_to_node[ind++] = (i + 1) * M + (M - 1);
+      cell_to_node.operator[]<MY_SIZE>(ind++) = i * M + (M - 1);
+      cell_to_node.operator[]<MY_SIZE>(ind++) = (i + 1) * M + (M - 1);
     }
     for (MY_SIZE i = 0; i < M - 1; ++i) {
       // Down side, edges directed right
-      cell_to_node[ind++] = (N - 1) * M + i;
-      cell_to_node[ind++] = (N - 1) * M + i + 1;
+      cell_to_node.operator[]<MY_SIZE>(ind++) = (N - 1) * M + i;
+      cell_to_node.operator[]<MY_SIZE>(ind++) = (N - 1) * M + i + 1;
     }
     assert(ind == 2 * numCells());
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
           MY_SIZE point_ind = r * M + c;
-          point_coordinates[point_ind * 3 + 0] = r;
-          point_coordinates[point_ind * 3 + 1] = c;
-          point_coordinates[point_ind * 3 + 2] = 0;
+          point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+          point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+          point_coordinates.operator[]<float>(point_ind * 3 + 2) = 0;
         }
       }
     }
-    Mesh<MeshDim>::renumberPoints(
-        Mesh<MeshDim>::getPointRenumberingPermutation());
+    Mesh::renumberPoints(Mesh::getPointRenumberingPermutation());
   }
   /* 2}}} */
 
@@ -217,33 +214,33 @@ protected:
       for (MY_SIZE r = 0; r < N1 - 1; ++r) {
         for (MY_SIZE c = 0; c < N2 - 1; ++c) {
           // Down
-          cell_to_node[array_ind++] = lower_point_ind;
-          cell_to_node[array_ind++] = upper_point_ind;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
           // Deep
-          cell_to_node[array_ind++] = upper_point_ind;
-          cell_to_node[array_ind++] = inner_point_ind;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) = inner_point_ind;
           // Left
-          cell_to_node[array_ind++] = upper_point_ind;
-          cell_to_node[array_ind++] = ++upper_point_ind;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) = ++upper_point_ind;
           ++lower_point_ind;
           ++inner_point_ind;
         }
         // Left end
-        cell_to_node[array_ind++] = lower_point_ind++;
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = inner_point_ind++;
-        cell_to_node[array_ind++] = upper_point_ind++;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind++;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = inner_point_ind++;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind++;
       }
       // Down end
       for (MY_SIZE c = 0; c < N2 - 1; ++c) {
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = upper_point_ind + 1;
-        cell_to_node[array_ind++] = inner_point_ind++;
-        cell_to_node[array_ind++] = upper_point_ind++;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind + 1;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = inner_point_ind++;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind++;
       }
       // Down last element
-      cell_to_node[array_ind++] = inner_point_ind++;
-      cell_to_node[array_ind++] = upper_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = inner_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind++;
     }
 
     // Last layer
@@ -252,20 +249,20 @@ protected:
     for (MY_SIZE r = 0; r < N1 - 1; ++r) {
       for (MY_SIZE c = 0; c < N2 - 1; ++c) {
         // Down
-        cell_to_node[array_ind++] = lower_point_ind++;
-        cell_to_node[array_ind++] = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind++;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
         // Left
-        cell_to_node[array_ind++] = upper_point_ind;
-        cell_to_node[array_ind++] = ++upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = ++upper_point_ind;
       }
       // Left end
-      cell_to_node[array_ind++] = lower_point_ind++;
-      cell_to_node[array_ind++] = upper_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = lower_point_ind++;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind++;
     }
     // Last layer Down end
     for (MY_SIZE c = 0; c < N2 - 1; ++c) {
-      cell_to_node[array_ind++] = upper_point_ind;
-      cell_to_node[array_ind++] = ++upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = upper_point_ind;
+      cell_to_node.operator[]<MY_SIZE>(array_ind++) = ++upper_point_ind;
     }
 
     // generate coordinates
@@ -274,9 +271,9 @@ protected:
         for (MY_SIZE r = 0; r < N1; ++r) {
           for (MY_SIZE c = 0; c < N2; ++c) {
             MY_SIZE point_ind = l * N1 * N2 + r * N2 + c;
-            point_coordinates[point_ind * 3 + 0] = r;
-            point_coordinates[point_ind * 3 + 1] = c;
-            point_coordinates[point_ind * 3 + 2] = l;
+            point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+            point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+            point_coordinates.operator[]<float>(point_ind * 3 + 2) = l;
           }
         }
       }
@@ -328,16 +325,18 @@ protected:
             const MY_SIZE point_down = block_ind_offset + pattern[k + 1][l];
             const MY_SIZE point_right = block_ind_offset + pattern[k][l + 1];
             // Down
-            cell_to_node[ind++] = point_cur;
-            cell_to_node[ind++] = point_down;
+            cell_to_node.operator[]<MY_SIZE>(ind++) = point_cur;
+            cell_to_node.operator[]<MY_SIZE>(ind++) = point_down;
             // Right
-            cell_to_node[ind++] = point_cur;
-            cell_to_node[ind++] = point_right;
+            cell_to_node.operator[]<MY_SIZE>(ind++) = point_cur;
+            cell_to_node.operator[]<MY_SIZE>(ind++) = point_right;
 
             if (point_coordinates.getSize() > 0) {
-              point_coordinates[point_cur * 3 + 0] = i * block_h + k;
-              point_coordinates[point_cur * 3 + 1] = j * block_w + l;
-              point_coordinates[point_cur * 3 + 2] = 0;
+              point_coordinates.operator[]<float>(point_cur * 3 + 0) =
+                  i * block_h + k;
+              point_coordinates.operator[]<float>(point_cur * 3 + 1) =
+                  j * block_w + l;
+              point_coordinates.operator[]<float>(point_cur * 3 + 2) = 0;
             }
           }
         }
@@ -347,31 +346,31 @@ protected:
     // edges along the edges of the grid
     MY_SIZE point_cur = (N - 1) * (M - 1);
     for (MY_SIZE i = 0; i < M - 1; ++i) {
-      cell_to_node[ind++] = point_cur;
-      cell_to_node[ind++] = point_cur + 1;
+      cell_to_node.operator[]<MY_SIZE>(ind++) = point_cur;
+      cell_to_node.operator[]<MY_SIZE>(ind++) = point_cur + 1;
 
       if (point_coordinates.getSize() > 0) {
-        point_coordinates[point_cur * 3 + 0] = N - 1;
-        point_coordinates[point_cur * 3 + 1] = i;
-        point_coordinates[point_cur * 3 + 2] = 0;
+        point_coordinates.operator[]<float>(point_cur * 3 + 0) = N - 1;
+        point_coordinates.operator[]<float>(point_cur * 3 + 1) = i;
+        point_coordinates.operator[]<float>(point_cur * 3 + 2) = 0;
       }
       ++point_cur;
     }
     for (MY_SIZE i = 0; i < N - 1; ++i) {
-      cell_to_node[ind++] = point_cur;
-      cell_to_node[ind++] = point_cur + 1;
+      cell_to_node.operator[]<MY_SIZE>(ind++) = point_cur;
+      cell_to_node.operator[]<MY_SIZE>(ind++) = point_cur + 1;
 
       if (point_coordinates.getSize() > 0) {
-        point_coordinates[point_cur * 3 + 0] = N - 1 - i;
-        point_coordinates[point_cur * 3 + 1] = M - 1;
-        point_coordinates[point_cur * 3 + 2] = 0;
+        point_coordinates.operator[]<float>(point_cur * 3 + 0) = N - 1 - i;
+        point_coordinates.operator[]<float>(point_cur * 3 + 1) = M - 1;
+        point_coordinates.operator[]<float>(point_cur * 3 + 2) = 0;
       }
       ++point_cur;
     }
     if (point_coordinates.getSize() > 0) {
-      point_coordinates[point_cur * 3 + 0] = 0;
-      point_coordinates[point_cur * 3 + 1] = M - 1;
-      point_coordinates[point_cur * 3 + 2] = 0;
+      point_coordinates.operator[]<float>(point_cur * 3 + 0) = 0;
+      point_coordinates.operator[]<float>(point_cur * 3 + 1) = M - 1;
+      point_coordinates.operator[]<float>(point_cur * 3 + 2) = 0;
     }
     assert(ind == 2 * numCells());
     assert(point_cur + 1 == numPoints());
@@ -387,20 +386,20 @@ protected:
       for (MY_SIZE c = 0; c < M - 1; ++c) {
         MY_SIZE top_left = r * M + c;
         MY_SIZE bottom_left = (r + 1) * M + c;
-        cell_to_node[array_ind++] = top_left;
-        cell_to_node[array_ind++] = top_left + 1;
-        cell_to_node[array_ind++] = bottom_left;
-        cell_to_node[array_ind++] = bottom_left + 1;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = top_left;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = top_left + 1;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = bottom_left;
+        cell_to_node.operator[]<MY_SIZE>(array_ind++) = bottom_left + 1;
       }
     }
-    assert(array_ind == numCells() * MeshDim);
+    assert(array_ind == numCells() * cell_to_node.getDim());
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE r = 0; r < N; ++r) {
         for (MY_SIZE c = 0; c < M; ++c) {
           MY_SIZE point_ind = r * M + c;
-          point_coordinates[point_ind * 3 + 0] = r;
-          point_coordinates[point_ind * 3 + 1] = c;
-          point_coordinates[point_ind * 3 + 2] = 0;
+          point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+          point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+          point_coordinates.operator[]<float>(point_ind * 3 + 2) = 0;
         }
       }
     }
@@ -420,27 +419,35 @@ protected:
           MY_SIZE top_layer = (l + 1) * N1 * N2;
           MY_SIZE inner_left_offset = r * N2 + c;
           MY_SIZE outer_left_offset = (r + 1) * N2 + c;
-          cell_to_node[array_ind++] = bottom_layer + inner_left_offset;
-          cell_to_node[array_ind++] = bottom_layer + inner_left_offset + 1;
-          cell_to_node[array_ind++] = bottom_layer + outer_left_offset + 1;
-          cell_to_node[array_ind++] = bottom_layer + outer_left_offset;
-          cell_to_node[array_ind++] = top_layer + inner_left_offset;
-          cell_to_node[array_ind++] = top_layer + inner_left_offset + 1;
-          cell_to_node[array_ind++] = top_layer + outer_left_offset + 1;
-          cell_to_node[array_ind++] = top_layer + outer_left_offset;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              bottom_layer + inner_left_offset;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              bottom_layer + inner_left_offset + 1;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              bottom_layer + outer_left_offset + 1;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              bottom_layer + outer_left_offset;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              top_layer + inner_left_offset;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              top_layer + inner_left_offset + 1;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              top_layer + outer_left_offset + 1;
+          cell_to_node.operator[]<MY_SIZE>(array_ind++) =
+              top_layer + outer_left_offset;
         }
       }
     }
-    assert(array_ind == numCells() * MeshDim);
+    assert(array_ind == numCells() * cell_to_node.getDim());
     // generate coordinates
     if (point_coordinates.getSize() > 0) {
       for (MY_SIZE l = 0; l < N3; ++l) {
         for (MY_SIZE r = 0; r < N1; ++r) {
           for (MY_SIZE c = 0; c < N2; ++c) {
             MY_SIZE point_ind = l * N1 * N2 + r * N2 + c;
-            point_coordinates[point_ind * 3 + 0] = r;
-            point_coordinates[point_ind * 3 + 1] = c;
-            point_coordinates[point_ind * 3 + 2] = l;
+            point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+            point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+            point_coordinates.operator[]<float>(point_ind * 3 + 2) = l;
           }
         }
       }

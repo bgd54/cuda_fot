@@ -2,18 +2,18 @@
 #define TESTS_HPP_HHJ8IWSK
 
 #include "partition.hpp"
-#include "problem.hpp"
+#include "structured_problem.hpp"
 #include <iostream>
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 using implementation_algorithm_t =
-    void (Problem<PointDim, CellDim, SOA, DataType>::*)(MY_SIZE, MY_SIZE);
+    void (Problem<PointDim, CellDim, SOA, DataType>::*)(MY_SIZE);
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 void testTwoImplementations(
-    MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
+    MY_SIZE num, MY_SIZE N, MY_SIZE M,
     implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm1,
     implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm2) {
   std::cout << "========================================" << std::endl;
@@ -24,7 +24,7 @@ void testTwoImplementations(
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
-  std::cout << " reset: " << reset_every << std::endl;
+  std::cout << std::endl;
   std::cout << "========================================" << std::endl;
 
   std::vector<DataType> result1, result2;
@@ -34,33 +34,36 @@ void testTwoImplementations(
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem(N, M);
+    Problem<PointDim, CellDim, SOA, DataType> problem(
+        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M));
     result1.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        result1[ind] = problem.point_weights[ind];
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
       }
     }
 
     // run algorithm
-    (problem.*algorithm1)(num, reset_every);
+    (problem.*algorithm1)(num);
 
     DataType abs_max = 0;
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       MY_SIZE value_changed = PointDim;
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        if (result1[ind] == problem.point_weights[ind]) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        if (result1[ind] ==
+            problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
-        result1[ind] = problem.point_weights[ind];
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
+        if (abs_max <
+            problem.point_weights.template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
@@ -87,39 +90,45 @@ void testTwoImplementations(
   single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem(N, M);
+    Problem<PointDim, CellDim, SOA, DataType> problem{
+        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        result2[ind] = problem.point_weights[ind];
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        result2[ind] = problem.point_weights.template operator[]<DataType>(ind);
       }
     }
     // run algorithm
-    (problem.*algorithm2)(num, reset_every);
+    (problem.*algorithm2)(num);
     DataType abs_max = 0;
 
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       MY_SIZE value_changed = PointDim;
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        if (result2[ind] == problem.point_weights[ind]) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        if (result2[ind] ==
+            problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed2.push_back(i);
           value_changed--;
         }
-        DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
-                        std::min(result1[ind], problem.point_weights[ind]);
+        DataType diff =
+            std::abs(problem.point_weights.template operator[]<DataType>(ind) -
+                     result1[ind]) /
+            std::min(result1[ind],
+                     problem.point_weights.template operator[]<DataType>(ind));
         if (diff >= maxdiff) {
           maxdiff = diff;
           ind_diff = i;
           dim_diff = d;
-          max = problem.point_weights[ind];
+          max = problem.point_weights.template operator[]<DataType>(ind);
         }
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        if (abs_max <
+            problem.point_weights.template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
@@ -142,7 +151,7 @@ void testTwoImplementations(
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
               << " dim: " << dim_diff << std::endl;
     MY_SIZE ind =
-        index<PointDim, SOA>(problem.mesh.numPoints(), ind_diff, dim_diff);
+        index<SOA>(problem.mesh.numPoints(), ind_diff, PointDim, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
@@ -151,7 +160,7 @@ void testTwoImplementations(
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
-void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
+void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
   std::cout << "========================================" << std::endl;
   std::cout << "Partition test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
@@ -160,7 +169,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
-  std::cout << " reset: " << reset_every << std::endl;
+  std::cout << std::endl;
   std::cout << "========================================" << std::endl;
 
   std::vector<DataType> result1, result2;
@@ -170,27 +179,28 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem(N, M);
-    //std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
-    //Problem<PointDim, CellDim, SOA, DataType> problem(f);
+    Problem<PointDim, CellDim, SOA, DataType> problem{
+        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
+    // std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
+    // Problem<PointDim, CellDim, SOA, DataType> problem(f);
     assert(problem.mesh.numPoints() == N * M);
     result1.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        result1[ind] = problem.point_weights[ind];
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
       }
     }
 
     // run algorithm
-    problem.loopCPUCellCentredOMP(num, reset_every);
+    problem.loopCPUCellCentredOMP(num);
 
     // Partition after
     problem.partition(1.01);
-    //std::ifstream f_part("/data/mgiles/asulyok/grid_4_100x200.metis_part");
-    //problem.readPartition(f_part);
+    // std::ifstream f_part("/data/mgiles/asulyok/grid_4_100x200.metis_part");
+    // problem.readPartition(f_part);
     problem.reorderToPartition();
     problem.renumberPoints();
 
@@ -198,15 +208,17 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       MY_SIZE value_changed = PointDim;
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        if (result1[ind] == problem.point_weights[ind]) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        if (result1[ind] ==
+            problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
-        result1[ind] = problem.point_weights[ind];
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
+        if (abs_max <
+            problem.point_weights.template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
@@ -233,48 +245,54 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
   single_change_in_node = false;
   {
     srand(1);
-    //std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
-    //Problem<PointDim, CellDim, SOA, DataType> problem(f);
-    Problem<PointDim, CellDim, SOA, DataType> problem(N, M);
+    // std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
+    // Problem<PointDim, CellDim, SOA, DataType> problem(f);
+    Problem<PointDim, CellDim, SOA, DataType> problem{
+        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        result2[ind] = problem.point_weights[ind];
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        result2[ind] = problem.point_weights.template operator[]<DataType>(ind);
       }
     }
     // Create partitioning
     problem.partition(1.01);
-    //std::ifstream f_part("/data/mgiles/asulyok/grid_4_100x200.metis_part");
-    //problem.readPartition(f_part);
+    // std::ifstream f_part("/data/mgiles/asulyok/grid_4_100x200.metis_part");
+    // problem.readPartition(f_part);
     problem.reorderToPartition();
     problem.renumberPoints();
 
     // run algorithm
-    problem.loopGPUHierarchical(num, reset_every);
+    problem.loopGPUHierarchical(num);
     DataType abs_max = 0;
 
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       MY_SIZE value_changed = PointDim;
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        if (result2[ind] == problem.point_weights[ind]) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        if (result2[ind] ==
+            problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed2.push_back(i);
           value_changed--;
         }
-        DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
-                        std::min(result1[ind], problem.point_weights[ind]);
+        DataType diff =
+            std::abs(problem.point_weights.template operator[]<DataType>(ind) -
+                     result1[ind]) /
+            std::min(result1[ind],
+                     problem.point_weights.template operator[]<DataType>(ind));
         if (diff >= maxdiff) {
           maxdiff = diff;
           ind_diff = i;
           dim_diff = d;
-          max = problem.point_weights[ind];
+          max = problem.point_weights.template operator[]<DataType>(ind);
         }
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        if (abs_max <
+            problem.point_weights.template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
@@ -297,7 +315,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
               << " dim: " << dim_diff << std::endl;
     MY_SIZE ind =
-        index<PointDim, SOA>(problem.mesh.numPoints(), ind_diff, dim_diff);
+        index<SOA>(problem.mesh.numPoints(), ind_diff, PointDim, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
@@ -307,7 +325,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every) {
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 void testReordering(
-    MY_SIZE num, MY_SIZE N, MY_SIZE M, MY_SIZE reset_every,
+    MY_SIZE num, MY_SIZE N, MY_SIZE M,
     implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm1,
     implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm2) {
   std::cout << "========================================" << std::endl;
@@ -318,7 +336,7 @@ void testReordering(
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
-  std::cout << " reset: " << reset_every << std::endl;
+  std::cout << std::endl;
   std::cout << "========================================" << std::endl;
 
   std::vector<DataType> result1, result2;
@@ -328,7 +346,8 @@ void testReordering(
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem(N, M);
+    Problem<PointDim, CellDim, SOA, DataType> problem{
+        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     // reorder first
     problem.reorder();
 
@@ -337,27 +356,29 @@ void testReordering(
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        result1[ind] = problem.point_weights[ind];
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
       }
     }
 
     // run algorithm
-    (problem.*algorithm1)(num, reset_every);
+    (problem.*algorithm1)(num);
 
     DataType abs_max = 0;
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       MY_SIZE value_changed = PointDim;
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        if (result1[ind] == problem.point_weights[ind]) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        if (result1[ind] ==
+            problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
-        result1[ind] = problem.point_weights[ind];
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
+        if (abs_max <
+            problem.point_weights.template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
@@ -384,18 +405,19 @@ void testReordering(
   single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem(N, M);
+    Problem<PointDim, CellDim, SOA, DataType> problem{
+        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        result2[ind] = problem.point_weights[ind];
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        result2[ind] = problem.point_weights.template operator[]<DataType>(ind);
       }
     }
     // run algorithm
-    (problem.*algorithm2)(num, reset_every);
+    (problem.*algorithm2)(num);
 
     // reorder after
     problem.reorder();
@@ -404,17 +426,21 @@ void testReordering(
 
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind = index<PointDim, SOA>(problem.mesh.numPoints(), i, d);
-        DataType diff = std::abs(problem.point_weights[ind] - result1[ind]) /
-                        std::min(result1[ind], problem.point_weights[ind]);
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+        DataType diff =
+            std::abs(problem.point_weights.template operator[]<DataType>(ind) -
+                     result1[ind]) /
+            std::min(result1[ind],
+                     problem.point_weights.template operator[]<DataType>(ind));
         if (diff >= maxdiff) {
           maxdiff = diff;
           ind_diff = i;
           dim_diff = d;
-          max = problem.point_weights[ind];
+          max = problem.point_weights.template operator[]<DataType>(ind);
         }
-        if (abs_max < problem.point_weights[ind]) {
-          abs_max = problem.point_weights[ind];
+        if (abs_max <
+            problem.point_weights.template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
@@ -425,7 +451,7 @@ void testReordering(
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
               << " dim: " << dim_diff << std::endl;
     MY_SIZE ind =
-        index<PointDim, SOA>(problem.mesh.numPoints(), ind_diff, dim_diff);
+        index<SOA>(problem.mesh.numPoints(), ind_diff, PointDim, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;

@@ -73,13 +73,13 @@ int main(int argc, char **argv) {
       std::cerr << "Error opening input file: " << argv[1] << std::endl;
       return 3;
     }
+    Problem<> problem(f, 288);
+    problem.reorder();
+    if (!arguments[GPS].empty()) {
+      std::ofstream f_gps_out(arguments[GPS]);
+      problem.mesh.writeCellList(f_gps_out);
+    }
     if (!arguments[METIS].empty()) {
-      Problem<> problem(f, 288);
-      problem.mesh.reorderScotch();
-      if (!arguments[GPS].empty()) {
-        std::ofstream f_gps_out(arguments[GPS]);
-        problem.mesh.writeCellList(f_gps_out);
-      }
       std::ofstream f_metis_out(arguments[METIS]);
       std::ofstream f_metis_out_part(arguments[METIS] + "_part");
       problem.partition(PARTITION_TOLERANCE);
@@ -87,13 +87,6 @@ int main(int argc, char **argv) {
       problem.renumberPoints();
       problem.mesh.writeCellList(f_metis_out);
       problem.writePartition(f_metis_out_part);
-    } else {
-      Mesh<MESH_DIM_MACRO> mesh(f);
-      if (!arguments[GPS].empty()) {
-        mesh.reorderScotch();
-        std::ofstream f_out(arguments[GPS]);
-        mesh.writeCellList(f_out);
-      }
     }
   } catch (ScotchError &e) {
     std::cerr << "Error during Scotch reordering: " << e.errorCode << std::endl;

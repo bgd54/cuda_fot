@@ -1,13 +1,13 @@
 #include <iostream>
 
 #include "mesh.hpp"
-#include "problem.hpp"
+#include "structured_problem.hpp"
 #include <fstream>
 
 constexpr float PARTITION_TOLERANCE = 1.001;
 
 void generateOutputs(const std::string &fname, const std::vector<MY_SIZE> &grid_dim, MY_SIZE block_size) {
-  Problem<> problem (grid_dim, {0,block_size});
+  StructuredProblem<> problem (grid_dim, {0,block_size});
   {
     std::ofstream f (fname);
     problem.mesh.writeCellList(f);

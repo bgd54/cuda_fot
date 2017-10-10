@@ -36,14 +36,14 @@ template <class UnsignedType> struct GraphCSR {
   /**
    * Creates a GraphCSR point-to-point mapping from a mesh.
    */
-  template <unsigned MeshDim>
   explicit GraphCSR(MY_SIZE _num_points, MY_SIZE _num_cells,
-                    const data_t<MY_SIZE, MeshDim> &cell_to_node)
+                    const data_t &cell_to_node)
       : num_points(_num_points), num_cells(_num_cells) {
     // static_assert(std::size_t(std::numeric_limits<UnsignedType>::max()) >=
     // std::size_t(std::numeric_limits<MY_SIZE>::max()),
     //"GraphCSR: UnsignedType too small.");
     assert(num_cells > 0);
+    assert(cell_to_node.getTypeSize() == sizeof(MY_SIZE));
     assert(cell_to_node.getSize() < std::numeric_limits<UnsignedType>::max());
     assert(static_cast<MY_SIZE>(num_cells) == cell_to_node.getSize());
     point_indices = new UnsignedType[num_points + 1];
@@ -51,6 +51,7 @@ template <class UnsignedType> struct GraphCSR {
     point_indices[0] = 0;
     std::multimap<UnsignedType, MY_SIZE> incidence =
         getPointToCell(cell_to_node);
+    const unsigned mesh_dim = cell_to_node.getDim();
     for (const auto incidence_pair : incidence) {
       UnsignedType current_point = incidence_pair.first;
       MY_SIZE current_cell = incidence_pair.second;
@@ -58,8 +59,9 @@ template <class UnsignedType> struct GraphCSR {
         point_indices[++point_ind] = cell_endpoints.size();
       }
       bool found_current_point = false;
-      for (MY_SIZE i = 0; i < MeshDim; ++i) {
-        UnsignedType other_point = cell_to_node[MeshDim * current_cell + i];
+      for (MY_SIZE i = 0; i < mesh_dim; ++i) {
+        UnsignedType other_point =
+            cell_to_node.operator[]<MY_SIZE>(mesh_dim *current_cell + i);
         if (other_point != current_point) {
           if (static_cast<MY_SIZE>(point_indices[current_point]) ==
                   cell_endpoints.size() ||
@@ -94,14 +96,18 @@ template <class UnsignedType> struct GraphCSR {
   UnsignedType numArcs() const { return cell_endpoints.size(); }
 
   /**
-   * returns vector or map
+   * returns a multimap: from points to incident cells
+   *
+   * data in cell_to_node must be of type MY_SIZE
    */
-  template <class T, unsigned MeshDim>
   static std::multimap<UnsignedType, MY_SIZE>
-  getPointToCell(const data_t<T, MeshDim> &cell_to_node) {
+  getPointToCell(const data_t &cell_to_node) {
+    assert(cell_to_node.getTypeSize() == sizeof(MY_SIZE));
+    const unsigned mesh_dim = cell_to_node.getDim();
     std::multimap<UnsignedType, MY_SIZE> point_to_cell;
-    for (MY_SIZE i = 0; i < MeshDim * cell_to_node.getSize(); ++i) {
-      point_to_cell.insert(std::make_pair(cell_to_node[i], i / MeshDim));
+    for (MY_SIZE i = 0; i < mesh_dim * cell_to_node.getSize(); ++i) {
+      point_to_cell.insert(
+          std::make_pair(cell_to_node.operator[]<MY_SIZE>(i), i / mesh_dim));
     }
     return point_to_cell;
   }
@@ -119,9 +125,8 @@ private:
   SCOTCH_Strat strategy;
 
 public:
-  template <unsigned MeshDim>
   explicit ScotchReorder(MY_SIZE num_points, MY_SIZE num_cells,
-                         const data_t<MY_SIZE, MeshDim> &cell_to_node)
+                         const data_t &cell_to_node)
       : csr(num_points, num_cells, cell_to_node) {
     SCOTCH_THROW(SCOTCH_graphInit(&graph));
     SCOTCH_THROW(SCOTCH_graphBuild(&graph, 0, csr.num_points,

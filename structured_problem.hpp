@@ -5,30 +5,36 @@
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
-class StructuredProblem : Problem<PointDim, CellDim, SOA, DataType> {
+class StructuredProblem : public Problem<PointDim, CellDim, SOA, DataType> {
 public:
   using Base = Problem<PointDim, CellDim, SOA, DataType>;
-  StructuredProblem(MY_SIZE N, MY_SIZE M,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-          bool use_coordinates = false)
+  StructuredProblem(
+      MY_SIZE N, MY_SIZE M,
+      std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
+      bool use_coordinates = false)
       : StructuredProblem({N, M}, block_dims, use_coordinates) {}
 
-  StructuredProblem(const std::vector<MY_SIZE> &grid_dim,
-          std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-          bool use_coordinates = false)
-      : Base(Grid<Base::MESH_DIM>(grid_dim, block_dims, use_coordinates),
-          calculateBlockSize(block_dims)) {
+  StructuredProblem(
+      const std::vector<MY_SIZE> &grid_dim,
+      std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
+      bool use_coordinates = false)
+      : Base(Grid(grid_dim, Base::MESH_DIM, block_dims, use_coordinates),
+             calculateBlockSize(block_dims)) {
     reset();
   }
 
-  ~StructuredProblem () {}
-  
+  ~StructuredProblem() {}
+
   void reset() {
-    for (DataType &w : std::get<0>(this->point_weights)) {
+    for (DataType *it = this->point_weights.template begin<DataType>();
+         it != this->point_weights.template end<DataType>(); ++it) {
+      DataType &w = *it;
       w = DataType(rand() % 10000) / 5000.f;
       w *= 0.001;
     }
-    for (DataType &weight : std::get<0>(this->cell_weights)) {
+    for (DataType *it = this->cell_weights.template begin<DataType>();
+         it != this->cell_weights.template end<DataType>(); ++it) {
+      DataType &weight = *it;
       weight = DataType(rand() % 10000 + 1) / 5000.0;
       weight *= 0.001;
     }
@@ -49,7 +55,6 @@ public:
       return block_dims.second;
     }
   }
-
 };
 
 #endif /* STRUCTURED_PROBLEM_H */

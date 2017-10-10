@@ -26,64 +26,78 @@ struct Problem {
   // using _MESH_DIM_T = std::integral_constant<unsigned, MESH_DIM_MACRO>;
   // static constexpr _MESH_DIM_T MESH_DIM {};
 
-  Mesh<MESH_DIM> mesh;
-  data_t<DataType, CellDim> cell_weights;
-  data_t<DataType, PointDim> point_weights;
+  Mesh mesh;
+  data_t cell_weights;
+  data_t point_weights;
   const MY_SIZE block_size; // GPU block size
   std::vector<MY_SIZE> partition_vector;
 
   /* ctor/dtor {{{1 */
+protected:
+  Problem(Mesh &&mesh_, MY_SIZE block_size_)
+      : mesh(std::move(mesh_)),
+        cell_weights(data_t::create<DataType>(mesh.numCells(), CellDim)),
+        point_weights(data_t::create<DataType>(mesh.numPoints(), PointDim)),
+        block_size{block_size_} {}
+
+public:
   Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
-      : mesh(mesh_is), cell_weights(mesh.numCells()),
-        point_weights(mesh.numPoints()), block_size{_block_size} {}
+      : mesh(mesh_is, MESH_DIM),
+        cell_weights(data_t::create<DataType>(mesh.numCells(), CellDim)),
+        point_weights(data_t::create<DataType>(mesh.numPoints(), PointDim)),
+        block_size{_block_size} {}
 
   ~Problem() {}
+
+  Problem(Problem &&other)
+      : mesh(std::move(other.mesh)),
+        cell_weights(std::move(other.cell_weights)),
+        point_weights(std::move(other.point_weights)),
+        block_size(other.block_size),
+        partition_vector(std::move(other.partition_vector)) {}
   /* 1}}} */
 
-  void loopGPUCellCentred(MY_SIZE num, MY_SIZE reset_every = 0);
-  void loopGPUHierarchical(MY_SIZE num, MY_SIZE reset_every = 0);
+  void loopGPUCellCentred(MY_SIZE num);
+  void loopGPUHierarchical(MY_SIZE num);
 
   void stepCPUCellCentred(DataType *temp) { /*{{{*/
     for (MY_SIZE cell_ind_base = 0; cell_ind_base < mesh.numCells();
          ++cell_ind_base) {
       for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
-        MY_SIZE ind_left_base =
-            mesh.cell_to_node[mesh.cell_to_node.dim * cell_ind_base + offset];
-        MY_SIZE ind_right_base =
-            mesh.cell_to_node[mesh.cell_to_node.dim * cell_ind_base +
-                              (offset == MESH_DIM - 1 ? 0 : offset + 1)];
+        MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+            mesh.cell_to_node.getDim() * cell_ind_base + offset);
+        MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+            mesh.cell_to_node.getDim() * cell_ind_base +
+            (offset == MESH_DIM - 1 ? 0 : offset + 1));
         MY_SIZE w_ind_left = 0, w_ind_right = 0;
         for (MY_SIZE d = 0; d < PointDim; ++d) {
-          w_ind_left = index<PointDim, SOA>(mesh.numPoints(), ind_left_base, d);
+          w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim, d);
           w_ind_right =
-              index<PointDim, SOA>(mesh.numPoints(), ind_right_base, d);
+              index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
           MY_SIZE cell_d = CellDim == 1 ? 0 : d;
 
           MY_SIZE cell_weight_ind =
-              index<CellDim, true>(mesh.numCells(), cell_ind_base, cell_d);
-          point_weights[w_ind_right] +=
-              cell_weights[cell_weight_ind] * temp[w_ind_left];
-          point_weights[w_ind_left] +=
-              cell_weights[cell_weight_ind] * temp[w_ind_right];
+              index<true>(mesh.numCells(), cell_ind_base, CellDim, cell_d);
+          point_weights.operator[]<DataType>(w_ind_right) +=
+              cell_weights.operator[]<DataType>(cell_weight_ind) *
+              temp[w_ind_left];
+          point_weights.operator[]<DataType>(w_ind_left) +=
+              cell_weights.operator[](cell_weight_ind) * temp[w_ind_right];
         }
       }
     }
   } /*}}}*/
 
-  void loopCPUCellCentred(MY_SIZE num, MY_SIZE reset_every = 0) { /*{{{*/
+  void loopCPUCellCentred(MY_SIZE num) { /*{{{*/
     DataType *temp = (DataType *)malloc(sizeof(DataType) * mesh.numPoints() *
-                                        point_weights.dim);
+                                        point_weights.getDim());
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
-      std::copy(point_weights.begin(), point_weights.end(), temp);
+      std::copy(point_weights.begin<DataType>(), point_weights.end<DataType>(),
+                temp);
       TIMER_TOGGLE(t);
       stepCPUCellCentred(temp);
-      if (reset_every && i % reset_every == reset_every - 1) {
-        TIMER_TOGGLE(t);
-        reset();
-        TIMER_TOGGLE(t);
-      }
     }
     PRINT_BANDWIDTH(t, "loopCPUCellCentred",
                     (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
@@ -98,55 +112,52 @@ struct Problem {
   } /*}}}*/
 
   void stepCPUCellCentredOMP(const std::vector<MY_SIZE> &inds,
-                             data_t<DataType, PointDim> &out) { /*{{{*/
+                             data_t &out) { /*{{{*/
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
       for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
 
-        MY_SIZE ind_left_base =
-            mesh.cell_to_node[mesh.cell_to_node.dim * ind + offset];
-        MY_SIZE ind_right_base =
-            mesh.cell_to_node[mesh.cell_to_node.dim * ind +
-                              (offset == MESH_DIM - 1 ? 0 : offset + 1)];
+        MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+            mesh.cell_to_node.getDim() * ind + offset);
+        MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+            mesh.cell_to_node.getDim() * ind +
+            (offset == MESH_DIM - 1 ? 0 : offset + 1));
 
         MY_SIZE w_ind_left = 0, w_ind_right = 0;
         for (MY_SIZE d = 0; d < PointDim; ++d) {
-          w_ind_left = index<PointDim, SOA>(mesh.numPoints(), ind_left_base, d);
+          w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim, d);
           w_ind_right =
-              index<PointDim, SOA>(mesh.numPoints(), ind_right_base, d);
+              index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
           MY_SIZE cell_d = CellDim == 1 ? 0 : d;
 
-          MY_SIZE cell_ind = index<CellDim, true>(mesh.numCells(), ind, cell_d);
-          point_weights[w_ind_right] +=
-              cell_weights[cell_ind] * out[w_ind_left];
-          point_weights[w_ind_left] +=
-              cell_weights[cell_ind] * out[w_ind_right];
+          MY_SIZE cell_ind = index<true>(mesh.numCells(), ind, CellDim, cell_d);
+          point_weights.operator[]<DataType>(w_ind_right) +=
+              cell_weights.operator[]<DataType>(cell_ind) *
+              out.operator[]<DataType>(w_ind_left);
+          point_weights.operator[]<DataType>(w_ind_left) +=
+              cell_weights.operator[]<DataType>(cell_ind) *
+              out.operator[]<DataType>(w_ind_right);
         }
       }
     }
   } /*}}}*/
 
-  void loopCPUCellCentredOMP(MY_SIZE num, MY_SIZE reset_every = 0) { /*{{{*/
-    data_t<DataType, PointDim> temp(point_weights.getSize());
+  void loopCPUCellCentredOMP(MY_SIZE num) { /*{{{*/
+    data_t temp(data_t::create<DataType>(point_weights.getSize(), PointDim));
     std::vector<std::vector<MY_SIZE>> partition = mesh.colourCells();
     MY_SIZE num_of_colours = partition.size();
     TIMER_START(t);
     for (MY_SIZE i = 0; i < num; ++i) {
       TIMER_TOGGLE(t);
       #pragma omp parallel for
-      for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.dim;
+      for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.getDim();
            ++e) {
-        temp[e] = point_weights[e];
+        temp.operator[]<DataType>(e) = point_weights.operator[]<DataType>(e);
       }
       TIMER_TOGGLE(t);
       for (MY_SIZE c = 0; c < num_of_colours; ++c) {
         stepCPUCellCentredOMP(partition[c], temp);
-      }
-      if (reset_every && i % reset_every == reset_every - 1) {
-        TIMER_TOGGLE(t);
-        reset();
-        TIMER_TOGGLE(t);
       }
     }
     PRINT_BANDWIDTH(t, "loopCPUCellCentredOMP",
@@ -164,8 +175,8 @@ struct Problem {
     ScotchReorder reorder(mesh.numPoints(), mesh.numCells(), mesh.cell_to_node);
     std::vector<SCOTCH_Num> point_permutation = reorder.reorder();
     std::vector<MY_SIZE> inverse_permutation = mesh.reorder(point_permutation);
-    reorderData<PointDim, SOA>(point_weights, point_permutation);
-    reorderDataInverse<CellDim, true>(cell_weights, inverse_permutation);
+    reorderData<SOA>(point_weights, point_permutation);
+    reorderDataInverse<true>(cell_weights, inverse_permutation);
   }
 
   void partition(float tolerance, idx_t options[METIS_NOPTIONS] = NULL) {
@@ -186,14 +197,16 @@ struct Problem {
   }
 
   void reorderToPartition() {
-    mesh.reorderToPartition<CellDim, DataType>(partition_vector, cell_weights);
+    std::vector<MY_SIZE> inverse_permutation =
+        mesh.reorderToPartition(partition_vector);
+    reorderDataInverse<true>(cell_weights, inverse_permutation);
   }
 
   void renumberPoints() {
     std::vector<MY_SIZE> permutation = mesh.getPointRenumberingPermutation2(
         mesh.getPointToPartition(partition_vector));
     mesh.renumberPoints(permutation);
-    reorderData<PointDim, SOA, DataType, MY_SIZE>(point_weights, permutation);
+    reorderData<SOA>(point_weights, permutation);
   }
 
   void writePartition(std::ostream &os) const {
