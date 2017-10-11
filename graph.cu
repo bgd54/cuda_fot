@@ -404,7 +404,7 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
   for (const std::vector<MY_SIZE> &colour : partition) {
     d_cell_lists.emplace_back(data_t::create<MY_SIZE>(colour.size(), MESH_DIM));
     d_cell_weights.emplace_back(
-        data_t::create<MY_SIZE>(colour.size(), CellDim));
+        data_t::create<DataType>(colour.size(), CellDim));
     for (std::size_t i = 0; i < colour.size(); ++i) {
       std::copy_n(mesh.cell_to_node.begin<MY_SIZE>() + MESH_DIM * colour[i],
                   MESH_DIM,
@@ -412,7 +412,7 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
       for (unsigned d = 0; d < CellDim; ++d) {
         d_cell_weights.back().operator[]<DataType>(
             index<true>(colour.size(), i, CellDim, d)) =
-            cell_weights.operator[](
+            cell_weights.operator[]<DataType>(
                 index<true>(mesh.numCells(), colour[i], CellDim, d));
       }
     }
