@@ -60,44 +60,52 @@ public:
   void loopGPUCellCentred(MY_SIZE num);
   void loopGPUHierarchical(MY_SIZE num);
 
-  void stepCPUCellCentred(DataType *temp) { /*{{{*/
+  template <class UserFunc> void stepCPUCellCentred(DataType *temp) { /*{{{*/
     for (MY_SIZE cell_ind_base = 0; cell_ind_base < mesh.numCells();
          ++cell_ind_base) {
-      for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
-        MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-            mesh.cell_to_node.getDim() * cell_ind_base + offset);
-        MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-            mesh.cell_to_node.getDim() * cell_ind_base +
-            (offset == MESH_DIM - 1 ? 0 : offset + 1));
-        MY_SIZE w_ind_left = 0, w_ind_right = 0;
-        for (MY_SIZE d = 0; d < PointDim; ++d) {
-          w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim, d);
-          w_ind_right =
-              index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
-          MY_SIZE cell_d = CellDim == 1 ? 0 : d;
+      UserFunc::call(point_weights.cbegin<DataType>(), temp,
+                     cell_weights.cbegin<DataType>(),
+                     mesh.cell_to_node.cbegin<MY_SIZE>(), cell_ind_base);
+      // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
+      //  MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+      //      mesh.cell_to_node.getDim() * cell_ind_base + offset);
+      //  MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+      //      mesh.cell_to_node.getDim() * cell_ind_base +
+      //      (offset == MESH_DIM - 1 ? 0 : offset + 1));
+      //  MY_SIZE w_ind_left = 0, w_ind_right = 0;
+      //  for (MY_SIZE d = 0; d < PointDim; ++d) {
+      //    w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim,
+      //    d);
+      //    w_ind_right =
+      //        index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
+      //    MY_SIZE cell_d = CellDim == 1 ? 0 : d;
 
-          MY_SIZE cell_weight_ind =
-              index<true>(mesh.numCells(), cell_ind_base, CellDim, cell_d);
-          point_weights.operator[]<DataType>(w_ind_right) +=
-              cell_weights.operator[]<DataType>(cell_weight_ind) *
-              temp[w_ind_left];
-          point_weights.operator[]<DataType>(w_ind_left) +=
-              cell_weights.operator[](cell_weight_ind) * temp[w_ind_right];
-        }
-      }
+      //    MY_SIZE cell_weight_ind =
+      //        index<true>(mesh.numCells(), cell_ind_base, CellDim, cell_d);
+      //    point_weights.operator[]<DataType>(w_ind_right) +=
+      //        cell_weights.operator[]<DataType>(cell_weight_ind) *
+      //        temp[w_ind_left];
+      //    point_weights.operator[]<DataType>(w_ind_left) +=
+      //        cell_weights.operator[](cell_weight_ind) * temp[w_ind_right];
+      //  }
+      //}
     }
   } /*}}}*/
 
-  void loopCPUCellCentred(MY_SIZE num) { /*{{{*/
+  template <class UserFunc> void loopCPUCellCentred(MY_SIZE num) { /*{{{*/
     DataType *temp = (DataType *)malloc(sizeof(DataType) * mesh.numPoints() *
                                         point_weights.getDim());
     TIMER_START(t);
+    TIMER_TOGGLE(t);
+    std::copy(point_weights.begin<DataType>(), point_weights.end<DataType>(),
+              temp);
+    TIMER_TOGGLE(t);
     for (MY_SIZE i = 0; i < num; ++i) {
+      stepCPUCellCentred<UserFunc>(temp);
       TIMER_TOGGLE(t);
-      std::copy(point_weights.begin<DataType>(), point_weights.end<DataType>(),
-                temp);
+      std::copy_n(temp, mesh.numPoints() * point_weights.getDim(),
+                  point_weights.begin<DataType>());
       TIMER_TOGGLE(t);
-      stepCPUCellCentred(temp);
     }
     PRINT_BANDWIDTH(t, "loopCPUCellCentred",
                     (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
@@ -111,54 +119,69 @@ public:
     free(temp);
   } /*}}}*/
 
+  template <class UserFunc>
   void stepCPUCellCentredOMP(const std::vector<MY_SIZE> &inds,
                              data_t &out) { /*{{{*/
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
-      for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
+      UserFunc::call(point_weights.cbegin<DataType>(), out.begin<DataType>(),
+                     cell_weights.cbegin<DataType>(),
+                     mesh.cell_to_node.cbegin<MY_SIZE>(), ind);
+      // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
 
-        MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-            mesh.cell_to_node.getDim() * ind + offset);
-        MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-            mesh.cell_to_node.getDim() * ind +
-            (offset == MESH_DIM - 1 ? 0 : offset + 1));
+      //  MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+      //      mesh.cell_to_node.getDim() * ind + offset);
+      //  MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
+      //      mesh.cell_to_node.getDim() * ind +
+      //      (offset == MESH_DIM - 1 ? 0 : offset + 1));
 
-        MY_SIZE w_ind_left = 0, w_ind_right = 0;
-        for (MY_SIZE d = 0; d < PointDim; ++d) {
-          w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim, d);
-          w_ind_right =
-              index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
-          MY_SIZE cell_d = CellDim == 1 ? 0 : d;
+      //  MY_SIZE w_ind_left = 0, w_ind_right = 0;
+      //  for (MY_SIZE d = 0; d < PointDim; ++d) {
+      //    w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim,
+      //    d);
+      //    w_ind_right =
+      //        index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
+      //    MY_SIZE cell_d = CellDim == 1 ? 0 : d;
 
-          MY_SIZE cell_ind = index<true>(mesh.numCells(), ind, CellDim, cell_d);
-          point_weights.operator[]<DataType>(w_ind_right) +=
-              cell_weights.operator[]<DataType>(cell_ind) *
-              out.operator[]<DataType>(w_ind_left);
-          point_weights.operator[]<DataType>(w_ind_left) +=
-              cell_weights.operator[]<DataType>(cell_ind) *
-              out.operator[]<DataType>(w_ind_right);
-        }
-      }
+      //    MY_SIZE cell_ind = index<true>(mesh.numCells(), ind, CellDim,
+      //    cell_d);
+      //    point_weights.operator[]<DataType>(w_ind_right) +=
+      //        cell_weights.operator[]<DataType>(cell_ind) *
+      //        out.operator[]<DataType>(w_ind_left);
+      //    point_weights.operator[]<DataType>(w_ind_left) +=
+      //        cell_weights.operator[]<DataType>(cell_ind) *
+      //        out.operator[]<DataType>(w_ind_right);
+      //  }
+      //}
     }
   } /*}}}*/
 
-  void loopCPUCellCentredOMP(MY_SIZE num) { /*{{{*/
+  template <class UserFunc> void loopCPUCellCentredOMP(MY_SIZE num) { /*{{{*/
     data_t temp(data_t::create<DataType>(point_weights.getSize(), PointDim));
     std::vector<std::vector<MY_SIZE>> partition = mesh.colourCells();
     MY_SIZE num_of_colours = partition.size();
     TIMER_START(t);
+    // Init temp
+    TIMER_TOGGLE(t);
+    #pragma omp parallel for
+    for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.getDim();
+         ++e) {
+      temp.operator[]<DataType>(e) = point_weights.operator[]<DataType>(e);
+    }
+    TIMER_TOGGLE(t);
     for (MY_SIZE i = 0; i < num; ++i) {
+      for (MY_SIZE c = 0; c < num_of_colours; ++c) {
+        stepCPUCellCentredOMP<UserFunc>(partition[c], temp);
+      }
+      // Copy back from temp
       TIMER_TOGGLE(t);
       #pragma omp parallel for
       for (MY_SIZE e = 0; e < point_weights.getSize() * point_weights.getDim();
            ++e) {
-        temp.operator[]<DataType>(e) = point_weights.operator[]<DataType>(e);
+        point_weights.operator[]<DataType>(e) = temp.operator[]<DataType>(e);
       }
       TIMER_TOGGLE(t);
-      for (MY_SIZE c = 0; c < num_of_colours; ++c) {
-        stepCPUCellCentredOMP(partition[c], temp);
-      }
     }
     PRINT_BANDWIDTH(t, "loopCPUCellCentredOMP",
                     (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +

@@ -1,6 +1,7 @@
 #ifndef TESTS_HPP_HHJ8IWSK
 #define TESTS_HPP_HHJ8IWSK
 
+#include "kernels/mine.hpp"
 #include "partition.hpp"
 #include "structured_problem.hpp"
 #include <iostream>
@@ -195,7 +196,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     }
 
     // run algorithm
-    problem.loopCPUCellCentredOMP(num);
+    problem.template loopCPUCellCentredOMP<mine::StepSeq<PointDim, CellDim>>(
+        num);
 
     // Partition after
     problem.partition(1.01);

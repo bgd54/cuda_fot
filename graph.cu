@@ -9,6 +9,7 @@
 
 #include "colouring.hpp"
 #include "helper_cuda.h"
+#include "kernels/mine.hpp"
 #include "problem.hpp"
 #include "tests.hpp"
 
@@ -655,9 +656,11 @@ void generateTimes(std::string in_file) {
         (problem.*algo)(num);
         std::cout << "--Problem finished." << std::endl;
       };
-  run(&Problem<PointDim, CellDim, SOA, DataType>::loopCPUCellCentred,
+  run(&Problem<PointDim, CellDim, SOA,
+               DataType>::template loopCPUCellCentred<mine::StepSeq>,
       RunCPU ? num : 1);
-  run(&Problem<PointDim, CellDim, SOA, DataType>::loopCPUCellCentredOMP,
+  run(&Problem<PointDim, CellDim, SOA,
+               DataType>::template loopCPUCellCentredOMP<mine::StepOMP>,
       RunCPU ? num : 1);
   run(&Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred, num);
   run(&Problem<PointDim, CellDim, SOA, DataType>::loopGPUHierarchical, num);
@@ -762,41 +765,48 @@ void generateTimesFromFile(int argc, const char **argv) {
 void test() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
-  constexpr unsigned TEST_DIM = 4;
-  constexpr unsigned TEST_CELL_DIM = 4;
+  constexpr unsigned TEST_DIM = 2;
+  constexpr unsigned TEST_CELL_DIM = 1;
   testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, float>(
       num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopCPUCellCentredOMP,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopGPUHierarchical);
-  testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, float>(
-      num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopGPUHierarchical);
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopGPUCellCentred,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false,
+               float>::loopCPUCellCentred<mine::StepSeq<
+                 TEST_DIM,TEST_CELL_DIM>>);
+  /*testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, float>(*/
+  /*    num, N, M,*/
+  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentred,*/
+  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true,
+   * float>::loopCPUCellCentredOMP);*/
 }
 
 void testReordering() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
   constexpr unsigned TEST_DIM = 2;
-  constexpr unsigned TEST_CELL_DIM = 2;
+  constexpr unsigned TEST_CELL_DIM = 1;
   testReordering<TEST_DIM, TEST_CELL_DIM, false, float>(
-      num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopCPUCellCentredOMP,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopCPUCellCentredOMP);
-  testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(
-      num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP);
+      num, N, M, &Problem<TEST_DIM, TEST_CELL_DIM, false,
+                          float>::loopCPUCellCentredOMP<mine::StepOMP<
+                            TEST_DIM,TEST_CELL_DIM>>,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false,
+               float>::loopCPUCellCentredOMP<mine::StepOMP<
+                 TEST_DIM, TEST_CELL_DIM>>);
+  /*testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(*/
+  /*    num, N, M,*/
+  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP,*/
+  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true,
+   * float>::loopCPUCellCentredOMP);*/
 }
 
-void testPartitioning() {
-  MY_SIZE num = 500;
-  MY_SIZE N = 100, M = 200;
-  constexpr unsigned TEST_DIM = 4;
-  constexpr unsigned TEST_CELL_DIM = 4;
-  testPartitioning<TEST_DIM, TEST_CELL_DIM, false, float>(num, N, M);
-  testPartitioning<TEST_DIM, TEST_CELL_DIM, true, float>(num, N, M);
-}
+/*void testPartitioning() {*/
+/*  MY_SIZE num = 500;*/
+/*  MY_SIZE N = 100, M = 200;*/
+/*  constexpr unsigned TEST_DIM = 4;*/
+/*  constexpr unsigned TEST_CELL_DIM = 4;*/
+/*  testPartitioning<TEST_DIM, TEST_CELL_DIM, false, float>(num, N, M);*/
+/*  testPartitioning<TEST_DIM, TEST_CELL_DIM, true, float>(num, N, M);*/
+/*}*/
 
 void generateTimesDifferentBlockDims() {
   // SOA
@@ -840,8 +850,8 @@ void generateTimesDifferentBlockDims() {
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
   test();
-  testReordering();
-  testPartitioning();
+  /*testReordering();*/
+  /*testPartitioning();*/
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
   return 0;
