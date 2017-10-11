@@ -424,8 +424,8 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
     total_num_blocks += num_blocks;
     for (MY_SIZE i = 0; i < num_blocks; ++i) {
       total_num_cache_lines += countCacheLinesForBlock<PointDim, SOA, DataType>(
-          d_cell_lists.back().begin<DataType>() + MESH_DIM * block_size * i,
-          d_cell_lists.back().begin<DataType>() +
+          d_cell_lists.back().begin<MY_SIZE>() + MESH_DIM * block_size * i,
+          d_cell_lists.back().begin<MY_SIZE>() +
               MESH_DIM *
                   std::min<MY_SIZE>(colour.size(), block_size * (i + 1)));
     }
