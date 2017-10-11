@@ -767,17 +767,18 @@ void test() {
   MY_SIZE N = 100, M = 200;
   constexpr unsigned TEST_DIM = 2;
   constexpr unsigned TEST_CELL_DIM = 1;
-  testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, float>(
+  using TEST_DATA_TYPE = double;
+  testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(
       num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopGPUCellCentred,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false,
-               float>::loopCPUCellCentred<mine::StepSeq<
-                 TEST_DIM,TEST_CELL_DIM>>);
-  /*testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, float>(*/
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::loopGPUCellCentred,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+          loopCPUCellCentred<mine::StepSeq4<
+                 TEST_DIM,TEST_CELL_DIM, TEST_DATA_TYPE>>);
+  /*testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(*/
   /*    num, N, M,*/
   /*    &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentred,*/
   /*    &Problem<TEST_DIM, TEST_CELL_DIM, true,
-   * float>::loopCPUCellCentredOMP);*/
+   * TEST_DATA_TYPE>::loopCPUCellCentredOMP);*/
 }
 
 void testReordering() {
@@ -788,10 +789,10 @@ void testReordering() {
   testReordering<TEST_DIM, TEST_CELL_DIM, false, float>(
       num, N, M, &Problem<TEST_DIM, TEST_CELL_DIM, false,
                           float>::loopCPUCellCentredOMP<mine::StepOMP<
-                            TEST_DIM,TEST_CELL_DIM>>,
+                            TEST_DIM,TEST_CELL_DIM, float>>,
       &Problem<TEST_DIM, TEST_CELL_DIM, false,
                float>::loopCPUCellCentredOMP<mine::StepOMP<
-                 TEST_DIM, TEST_CELL_DIM>>);
+                 TEST_DIM, TEST_CELL_DIM, float>>);
   /*testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(*/
   /*    num, N, M,*/
   /*    &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP,*/

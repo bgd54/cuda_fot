@@ -4,11 +4,11 @@
 #define USER_FUNCTION_SIGNATURE(fname) void fname
 #endif /* ifndef USER_FUNCTION_SIGNATURE */
 
-template <unsigned PointDim, unsigned CellDim>
+template <unsigned PointDim, unsigned CellDim, class DataType>
 USER_FUNCTION_SIGNATURE(mine_func)
-(const float *left_point_data, const float *right_point_data,
- float *left_point_data_out, float *right_point_data_out,
- const float *cell_data) {
+(const DataType *left_point_data, const DataType *right_point_data,
+ DataType *left_point_data_out, DataType *right_point_data_out,
+ const DataType *cell_data) {
   static_assert(CellDim == PointDim || CellDim == 1, "CellDim makes no sense");
   for (unsigned point_d = 0; point_d < PointDim; ++point_d) {
     unsigned cell_d = CellDim == PointDim ? point_d : 0;
@@ -19,22 +19,24 @@ USER_FUNCTION_SIGNATURE(mine_func)
   }
 }
 
-template<unsigned PointDim, unsigned CellDim>
+template <unsigned PointDim, unsigned CellDim, class DataType>
 USER_FUNCTION_SIGNATURE(mine_func)
-(const float *point_data0, const float *point_data1, const float *point_data2,
- const float *point_data3, float *point_data_out0, float *point_data_out1,
- float *point_data_out2, float *point_data_out3, const float *cell_data) {
+(const DataType *point_data0, const DataType *point_data1,
+ const DataType *point_data2, const DataType *point_data3,
+ DataType *point_data_out0, DataType *point_data_out1,
+ DataType *point_data_out2, DataType *point_data_out3,
+ const DataType *cell_data) {
   static_assert(CellDim == PointDim || CellDim == 1, "CellDim makes no sense");
   for (unsigned point_d = 0; point_d < PointDim; ++point_d) {
     unsigned cell_d = CellDim == PointDim ? point_d : 0;
-    point_data_out0[point_d] += (point_data1[point_d] + point_data3[point_d])
-      * cell_data[cell_d];
-    point_data_out1[point_d] += (point_data2[point_d] + point_data0[point_d])
-      * cell_data[cell_d];
-    point_data_out2[point_d] += (point_data3[point_d] + point_data1[point_d])
-      * cell_data[cell_d];
-    point_data_out3[point_d] += (point_data0[point_d] + point_data2[point_d])
-      * cell_data[cell_d];
+    point_data_out0[point_d] +=
+        (point_data1[point_d] + point_data3[point_d]) * cell_data[cell_d];
+    point_data_out1[point_d] +=
+        (point_data2[point_d] + point_data0[point_d]) * cell_data[cell_d];
+    point_data_out2[point_d] +=
+        (point_data3[point_d] + point_data1[point_d]) * cell_data[cell_d];
+    point_data_out3[point_d] +=
+        (point_data0[point_d] + point_data2[point_d]) * cell_data[cell_d];
   }
 }
 
