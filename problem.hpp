@@ -51,7 +51,7 @@ public:
         partition_vector(std::move(other.partition_vector)) {}
   /* 1}}} */
 
-  void loopGPUCellCentred(MY_SIZE num);
+  template <class UserFunc> void loopGPUCellCentred(MY_SIZE num);
   void loopGPUHierarchical(MY_SIZE num);
 
   template <class UserFunc> void stepCPUCellCentred(DataType *temp) { /*{{{*/

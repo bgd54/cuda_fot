@@ -197,7 +197,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
 
     // run algorithm
     problem.template loopCPUCellCentredOMP<
-        mine::StepSeq<PointDim, CellDim, DataType>>(num);
+        MINE_KERNEL(StepSeq)<PointDim, CellDim, DataType>>(num);
 
     // Partition after
     problem.partition(1.01);

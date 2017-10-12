@@ -11,6 +11,12 @@
 #include "helper_cuda.h"
 #include "kernels/mine.hpp"
 #include "problem.hpp"
+
+// Macros to easily change between mesh dims
+#define CONCAT(a,b) a ## b
+#define CONCAT2(a,b) CONCAT(a,b)
+#define MINE_KERNEL(kname) mine:: CONCAT2(kname, MESH_DIM_MACRO)
+
 #include "tests.hpp"
 
 /* copyKernels {{{1 */
@@ -390,6 +396,7 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
 
 /* loopGPUCellCentred {{{1 */
 template <unsigned PointDim, unsigned CellDim, bool SOA, typename DataType>
+template<class UserFunc>
 void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
     MY_SIZE num) {
   std::vector<std::vector<MY_SIZE>> partition = mesh.colourCells();
@@ -437,13 +444,19 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
       MY_SIZE num_blocks = std::ceil(static_cast<double>(partition[c].size()) /
                                      static_cast<double>(block_size));
-      problem_stepGPU<PointDim, CellDim, SOA, DataType,
-                      MESH_DIM><<<num_blocks, block_size>>>(
-          point_weights.getDeviceData<DataType>(),
-          d_cell_weights[c].getDeviceData<DataType>(),
+      /*problem_stepGPU<PointDim, CellDim, SOA, DataType,*/
+      /*                MESH_DIM><<<num_blocks, block_size>>>(*/
+      /*    point_weights.getDeviceData<DataType>(),*/
+      /*    d_cell_weights[c].getDeviceData<DataType>(),*/
+      /*    d_cell_lists[c].getDeviceData<MY_SIZE>(),*/
+      /*    point_weights2.getDeviceData<DataType>(), partition[c].size(),*/
+      /*    mesh.numPoints(), mesh.numCells());*/
+      UserFunc::template call<SOA>(point_weights.getDeviceData(),
+          point_weights2.getDeviceData(),
+          d_cell_weights[c].getDeviceData(),
           d_cell_lists[c].getDeviceData<MY_SIZE>(),
-          point_weights2.getDeviceData<DataType>(), partition[c].size(),
-          mesh.numPoints(), mesh.numCells());
+          partition[c].size(),mesh.numPoints(),
+          partition[c].size(), num_blocks, block_size);
       checkCudaErrors(cudaDeviceSynchronize());
     }
     TIMER_TOGGLE(t);
@@ -657,10 +670,10 @@ void generateTimes(std::string in_file) {
         std::cout << "--Problem finished." << std::endl;
       };
   run(&Problem<PointDim, CellDim, SOA,
-               DataType>::template loopCPUCellCentred<mine::StepSeq>,
+               DataType>::template loopCPUCellCentred<MINE_KERNEL(StepSeq)>,
       RunCPU ? num : 1);
   run(&Problem<PointDim, CellDim, SOA,
-               DataType>::template loopCPUCellCentredOMP<mine::StepOMP>,
+               DataType>::template loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)>,
       RunCPU ? num : 1);
   run(&Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred, num);
   run(&Problem<PointDim, CellDim, SOA, DataType>::loopGPUHierarchical, num);
@@ -770,15 +783,19 @@ void test() {
   using TEST_DATA_TYPE = float;
   testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(
       num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::loopGPUCellCentred,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::loopGPUCellCentred<
+      MINE_KERNEL(StepGPUGlobal)<TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>
+      >,
       &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-          loopCPUCellCentred<mine::StepOMP4<
+          loopCPUCellCentred<MINE_KERNEL(StepOMP)<
                  TEST_DIM,TEST_CELL_DIM, TEST_DATA_TYPE>>);
   testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(
       num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::loopGPUCellCentred,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::loopGPUCellCentred<
+      MINE_KERNEL(StepGPUGlobal)<TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>
+      >,
       &Problem<TEST_DIM, TEST_CELL_DIM, true,
-  TEST_DATA_TYPE>::loopCPUCellCentredOMP<mine::StepOMP4<TEST_DIM, TEST_CELL_DIM,
+  TEST_DATA_TYPE>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<TEST_DIM, TEST_CELL_DIM,
       TEST_DATA_TYPE>>);
 }
 
@@ -789,17 +806,17 @@ void testReordering() {
   constexpr unsigned TEST_CELL_DIM = 4;
   testReordering<TEST_DIM, TEST_CELL_DIM, false, float>(
       num, N, M, &Problem<TEST_DIM, TEST_CELL_DIM, false,
-                          float>::loopCPUCellCentredOMP<mine::StepOMP4<
+                          float>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<
                             TEST_DIM,TEST_CELL_DIM, float>>,
       &Problem<TEST_DIM, TEST_CELL_DIM, false,
-               float>::loopCPUCellCentredOMP<mine::StepOMP4<
+               float>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<
                  TEST_DIM, TEST_CELL_DIM, float>>);
   testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(
       num, N, M,
       &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP<
-      mine::StepOMP4<TEST_DIM,TEST_CELL_DIM, float>>,
+      MINE_KERNEL(StepOMP)<TEST_DIM,TEST_CELL_DIM, float>>,
       &Problem<TEST_DIM, TEST_CELL_DIM, true,
-   float>::loopCPUCellCentredOMP<mine::StepOMP4<TEST_DIM, TEST_CELL_DIM, float>>);
+   float>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<TEST_DIM, TEST_CELL_DIM, float>>);
 }
 
 /*void testPartitioning() {*/
