@@ -19,7 +19,7 @@ struct StepSeq {
   template <bool SOA>
   static void call(const void *_point_data, void *_point_data_out,
                    const void *_cell_data, const MY_SIZE *cell_to_node,
-                   MY_SIZE ind) {
+                   MY_SIZE ind, unsigned point_stride, unsigned cell_stride) {
     const float *point_data = reinterpret_cast<const float *>(_point_data);
     float *point_data_out = reinterpret_cast<float *>(_point_data_out);
     const float *cell_data = reinterpret_cast<const float *>(_cell_data);
@@ -32,7 +32,8 @@ struct StepSeq {
     const float *cell_data_cur = cell_data + ind;
 
     // Calling user function
-    user_func_host(point_data_cur, point_data_out_cur, cell_data_cur);
+    user_func_host(point_data_cur, point_data_out_cur, cell_data_cur,
+                   point_stride, cell_stride);
   }
 };
 
