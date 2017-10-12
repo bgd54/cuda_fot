@@ -16,6 +16,7 @@ struct StepSeq {
   static constexpr unsigned MESH_DIM = 1;
   static constexpr unsigned POINT_DIM = 1;
   static constexpr unsigned CELL_DIM = 1;
+  template <bool SOA>
   static void call(const void *_point_data, void *_point_data_out,
                    const void *_cell_data, const MY_SIZE *cell_to_node,
                    MY_SIZE ind) {
@@ -23,11 +24,12 @@ struct StepSeq {
     float *point_data_out = reinterpret_cast<float *>(_point_data_out);
     const float *cell_data = reinterpret_cast<const float *>(_cell_data);
 
+    unsigned used_point_dim = !SOA ? POINT_DIM : 1;
     const float *point_data_cur =
-        point_data + POINT_DIM * cell_to_node[MESH_DIM * ind + 0];
+        point_data + used_point_dim * cell_to_node[MESH_DIM * ind + 0];
     float *point_data_out_cur =
-        point_data_out + POINT_DIM * cell_to_node[MESH_DIM * ind + 0];
-    const float *cell_data_cur = cell_data + CELL_DIM * ind;
+        point_data_out + used_point_dim * cell_to_node[MESH_DIM * ind + 0];
+    const float *cell_data_cur = cell_data + ind;
 
     // Calling user function
     user_func_host(point_data_cur, point_data_out_cur, cell_data_cur);

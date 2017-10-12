@@ -18,13 +18,7 @@ constexpr MY_SIZE DEFAULT_BLOCK_SIZE = 128;
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 struct Problem {
-  static_assert(
-      CellDim == PointDim || CellDim == 1,
-      "I know of no reason why CellDim should be anything but 1 or PointDim");
   static constexpr unsigned MESH_DIM = MESH_DIM_MACRO;
-  // And because nvcc doesn't compile the above, we need the following hack:
-  // using _MESH_DIM_T = std::integral_constant<unsigned, MESH_DIM_MACRO>;
-  // static constexpr _MESH_DIM_T MESH_DIM {};
 
   Mesh mesh;
   data_t cell_weights;
@@ -63,9 +57,10 @@ public:
   template <class UserFunc> void stepCPUCellCentred(DataType *temp) { /*{{{*/
     for (MY_SIZE cell_ind_base = 0; cell_ind_base < mesh.numCells();
          ++cell_ind_base) {
-      UserFunc::call(point_weights.cbegin<DataType>(), temp,
-                     cell_weights.cbegin<DataType>(),
-                     mesh.cell_to_node.cbegin<MY_SIZE>(), cell_ind_base);
+      UserFunc::template call<SOA>(
+          point_weights.cbegin<DataType>(), temp,
+          cell_weights.cbegin<DataType>(), mesh.cell_to_node.cbegin<MY_SIZE>(),
+          cell_ind_base, mesh.numPoints(), mesh.numCells());
       // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
       //  MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
       //      mesh.cell_to_node.getDim() * cell_ind_base + offset);
@@ -125,9 +120,10 @@ public:
     #pragma omp parallel for
     for (MY_SIZE i = 0; i < inds.size(); ++i) {
       MY_SIZE ind = inds[i];
-      UserFunc::call(point_weights.cbegin<DataType>(), out.begin<DataType>(),
-                     cell_weights.cbegin<DataType>(),
-                     mesh.cell_to_node.cbegin<MY_SIZE>(), ind);
+      UserFunc::template call<SOA>(
+          point_weights.cbegin<DataType>(), out.begin<DataType>(),
+          cell_weights.cbegin<DataType>(), mesh.cell_to_node.cbegin<MY_SIZE>(),
+          ind, mesh.numPoints(), mesh.numCells());
       // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
 
       //  MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(

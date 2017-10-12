@@ -765,39 +765,41 @@ void generateTimesFromFile(int argc, const char **argv) {
 void test() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
-  constexpr unsigned TEST_DIM = 2;
-  constexpr unsigned TEST_CELL_DIM = 1;
-  using TEST_DATA_TYPE = double;
+  constexpr unsigned TEST_DIM = 4;
+  constexpr unsigned TEST_CELL_DIM = 4;
+  using TEST_DATA_TYPE = float;
   testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(
       num, N, M,
       &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::loopGPUCellCentred,
       &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-          loopCPUCellCentred<mine::StepSeq4<
+          loopCPUCellCentred<mine::StepOMP4<
                  TEST_DIM,TEST_CELL_DIM, TEST_DATA_TYPE>>);
-  /*testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(*/
-  /*    num, N, M,*/
-  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentred,*/
-  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true,
-   * TEST_DATA_TYPE>::loopCPUCellCentredOMP);*/
+  testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(
+      num, N, M,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::loopGPUCellCentred,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true,
+  TEST_DATA_TYPE>::loopCPUCellCentredOMP<mine::StepOMP4<TEST_DIM, TEST_CELL_DIM,
+      TEST_DATA_TYPE>>);
 }
 
 void testReordering() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
-  constexpr unsigned TEST_DIM = 2;
-  constexpr unsigned TEST_CELL_DIM = 1;
+  constexpr unsigned TEST_DIM = 4;
+  constexpr unsigned TEST_CELL_DIM = 4;
   testReordering<TEST_DIM, TEST_CELL_DIM, false, float>(
       num, N, M, &Problem<TEST_DIM, TEST_CELL_DIM, false,
-                          float>::loopCPUCellCentredOMP<mine::StepOMP<
+                          float>::loopCPUCellCentredOMP<mine::StepOMP4<
                             TEST_DIM,TEST_CELL_DIM, float>>,
       &Problem<TEST_DIM, TEST_CELL_DIM, false,
-               float>::loopCPUCellCentredOMP<mine::StepOMP<
+               float>::loopCPUCellCentredOMP<mine::StepOMP4<
                  TEST_DIM, TEST_CELL_DIM, float>>);
-  /*testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(*/
-  /*    num, N, M,*/
-  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP,*/
-  /*    &Problem<TEST_DIM, TEST_CELL_DIM, true,
-   * float>::loopCPUCellCentredOMP);*/
+  testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(
+      num, N, M,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP<
+      mine::StepOMP4<TEST_DIM,TEST_CELL_DIM, float>>,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true,
+   float>::loopCPUCellCentredOMP<mine::StepOMP4<TEST_DIM, TEST_CELL_DIM, float>>);
 }
 
 /*void testPartitioning() {*/
@@ -851,7 +853,7 @@ void generateTimesDifferentBlockDims() {
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
   test();
-  /*testReordering();*/
+  testReordering();
   /*testPartitioning();*/
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
