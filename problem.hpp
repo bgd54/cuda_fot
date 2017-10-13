@@ -61,29 +61,6 @@ public:
           point_weights.cbegin<DataType>(), temp,
           cell_weights.cbegin<DataType>(), mesh.cell_to_node.cbegin<MY_SIZE>(),
           cell_ind_base, mesh.numPoints(), mesh.numCells());
-      // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
-      //  MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-      //      mesh.cell_to_node.getDim() * cell_ind_base + offset);
-      //  MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-      //      mesh.cell_to_node.getDim() * cell_ind_base +
-      //      (offset == MESH_DIM - 1 ? 0 : offset + 1));
-      //  MY_SIZE w_ind_left = 0, w_ind_right = 0;
-      //  for (MY_SIZE d = 0; d < PointDim; ++d) {
-      //    w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim,
-      //    d);
-      //    w_ind_right =
-      //        index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
-      //    MY_SIZE cell_d = CellDim == 1 ? 0 : d;
-
-      //    MY_SIZE cell_weight_ind =
-      //        index<true>(mesh.numCells(), cell_ind_base, CellDim, cell_d);
-      //    point_weights.operator[]<DataType>(w_ind_right) +=
-      //        cell_weights.operator[]<DataType>(cell_weight_ind) *
-      //        temp[w_ind_left];
-      //    point_weights.operator[]<DataType>(w_ind_left) +=
-      //        cell_weights.operator[](cell_weight_ind) * temp[w_ind_right];
-      //  }
-      //}
     }
   } /*}}}*/
 
@@ -124,32 +101,6 @@ public:
           point_weights.cbegin<DataType>(), out.begin<DataType>(),
           cell_weights.cbegin<DataType>(), mesh.cell_to_node.cbegin<MY_SIZE>(),
           ind, mesh.numPoints(), mesh.numCells());
-      // for (MY_SIZE offset = 0; offset < MESH_DIM; ++offset) {
-
-      //  MY_SIZE ind_left_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-      //      mesh.cell_to_node.getDim() * ind + offset);
-      //  MY_SIZE ind_right_base = mesh.cell_to_node.operator[]<MY_SIZE>(
-      //      mesh.cell_to_node.getDim() * ind +
-      //      (offset == MESH_DIM - 1 ? 0 : offset + 1));
-
-      //  MY_SIZE w_ind_left = 0, w_ind_right = 0;
-      //  for (MY_SIZE d = 0; d < PointDim; ++d) {
-      //    w_ind_left = index<SOA>(mesh.numPoints(), ind_left_base, PointDim,
-      //    d);
-      //    w_ind_right =
-      //        index<SOA>(mesh.numPoints(), ind_right_base, PointDim, d);
-      //    MY_SIZE cell_d = CellDim == 1 ? 0 : d;
-
-      //    MY_SIZE cell_ind = index<true>(mesh.numCells(), ind, CellDim,
-      //    cell_d);
-      //    point_weights.operator[]<DataType>(w_ind_right) +=
-      //        cell_weights.operator[]<DataType>(cell_ind) *
-      //        out.operator[]<DataType>(w_ind_left);
-      //    point_weights.operator[]<DataType>(w_ind_left) +=
-      //        cell_weights.operator[]<DataType>(cell_ind) *
-      //        out.operator[]<DataType>(w_ind_right);
-      //  }
-      //}
     }
   } /*}}}*/
 

@@ -41,52 +41,6 @@ __global__ void copyKernel(const double *__restrict__ a, double *__restrict__ b,
 }
 /* 1}}} */
 
-/* problem_stepGPU {{{1 */
-template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          typename DataType, unsigned MeshDim>
-__global__ void
-problem_stepGPU(const DataType *__restrict__ point_weights,
-                const DataType *__restrict__ cell_weights,
-                const MY_SIZE *__restrict__ cell_list,
-                DataType *__restrict__ out, const MY_SIZE cell_num_in_partition,
-                const MY_SIZE num_points, const MY_SIZE num_cells) {
-  static_assert(
-      CellDim == PointDim || CellDim == 1,
-      "I know of no reason why CellDim should be anything but 1 or PointDim");
-
-  MY_SIZE id = blockIdx.x * blockDim.x + threadIdx.x;
-  DataType inc[2 * PointDim];
-  if (id < cell_num_in_partition) {
-    #pragma unroll
-    for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-      MY_SIZE edge_left = cell_list[MeshDim * id + offset];
-      MY_SIZE edge_right =
-          cell_list[MeshDim * id + (offset == MeshDim - 1 ? 0 : offset + 1)];
-      #pragma unroll
-      for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind_left = index<SOA>(num_points, edge_left, PointDim, d);
-        MY_SIZE ind_right = index<SOA>(num_points, edge_right, PointDim, d);
-        MY_SIZE cell_d = CellDim == 1 ? 0 : d;
-        MY_SIZE cell_ind =
-            index<true>(cell_num_in_partition, id, CellDim, cell_d);
-        inc[d] =
-            out[ind_right] + cell_weights[cell_ind] * point_weights[ind_left];
-        inc[d + PointDim] =
-            out[ind_left] + cell_weights[cell_ind] * point_weights[ind_right];
-      }
-      #pragma unroll
-      for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE ind_left = index<SOA>(num_points, edge_left, PointDim, d);
-        MY_SIZE ind_right = index<SOA>(num_points, edge_right, PointDim, d);
-
-        out[ind_right] = inc[d];
-        out[ind_left] = inc[d + PointDim];
-      }
-    }
-  }
-}
-/* 1}}} */
-
 /* problem_stepGPUHierarchical {{{1 */
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           bool PerDataCache = false, bool SOAInShared = true,
