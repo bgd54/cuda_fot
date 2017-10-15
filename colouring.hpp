@@ -67,8 +67,9 @@ struct HierarchicalColourMemory {
     colourset_t used_colours;
     std::vector<MY_SIZE> set_sizes;
     std::vector<std::uint8_t> block_colours(mesh.numCells());
-    std::vector<DataType> tmp_cell_weights(problem.cell_weights.cbegin(),
-                                           problem.cell_weights.cend());
+    std::vector<DataType> tmp_cell_weights(
+        problem.cell_weights.template cbegin<DataType>(),
+        problem.cell_weights.template cend<DataType>());
     std::vector<MY_SIZE> blocks;
     std::vector<std::pair<MY_SIZE, MY_SIZE>> partition_to_cell;
     std::vector<MY_SIZE> cell_inverse_permutation(mesh.numCells());
@@ -341,8 +342,8 @@ private:
 
 public:
   /*******************
-  *  Device layout  *
-  *******************/
+   *  Device layout  *
+   *******************/
   struct DeviceMemoryOfOneColour {
     device_data_t cell_weights;
     device_data_t points_to_be_cached, points_to_be_cached_offsets;

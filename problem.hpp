@@ -52,7 +52,7 @@ public:
   /* 1}}} */
 
   template <class UserFunc> void loopGPUCellCentred(MY_SIZE num);
-  void loopGPUHierarchical(MY_SIZE num);
+  template <class UserFunc> void loopGPUHierarchical(MY_SIZE num);
 
   template <class UserFunc> void stepCPUCellCentred(DataType *temp) { /*{{{*/
     for (MY_SIZE cell_ind_base = 0; cell_ind_base < mesh.numCells();

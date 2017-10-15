@@ -13,9 +13,9 @@
 #include "problem.hpp"
 
 // Macros to easily change between mesh dims
-#define CONCAT(a,b) a ## b
-#define CONCAT2(a,b) CONCAT(a,b)
-#define MINE_KERNEL(kname) mine:: CONCAT2(kname, MESH_DIM_MACRO)
+#define CONCAT(a, b) a##b
+#define CONCAT2(a, b) CONCAT(a, b)
+#define MINE_KERNEL(kname) mine::CONCAT2(kname, MESH_DIM_MACRO)
 
 #include "tests.hpp"
 
@@ -37,282 +37,6 @@ __global__ void copyKernel(const double *__restrict__ a, double *__restrict__ b,
   double2 *__restrict__ b_ = reinterpret_cast<double2 *>(b);
   if (tid * 2 < size) {
     b_[tid] = a_[tid];
-  }
-}
-/* 1}}} */
-
-/* problem_stepGPUHierarchical {{{1 */
-template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          bool PerDataCache = false, bool SOAInShared = true,
-          typename DataType = float, unsigned MeshDim>
-__global__ void problem_stepGPUHierarchical(
-    const MY_SIZE *__restrict__ cell_list,
-    const DataType *__restrict__ point_weights,
-    DataType *__restrict__ point_weights_out,
-    const DataType *__restrict__ cell_weights,
-    const MY_SIZE *__restrict__ points_to_be_cached,
-    const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const std::uint8_t *__restrict__ cell_colours,
-    const std::uint8_t *__restrict__ num_cell_colours,
-    const MY_SIZE *__restrict__ block_offsets, const MY_SIZE num_threads,
-    const MY_SIZE num_points) {
-  static_assert(
-      CellDim == PointDim || CellDim == 1,
-      "I know of no reason why CellDim should be anything but 1 or PointDim");
-
-  const float4 *__restrict__ point_weights2 =
-      reinterpret_cast<const float4 *>(point_weights);
-  float4 *__restrict__ point_weights_out2 =
-      reinterpret_cast<float4 *>(point_weights_out);
-  const double2 *__restrict__ point_weights3 =
-      reinterpret_cast<const double2 *>(point_weights);
-  double2 *__restrict__ point_weights_out3 =
-      reinterpret_cast<double2 *>(point_weights_out);
-
-  static_assert(SOA || PerDataCache,
-                "AOS and not per data cache is currently not supported");
-  MY_SIZE bid = blockIdx.x;
-  MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;
-  MY_SIZE tid = threadIdx.x;
-
-  MY_SIZE cache_points_offset = points_to_be_cached_offsets[bid];
-  MY_SIZE num_cached_points =
-      points_to_be_cached_offsets[bid + 1] - cache_points_offset;
-  MY_SIZE shared_num_cached_points;
-  if (SOAInShared) {
-    static_assert(32 % PointDim == 0, "Currently, shared memory bank conflict "
-                                      "avoidance works only if 32 is divisible "
-                                      "by PointDim");
-    MY_SIZE needed_offset = 32 / PointDim;
-    if (num_cached_points % 32 <= needed_offset) {
-      shared_num_cached_points =
-          num_cached_points - (num_cached_points % 32) + needed_offset;
-    } else {
-      shared_num_cached_points =
-          num_cached_points - (num_cached_points % 32) + 32 + needed_offset;
-    }
-    assert(shared_num_cached_points >= num_cached_points);
-  } else {
-    shared_num_cached_points = num_cached_points;
-  }
-
-  extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
-  DataType *point_cache = reinterpret_cast<DataType *>(shared);
-
-  MY_SIZE block_size = block_offsets[bid + 1] - block_offsets[bid];
-
-  std::uint8_t our_colour;
-  if (tid >= block_size) {
-    our_colour = num_cell_colours[bid];
-  } else {
-    our_colour = cell_colours[thread_ind];
-  }
-
-  // Cache in
-  if (PerDataCache) {
-    if (!SOA && PointDim % 4 == 0 && std::is_same<DataType, float>::value) {
-      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 4;
-           i += blockDim.x) {
-        MY_SIZE point_ind = i * 4 / PointDim;
-        MY_SIZE d = (i * 4) % PointDim;
-        MY_SIZE g_ind = index<SOA>(
-            num_points, points_to_be_cached[cache_points_offset + point_ind],
-            PointDim, d);
-        MY_SIZE c_ind0 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 0);
-        MY_SIZE c_ind1 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 1);
-        MY_SIZE c_ind2 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 2);
-        MY_SIZE c_ind3 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 3);
-        float4 tmp = point_weights2[g_ind / 4];
-        point_cache[c_ind0] = tmp.x;
-        point_cache[c_ind1] = tmp.y;
-        point_cache[c_ind2] = tmp.z;
-        point_cache[c_ind3] = tmp.w;
-      }
-    } else if (!SOA && PointDim % 2 == 0 &&
-               std::is_same<DataType, double>::value) {
-      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 2;
-           i += blockDim.x) {
-        MY_SIZE point_ind = i * 2 / PointDim;
-        MY_SIZE d = (i * 2) % PointDim;
-        MY_SIZE g_ind = index<SOA>(
-            num_points, points_to_be_cached[cache_points_offset + point_ind],
-            PointDim, d);
-        MY_SIZE c_ind0 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 0);
-        MY_SIZE c_ind1 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 1);
-        double2 tmp = point_weights3[g_ind / 2];
-        point_cache[c_ind0] = tmp.x;
-        point_cache[c_ind1] = tmp.y;
-      }
-    } else {
-      for (MY_SIZE i = tid; i < PointDim * num_cached_points; i += blockDim.x) {
-        MY_SIZE point_ind = i / PointDim;
-        MY_SIZE d = i % PointDim;
-        MY_SIZE g_ind = index<SOA>(
-            num_points, points_to_be_cached[cache_points_offset + point_ind],
-            PointDim, d);
-        MY_SIZE c_ind = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                           PointDim, d);
-        point_cache[c_ind] = point_weights[g_ind];
-      }
-    }
-  } else {
-    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
-      MY_SIZE g_point_to_be_cached =
-          points_to_be_cached[cache_points_offset + i];
-      for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE c_ind, g_ind;
-        g_ind = index<SOA>(num_points, g_point_to_be_cached, PointDim, d);
-        c_ind = index<SOAInShared>(shared_num_cached_points, i, PointDim, d);
-
-        point_cache[c_ind] = point_weights[g_ind];
-      }
-    }
-  }
-
-  __syncthreads();
-
-  // Computation
-  DataType increment[PointDim * MeshDim];
-
-  #pragma unroll
-  for (MY_SIZE i = 0; i < PointDim * MeshDim; ++i) {
-    increment[i] = 0;
-  }
-  if (tid < block_size) {
-    for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-      MY_SIZE offset_left = offset;
-      MY_SIZE offset_right = offset == MeshDim - 1 ? 0 : offset + 1;
-      MY_SIZE edge_left =
-          cell_list[index<true>(num_threads, thread_ind, MeshDim, offset_left)];
-      MY_SIZE edge_right = cell_list[index<true>(num_threads, thread_ind,
-                                                 MeshDim, offset_right)];
-      for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE left_ind = index<SOAInShared>(shared_num_cached_points,
-                                              edge_left, PointDim, d);
-        MY_SIZE right_ind = index<SOAInShared>(shared_num_cached_points,
-                                               edge_right, PointDim, d);
-        MY_SIZE cell_d = CellDim == 1 ? 0 : d;
-        MY_SIZE cell_ind =
-            index<true>(num_threads, thread_ind, PointDim, cell_d);
-
-        increment[offset_right * PointDim + d] +=
-            point_cache[left_ind] * cell_weights[cell_ind];
-        increment[offset_left * PointDim + d] +=
-            point_cache[right_ind] * cell_weights[cell_ind];
-      }
-    }
-  }
-
-  __syncthreads();
-
-  // Clear cache
-  for (MY_SIZE i = tid; i < shared_num_cached_points * PointDim;
-       i += blockDim.x) {
-    point_cache[i] = 0;
-  }
-
-  __syncthreads();
-
-  // Accumulate increment
-  for (MY_SIZE i = 0; i < num_cell_colours[bid]; ++i) {
-    if (our_colour == i) {
-      for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-        MY_SIZE point =
-            cell_list[index<true>(num_threads, thread_ind, MeshDim, offset)];
-        for (MY_SIZE d = 0; d < PointDim; ++d) {
-          MY_SIZE point_data_ind =
-              index<SOAInShared>(shared_num_cached_points, point, PointDim, d);
-
-          point_cache[point_data_ind] += increment[offset * PointDim + d];
-        }
-      }
-    }
-    __syncthreads();
-  }
-
-  // Cache out
-  if (PerDataCache) {
-    if (!SOA && PointDim % 4 == 0 && std::is_same<DataType, float>::value) {
-      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 4;
-           i += blockDim.x) {
-        MY_SIZE point_ind = i * 4 / PointDim;
-        MY_SIZE d = (i * 4) % PointDim;
-        MY_SIZE g_ind = index<SOA>(
-            num_points, points_to_be_cached[cache_points_offset + point_ind],
-            PointDim, d);
-        MY_SIZE c_ind0 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 0);
-        MY_SIZE c_ind1 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 1);
-        MY_SIZE c_ind2 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 2);
-        MY_SIZE c_ind3 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 3);
-        float4 result = point_weights_out2[g_ind / 4];
-        result.x += point_cache[c_ind0];
-        result.y += point_cache[c_ind1];
-        result.z += point_cache[c_ind2];
-        result.w += point_cache[c_ind3];
-        point_weights_out2[g_ind / 4] = result;
-      }
-    } else if (!SOA && PointDim % 2 == 0 &&
-               std::is_same<DataType, double>::value) {
-      for (MY_SIZE i = tid; i < PointDim * num_cached_points / 2;
-           i += blockDim.x) {
-        MY_SIZE point_ind = i * 2 / PointDim;
-        MY_SIZE d = (i * 2) % PointDim;
-        MY_SIZE g_ind = index<SOA>(
-            num_points, points_to_be_cached[cache_points_offset + point_ind],
-            PointDim, d);
-        MY_SIZE c_ind0 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 0);
-        MY_SIZE c_ind1 = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                            PointDim, d + 1);
-        double2 result = point_weights_out3[g_ind / 2];
-        result.x += point_cache[c_ind0];
-        result.y += point_cache[c_ind1];
-        point_weights_out3[g_ind / 2] = result;
-      }
-    } else {
-      for (MY_SIZE i = tid; i < num_cached_points * PointDim; i += blockDim.x) {
-        MY_SIZE point_ind = i / PointDim;
-        MY_SIZE d = i % PointDim;
-        MY_SIZE g_ind = index<SOA>(
-            num_points, points_to_be_cached[cache_points_offset + point_ind],
-            PointDim, d);
-        MY_SIZE c_ind = index<SOAInShared>(shared_num_cached_points, point_ind,
-                                           PointDim, d);
-        DataType result = point_weights_out[g_ind] + point_cache[c_ind];
-        point_weights_out[g_ind] = result;
-      }
-    }
-  } else {
-    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
-      MY_SIZE g_point_to_be_cached =
-          points_to_be_cached[cache_points_offset + i];
-      DataType result[PointDim];
-      #pragma unroll
-      for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE write_g_ind =
-            index<SOA>(num_points, g_point_to_be_cached, PointDim, d);
-        MY_SIZE write_c_ind =
-            index<SOAInShared>(shared_num_cached_points, i, PointDim, d);
-
-        result[d] = point_weights_out[write_g_ind] + point_cache[write_c_ind];
-      }
-      #pragma unroll
-      for (MY_SIZE d = 0; d < PointDim; ++d) {
-        MY_SIZE write_g_ind =
-            index<SOA>(num_points, g_point_to_be_cached, PointDim, d);
-        point_weights_out[write_g_ind] = result[d];
-      }
-    }
   }
 }
 /* 1}}} */
@@ -350,7 +74,7 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
 
 /* loopGPUCellCentred {{{1 */
 template <unsigned PointDim, unsigned CellDim, bool SOA, typename DataType>
-template<class UserFunc>
+template <class UserFunc>
 void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
     MY_SIZE num) {
   std::vector<std::vector<MY_SIZE>> partition = mesh.colourCells();
@@ -405,12 +129,11 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
       /*    d_cell_lists[c].getDeviceData<MY_SIZE>(),*/
       /*    point_weights2.getDeviceData<DataType>(), partition[c].size(),*/
       /*    mesh.numPoints(), mesh.numCells());*/
-      UserFunc::template call<SOA>(point_weights.getDeviceData(),
-          point_weights2.getDeviceData(),
+      UserFunc::template call<SOA>(
+          point_weights.getDeviceData(), point_weights2.getDeviceData(),
           d_cell_weights[c].getDeviceData(),
-          d_cell_lists[c].getDeviceData<MY_SIZE>(),
-          partition[c].size(),mesh.numPoints(),
-          partition[c].size(), num_blocks, block_size);
+          d_cell_lists[c].getDeviceData<MY_SIZE>(), partition[c].size(),
+          mesh.numPoints(), partition[c].size(), num_blocks, block_size);
       checkCudaErrors(cudaDeviceSynchronize());
     }
     TIMER_TOGGLE(t);
@@ -450,6 +173,7 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUCellCentred(
 
 /* loopGPUHierarchical {{{1 */
 template <unsigned PointDim, unsigned CellDim, bool SOA, typename DataType>
+template <class UserFunc>
 void Problem<PointDim, CellDim, SOA, DataType>::loopGPUHierarchical(
     MY_SIZE num) {
   TIMER_START(t_colouring);
@@ -511,20 +235,18 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUHierarchical(
       MY_SIZE cache_size =
           sizeof(DataType) * (d_memory[colour_ind].shared_size + 32) * PointDim;
       TIMER_TOGGLE(timer_calc);
-      problem_stepGPUHierarchical<
-          PointDim, CellDim, SOA, !SOA, true, DataType,
-          MESH_DIM><<<num_blocks, block_size, cache_size>>>(
-          static_cast<MY_SIZE *>(d_memory[colour_ind].cell_list),
-          point_weights.getDeviceData<DataType>(),
-          point_weights_out.getDeviceData<DataType>(),
-          static_cast<DataType *>(d_memory[colour_ind].cell_weights),
+      UserFunc::template call<SOA>(
+          point_weights.getDeviceData(), point_weights_out.getDeviceData(),
           static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached),
           static_cast<MY_SIZE *>(
               d_memory[colour_ind].points_to_be_cached_offsets),
-          static_cast<std::uint8_t *>(d_memory[colour_ind].cell_colours),
+          d_memory[colour_ind].cell_weights,
+          static_cast<MY_SIZE *>(d_memory[colour_ind].cell_list),
           static_cast<std::uint8_t *>(d_memory[colour_ind].num_cell_colours),
+          static_cast<std::uint8_t *>(d_memory[colour_ind].cell_colours),
           static_cast<MY_SIZE *>(d_memory[colour_ind].block_offsets),
-          num_threads, mesh.numPoints());
+          num_threads, mesh.numPoints(), num_threads, num_blocks, block_size,
+          cache_size);
       TIMER_TOGGLE(timer_calc);
       checkCudaErrors(cudaDeviceSynchronize());
     }
@@ -608,21 +330,22 @@ void generateTimes(std::string in_file) {
             << std::endl;
   std::function<void(
       implementation_algorithm_t<PointDim, CellDim, SOA, DataType>, MY_SIZE)>
-      run = [&in_file](
-          implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algo,
-          MY_SIZE num) {
-        std::ifstream f(in_file);
-        Problem<PointDim, CellDim, SOA, DataType> problem(f, 288);
-        if (in_file.find("metis") < in_file.size()) {
-          std::ifstream f_part(in_file + "_part");
-          problem.readPartition(f_part);
-          problem.reorderToPartition();
-          problem.renumberPoints();
-        }
-        std::cout << "--Problem created" << std::endl;
-        (problem.*algo)(num);
-        std::cout << "--Problem finished." << std::endl;
-      };
+      run =
+          [&in_file](
+              implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algo,
+              MY_SIZE num) {
+            std::ifstream f(in_file);
+            Problem<PointDim, CellDim, SOA, DataType> problem(f, 288);
+            if (in_file.find("metis") < in_file.size()) {
+              std::ifstream f_part(in_file + "_part");
+              problem.readPartition(f_part);
+              problem.reorderToPartition();
+              problem.renumberPoints();
+            }
+            std::cout << "--Problem created" << std::endl;
+            (problem.*algo)(num);
+            std::cout << "--Problem finished." << std::endl;
+          };
   run(&Problem<PointDim, CellDim, SOA,
                DataType>::template loopCPUCellCentred<MINE_KERNEL(StepSeq)>,
       RunCPU ? num : 1);
@@ -652,8 +375,8 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
             << std::endl;
   std::function<void(
       implementation_algorithm_t<PointDim, CellDim, SOA, DataType>)>
-      run = [&](
-          implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algo) {
+      run = [&](implementation_algorithm_t<PointDim, CellDim, SOA, DataType>
+                    algo) {
         Problem<PointDim, CellDim, SOA, DataType> problem(
             std::move(StructuredProblem<PointDim, CellDim, SOA, DataType>(
                 N, M, block_dims)));
@@ -732,25 +455,25 @@ void generateTimesFromFile(int argc, const char **argv) {
 void test() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
-  constexpr unsigned TEST_DIM = 4;
-  constexpr unsigned TEST_CELL_DIM = 4;
+  constexpr unsigned TEST_DIM = 1;
+  constexpr unsigned TEST_CELL_DIM = 1;
   using TEST_DATA_TYPE = float;
   testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(
       num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::loopGPUCellCentred<
-      MINE_KERNEL(StepGPUGlobal)<TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>
-      >,
       &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-          loopCPUCellCentred<MINE_KERNEL(StepOMP)<
-                 TEST_DIM,TEST_CELL_DIM, TEST_DATA_TYPE>>);
+              loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
+                                  TEST_CELL_DIM, TEST_DATA_TYPE>>,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+              loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
+                                 TEST_DATA_TYPE>>);
   testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(
       num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::loopGPUCellCentred<
-      MINE_KERNEL(StepGPUGlobal)<TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>
-      >,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true,
-  TEST_DATA_TYPE>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<TEST_DIM, TEST_CELL_DIM,
-      TEST_DATA_TYPE>>);
+      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+              loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
+                                  TEST_CELL_DIM, TEST_DATA_TYPE>>,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+              loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                    TEST_CELL_DIM, TEST_DATA_TYPE>>);
 }
 
 void testReordering() {
@@ -759,18 +482,17 @@ void testReordering() {
   constexpr unsigned TEST_DIM = 4;
   constexpr unsigned TEST_CELL_DIM = 4;
   testReordering<TEST_DIM, TEST_CELL_DIM, false, float>(
-      num, N, M, &Problem<TEST_DIM, TEST_CELL_DIM, false,
-                          float>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<
-                            TEST_DIM,TEST_CELL_DIM, float>>,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false,
-               float>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<
-                 TEST_DIM, TEST_CELL_DIM, float>>);
+      num, N, M,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopCPUCellCentredOMP<
+          MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, float>>,
+      &Problem<TEST_DIM, TEST_CELL_DIM, false, float>::loopCPUCellCentredOMP<
+          MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, float>>);
   testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(
       num, N, M,
       &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP<
-      MINE_KERNEL(StepOMP)<TEST_DIM,TEST_CELL_DIM, float>>,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true,
-   float>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP)<TEST_DIM, TEST_CELL_DIM, float>>);
+          MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, float>>,
+      &Problem<TEST_DIM, TEST_CELL_DIM, true, float>::loopCPUCellCentredOMP<
+          MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, float>>);
 }
 
 /*void testPartitioning() {*/
