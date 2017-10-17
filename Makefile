@@ -3,7 +3,7 @@ LIB	:= -L$(CUDA_HOME)/lib64 -lcudart
 
 MAIN_SRC = graph.cu generate_grid.cu apply_reorder.cu
 AUX_SRC =
-HDR = $(wildcard *.hpp)
+HDR = $(wildcard *.hpp) $(wildcard kernels/*.hpp)
 TGT = $(patsubst %.cu,%,$(MAIN_SRC))
 
 NVCCFLAGS	:= -arch=sm_60 --use_fast_math
