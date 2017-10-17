@@ -11,12 +11,6 @@
 #include "helper_cuda.h"
 #include "kernels/mine.hpp"
 #include "problem.hpp"
-
-// Macros to easily change between mesh dims
-#define CONCAT(a, b) a##b
-#define CONCAT2(a, b) CONCAT(a, b)
-#define MINE_KERNEL(kname) mine::CONCAT2(kname, MESH_DIM_MACRO)
-
 #include "tests.hpp"
 
 /* copyKernels {{{1 */
@@ -330,22 +324,21 @@ void generateTimes(std::string in_file) {
             << std::endl;
   std::function<void(
       implementation_algorithm_t<PointDim, CellDim, SOA, DataType>, MY_SIZE)>
-      run =
-          [&in_file](
-              implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algo,
-              MY_SIZE num) {
-            std::ifstream f(in_file);
-            Problem<PointDim, CellDim, SOA, DataType> problem(f, 288);
-            if (in_file.find("metis") < in_file.size()) {
-              std::ifstream f_part(in_file + "_part");
-              problem.readPartition(f_part);
-              problem.reorderToPartition();
-              problem.renumberPoints();
-            }
-            std::cout << "--Problem created" << std::endl;
-            (problem.*algo)(num);
-            std::cout << "--Problem finished." << std::endl;
-          };
+      run = [&in_file](
+          implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algo,
+          MY_SIZE num) {
+        std::ifstream f(in_file);
+        Problem<PointDim, CellDim, SOA, DataType> problem(f, 288);
+        if (in_file.find("metis") < in_file.size()) {
+          std::ifstream f_part(in_file + "_part");
+          problem.readPartition(f_part);
+          problem.reorderToPartition();
+          problem.renumberPoints();
+        }
+        std::cout << "--Problem created" << std::endl;
+        (problem.*algo)(num);
+        std::cout << "--Problem finished." << std::endl;
+      };
   run(&Problem<PointDim, CellDim, SOA,
                DataType>::template loopCPUCellCentred<MINE_KERNEL(StepSeq)>,
       RunCPU ? num : 1);
@@ -375,8 +368,8 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
             << std::endl;
   std::function<void(
       implementation_algorithm_t<PointDim, CellDim, SOA, DataType>)>
-      run = [&](implementation_algorithm_t<PointDim, CellDim, SOA, DataType>
-                    algo) {
+      run = [&](
+          implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algo) {
         Problem<PointDim, CellDim, SOA, DataType> problem(
             std::move(StructuredProblem<PointDim, CellDim, SOA, DataType>(
                 N, M, block_dims)));
@@ -452,30 +445,6 @@ void generateTimesFromFile(int argc, const char **argv) {
   generateTimes<16, 16, true, false, double>(argv[1]);
 }
 
-void test() {
-  MY_SIZE num = 500;
-  MY_SIZE N = 100, M = 200;
-  constexpr unsigned TEST_DIM = 1;
-  constexpr unsigned TEST_CELL_DIM = 1;
-  using TEST_DATA_TYPE = float;
-  testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(
-      num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-              loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
-                                  TEST_CELL_DIM, TEST_DATA_TYPE>>,
-      &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-              loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
-                                 TEST_DATA_TYPE>>);
-  testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(
-      num, N, M,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-              loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
-                                  TEST_CELL_DIM, TEST_DATA_TYPE>>,
-      &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-              loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-                                    TEST_CELL_DIM, TEST_DATA_TYPE>>);
-}
-
 void testReordering() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
@@ -545,8 +514,8 @@ void generateTimesDifferentBlockDims() {
 
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
-  test();
-  testReordering();
+  testImplementations();
+  /*testReordering();*/
   /*testPartitioning();*/
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/

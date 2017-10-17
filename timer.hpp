@@ -1,8 +1,6 @@
 #ifndef TIMER_HPP_UAYKBI6U
 #define TIMER_HPP_UAYKBI6U
 
-#define USE_TIMER_MACRO
-
 #ifdef USE_TIMER_MACRO
 
 #define TIMER_START(t) Timer t
@@ -31,7 +29,7 @@
 #define TIMER_START(t)
 #define TIMER_PRINT(t, pre)
 #define TIMER_TOGGLE(t)
-#define PRINT_BANDWIDTH(t, pre, data)
+#define PRINT_BANDWIDTH(t, pre, data, tot_data)
 #define CUDA_TIMER_START(t)
 
 #endif

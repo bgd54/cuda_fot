@@ -21,11 +21,17 @@ METIS_FLAGS := -I/home/software/parmetis-gnu/include
 METIS_FLAGS += -lmetis -L/home/software/parmetis-gnu/lib/
 
 MESH_DIM ?= 2
+VERBOSE ?= no
+ifeq ($(VERBOSE), no)
+MACRO_VERBOSE =
+else
+MACRO_VERBOSE = -DVERBOSE_TEST -DUSE_TIMER_MACRO
+endif
 
 all: $(TGT)
 
 %: %.cu Makefile $(HDR) $(AUX_SRC)
-	nvcc $< $(AUX_SRC) -o $@ $(INC) $(METIS_FLAGS) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t" -DMESH_DIM_MACRO=$(MESH_DIM)
+	nvcc $< $(AUX_SRC) -o $@ $(INC) $(METIS_FLAGS) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t" -DMESH_DIM_MACRO=$(MESH_DIM) $(MACRO_VERBOSE)
 
 clean:
 		rm -f $(TGT)

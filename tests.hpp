@@ -6,6 +6,11 @@
 #include "structured_problem.hpp"
 #include <iostream>
 
+// Macros to easily change between mesh dims
+#define CONCAT(a, b) a##b
+#define CONCAT2(a, b) CONCAT(a, b)
+#define MINE_KERNEL(kname) mine::CONCAT2(kname, MESH_DIM_MACRO)
+
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 using implementation_algorithm_t =
@@ -29,10 +34,12 @@ void testTwoImplementations(
   std::cout << "========================================" << std::endl;
 
   std::vector<DataType> result1, result2;
-  std::vector<MY_SIZE> not_changed, not_changed2;
   DataType maxdiff = 0;
+#ifdef VERBOSE_TEST
+  std::vector<MY_SIZE> not_changed, not_changed2;
   MY_SIZE ind_max = 0, dim_max = 0;
   bool single_change_in_node = false;
+#endif // VERBOSE_TEST
   {
     srand(1);
     Problem<PointDim, CellDim, SOA, DataType> problem(
@@ -50,29 +57,40 @@ void testTwoImplementations(
     // run algorithm
     (problem.*algorithm1)(num);
 
+#ifdef VERBOSE_TEST
     DataType abs_max = 0;
+#endif // VERBOSE_TEST
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
+#ifdef VERBOSE_TEST
       MY_SIZE value_changed = PointDim;
+#endif // VERBOSE_TEST
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+#ifdef VERBOSE_TEST
         if (result1[ind] ==
             problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
+#endif // VERBOSE_TEST
         result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
+#ifdef VERBOSE_TEST
         if (abs_max <
             problem.point_weights.template operator[]<DataType>(ind)) {
           abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
+#endif // VERBOSE_TEST
       }
+#ifdef VERBOSE_TEST
       if (value_changed != PointDim && value_changed != 0) {
         single_change_in_node = true;
       }
+#endif // VERBOSE_TEST
     }
+#ifdef VERBOSE_TEST
     std::cout << "Nodes stayed: " << not_changed.size() << "/"
               << problem.mesh.numPoints() << std::endl;
     if (single_change_in_node) {
@@ -84,11 +102,14 @@ void testTwoImplementations(
     }
     std::cout << "Abs max: " << abs_max << " node: " << ind_max
               << " dim: " << dim_max << std::endl;
+#endif // VERBOSE_TEST
   }
 
+#ifdef VERBOSE_TEST
   MY_SIZE ind_diff = 0, dim_diff = 0;
   DataType max = 0;
   single_change_in_node = false;
+#endif // VERBOSE_TEST
   {
     srand(1);
     Problem<PointDim, CellDim, SOA, DataType> problem{
@@ -104,18 +125,24 @@ void testTwoImplementations(
     }
     // run algorithm
     (problem.*algorithm2)(num);
+#ifdef VERBOSE_TEST
     DataType abs_max = 0;
+#endif // VERBOSE_TEST
 
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
+#ifdef VERBOSE_TEST
       MY_SIZE value_changed = PointDim;
+#endif // VERBOSE_TEST
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+#ifdef VERBOSE_TEST
         if (result2[ind] ==
             problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed2.push_back(i);
           value_changed--;
         }
+#endif // VERBOSE_TEST
         DataType diff =
             std::abs(problem.point_weights.template operator[]<DataType>(ind) -
                      result1[ind]) /
@@ -123,21 +150,28 @@ void testTwoImplementations(
                      problem.point_weights.template operator[]<DataType>(ind));
         if (diff >= maxdiff) {
           maxdiff = diff;
+#ifdef VERBOSE_TEST
           ind_diff = i;
           dim_diff = d;
           max = problem.point_weights.template operator[]<DataType>(ind);
+#endif // VERBOSE_TEST
         }
+#ifdef VERBOSE_TEST
         if (abs_max <
             problem.point_weights.template operator[]<DataType>(ind)) {
           abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
+#endif // VERBOSE_TEST
       }
+#ifdef VERBOSE_TEST
       if (value_changed != PointDim && value_changed != 0) {
         single_change_in_node = true;
       }
+#endif // VERBOSE_TEST
     }
+#ifdef VERBOSE_TEST
     std::cout << "Nodes stayed: " << not_changed2.size() << "/"
               << problem.mesh.numPoints() << std::endl;
     if (single_change_in_node) {
@@ -154,6 +188,7 @@ void testTwoImplementations(
     MY_SIZE ind =
         index<SOA>(problem.mesh.numPoints(), ind_diff, PointDim, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
+#endif // VERBOSE_TEST
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
   }
@@ -196,8 +231,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     }
 
     // run algorithm
-    problem.template loopCPUCellCentredOMP<
-        MINE_KERNEL(StepSeq)<PointDim, CellDim, DataType>>(num);
+    problem.template loopCPUCellCentredOMP<MINE_KERNEL(StepSeq) < PointDim,
+                                           CellDim, DataType>> (num);
 
     // Partition after
     problem.partition(1.01);
@@ -460,6 +495,212 @@ void testReordering(
   }
 }
 
+#define TEST_TWO_IMPLEMENTATIONS(algorithm1, algorithm2, algorithm1_SOA,       \
+                                 algorithm2_SOA)                               \
+  {                                                                            \
+    /* {{{1 */                                                                 \
+    constexpr MY_SIZE num = 500;                                               \
+    constexpr MY_SIZE N = 100, M = 200;                                        \
+    /* float */                                                                \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 1;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 2;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 2;                                         \
+      constexpr unsigned TEST_CELL_DIM = 2;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 4;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 4;                                         \
+      constexpr unsigned TEST_CELL_DIM = 4;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 8;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 8;                                         \
+      constexpr unsigned TEST_CELL_DIM = 8;                                    \
+      using TEST_DATA_TYPE = float;                                            \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    /* double */                                                               \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 1;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 2;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 2;                                         \
+      constexpr unsigned TEST_CELL_DIM = 2;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 4;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 4;                                         \
+      constexpr unsigned TEST_CELL_DIM = 4;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 8;                                         \
+      constexpr unsigned TEST_CELL_DIM = 1;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+    {                                                                          \
+      constexpr unsigned TEST_DIM = 8;                                         \
+      constexpr unsigned TEST_CELL_DIM = 8;                                    \
+      using TEST_DATA_TYPE = double;                                           \
+      /* {{{2 */                                                               \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>(  \
+          num, N, M, algorithm1, algorithm2);                                  \
+      testTwoImplementations<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>(   \
+          num, N, M, algorithm1_SOA, algorithm2_SOA);                          \
+      /* 2}}} */                                                               \
+    }                                                                          \
+  } /* 1}}}*/
+
+void testImplementations() {
+  // auto glob_algo = &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+  //                     loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) <
+  //                     TEST_DIM,
+  //                                        TEST_CELL_DIM, TEST_DATA_TYPE>> ;
+  // auto hier_algo =
+  //    &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+  //        loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
+  //                            TEST_CELL_DIM, TEST_DATA_TYPE>> ;
+  // auto glob_algo_SOA =
+  //    &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+  //        loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
+  //                           TEST_CELL_DIM, TEST_DATA_TYPE>> ;
+  // auto hier_algo_SOA =
+  //    &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+  //        loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
+  //                            TEST_CELL_DIM, TEST_DATA_TYPE>> ;
+  std::cout << "========================================" << std::endl;
+  std::cout << "#         Sequential - OpenMP          #" << std::endl;
+  TEST_TWO_IMPLEMENTATIONS(
+      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+           loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
+                              TEST_DATA_TYPE>>),
+      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
+                                 TEST_DATA_TYPE>>),
+      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+           loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
+                              TEST_DATA_TYPE>>),
+      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
+                                 TEST_DATA_TYPE>>));
+
+  // std::cout << "========================================" << std::endl;
+  // std::cout << "#         OpenMP - GPU Global          #" << std::endl;
+  // testTwoImplementations(omp_algo, glob_algo, omp_algo_SOA, glob_algo_SOA);
+
+  // std::cout << "========================================" << std::endl;
+  // std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
+  // testTwoImplementations(omp_algo, hier_algo, omp_algo_SOA, hier_algo_SOA);
+}
+
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */
 
-// vim:set et sts=2 sw=2 ts=2:
+// vim:set et sts=2 sw=2 ts=2 fdm=marker:
