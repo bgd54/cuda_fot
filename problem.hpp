@@ -208,6 +208,35 @@ public:
       }
     }
   }
+
+  void readPointData(std::istream &is) {
+    if (!is) {
+      throw InvalidInputFile{"point data input", 0};
+    }
+    for (MY_SIZE i = 0; i < mesh.numPoints(); ++i) {
+      for (MY_SIZE j = 0; j < point_weights.getDim(); ++j) {
+        is >> point_weights.operator[]<DataType>(index<SOA>(
+                  point_weights.getSize(), i, point_weights.getDim(), j));
+      }
+      if (!is) {
+        throw InvalidInputFile{"point data input", i};
+      }
+    }
+  }
+
+  void readCellData(std::istream &is) {
+    if (!is) {
+      throw InvalidInputFile{"cell data input", 0};
+    }
+    for (MY_SIZE i = 0; i < mesh.numCells(); ++i) {
+      for (MY_SIZE j = 0; j < cell_weights.getDim(); ++j) {
+        is >> cell_weights.operator[]<DataType>(j *cell_weights.getSize() + i);
+      }
+      if (!is) {
+        throw InvalidInputFile{"cell data input", i};
+      }
+    }
+  }
 };
 
 #endif /* end of include guard: PROBLEM_HPP_CGW3IDMV */
