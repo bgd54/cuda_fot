@@ -3,11 +3,10 @@
 
 #include "problem.hpp"
 
-template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          typename DataType = float>
-class StructuredProblem : public Problem<PointDim, CellDim, SOA, DataType> {
+template <unsigned PointDim, unsigned CellDim, bool SOA, typename DataType>
+class StructuredProblem : public Problem<SOA, DataType> {
 public:
-  using Base = Problem<PointDim, CellDim, SOA, DataType>;
+  using Base = Problem<SOA, DataType>;
   StructuredProblem(
       MY_SIZE N, MY_SIZE M,
       std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
@@ -19,7 +18,7 @@ public:
       std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
       bool use_coordinates = false)
       : Base(Grid(grid_dim, Base::MESH_DIM, block_dims, use_coordinates),
-             calculateBlockSize(block_dims)) {
+             PointDim, CellDim, calculateBlockSize(block_dims)) {
     reset();
   }
 

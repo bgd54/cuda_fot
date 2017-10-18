@@ -11,22 +11,19 @@
 #define CONCAT2(a, b) CONCAT(a, b)
 #define MINE_KERNEL(kname) mine::CONCAT2(kname, MESH_DIM_MACRO)
 
-template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          typename DataType = float>
-using implementation_algorithm_t =
-    void (Problem<PointDim, CellDim, SOA, DataType>::*)(MY_SIZE);
+template <bool SOA = false, typename DataType = float>
+using implementation_algorithm_t = void (Problem<SOA, DataType>::*)(MY_SIZE);
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 void testTwoImplementations(
     MY_SIZE num, MY_SIZE N, MY_SIZE M,
-    implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm1,
-    implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm2) {
+    implementation_algorithm_t<SOA, DataType> algorithm1,
+    implementation_algorithm_t<SOA, DataType> algorithm2) {
   std::cout << "========================================" << std::endl;
   std::cout << "Two implementation test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-  std::cout << ", MeshDim: "
-            << Problem<PointDim, CellDim, SOA, DataType>::MESH_DIM;
+  std::cout << ", MeshDim: " << Problem<SOA, DataType>::MESH_DIM;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
@@ -42,7 +39,7 @@ void testTwoImplementations(
 #endif // VERBOSE_TEST
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem(
+    Problem<SOA, DataType> problem(
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M));
     result1.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -112,7 +109,7 @@ void testTwoImplementations(
 #endif // VERBOSE_TEST
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem{
+    Problem<SOA, DataType> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -200,8 +197,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
   std::cout << "========================================" << std::endl;
   std::cout << "Partition test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-  std::cout << ", MeshDim: "
-            << Problem<PointDim, CellDim, SOA, DataType>::MESH_DIM;
+  std::cout << ", MeshDim: " << Problem<SOA, DataType>::MESH_DIM;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
@@ -215,10 +211,10 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem{
+    Problem<SOA, DataType> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     // std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
-    // Problem<PointDim, CellDim, SOA, DataType> problem(f);
+    // Problem<SOA, DataType> problem(f);
     assert(problem.mesh.numPoints() == N * M);
     result1.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -283,8 +279,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
   {
     srand(1);
     // std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
-    // Problem<PointDim, CellDim, SOA, DataType> problem(f);
-    Problem<PointDim, CellDim, SOA, DataType> problem{
+    // Problem<SOA, DataType> problem(f);
+    Problem<SOA, DataType> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -361,15 +357,13 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
-void testReordering(
-    MY_SIZE num, MY_SIZE N, MY_SIZE M,
-    implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm1,
-    implementation_algorithm_t<PointDim, CellDim, SOA, DataType> algorithm2) {
+void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
+                    implementation_algorithm_t<SOA, DataType> algorithm1,
+                    implementation_algorithm_t<SOA, DataType> algorithm2) {
   std::cout << "========================================" << std::endl;
   std::cout << "Two implementation test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-  std::cout << ", MeshDim: "
-            << Problem<PointDim, CellDim, SOA, DataType>::MESH_DIM;
+  std::cout << ", MeshDim: " << Problem<SOA, DataType>::MESH_DIM;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
@@ -383,7 +377,7 @@ void testReordering(
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem{
+    Problem<SOA, DataType> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     // reorder first
     problem.reorder();
@@ -442,7 +436,7 @@ void testReordering(
   single_change_in_node = false;
   {
     srand(1);
-    Problem<PointDim, CellDim, SOA, DataType> problem{
+    Problem<SOA, DataType> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -660,57 +654,45 @@ void testReordering(
   } /* 1}}}*/
 
 void testImplementations() {
-  // std::cout << "========================================" << std::endl;
-  // std::cout << "#         Sequential - OpenMP          #" << std::endl;
-  // TEST_TWO_IMPLEMENTATIONS(
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-  //         loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
-  //                            TEST_DATA_TYPE>>),
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-  //         TEST_CELL_DIM,
-  //                               TEST_DATA_TYPE>>),
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-  //         loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
-  //                            TEST_DATA_TYPE>>),
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-  //         TEST_CELL_DIM,
-  //                               TEST_DATA_TYPE>>));
+  std::cout << "========================================" << std::endl;
+  std::cout << "#         Sequential - OpenMP          #" << std::endl;
+  TEST_TWO_IMPLEMENTATIONS(
+      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentred<
+           MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
+           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentred<
+           MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
+           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>));
 
-  // std::cout << "========================================" << std::endl;
-  // std::cout << "#         OpenMP - GPU Global          #" << std::endl;
-  // TEST_TWO_IMPLEMENTATIONS(
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-  //         TEST_CELL_DIM,
-  //                               TEST_DATA_TYPE>>),
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-  //         loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
-  //                            TEST_CELL_DIM, TEST_DATA_TYPE>>),
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-  //         TEST_CELL_DIM,
-  //                               TEST_DATA_TYPE>>),
-  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-  //         loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
-  //                            TEST_CELL_DIM, TEST_DATA_TYPE>>));
+  std::cout << "========================================" << std::endl;
+  std::cout << "#         OpenMP - GPU Global          #" << std::endl;
+  TEST_TWO_IMPLEMENTATIONS(
+      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
+           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false, TEST_DATA_TYPE>::loopGPUCellCentred<
+           MINE_KERNEL(StepGPUGlobal) < TEST_DIM, TEST_CELL_DIM,
+           TEST_DATA_TYPE>>),
+      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
+           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true, TEST_DATA_TYPE>::loopGPUCellCentred<
+           MINE_KERNEL(StepGPUGlobal) < TEST_DIM, TEST_CELL_DIM,
+           TEST_DATA_TYPE>>));
 
   std::cout << "========================================" << std::endl;
   std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
   TEST_TWO_IMPLEMENTATIONS(
-      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
-                                 TEST_DATA_TYPE>>),
-      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-           loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
-                               TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
-                                 TEST_DATA_TYPE>>),
-      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-           loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
-                               TEST_CELL_DIM, TEST_DATA_TYPE>>));
+      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
+           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false, TEST_DATA_TYPE>::loopGPUHierarchical<
+           MINE_KERNEL(StepGPUHierarchical) < TEST_DIM, TEST_CELL_DIM,
+           TEST_DATA_TYPE>>),
+      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
+           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true, TEST_DATA_TYPE>::loopGPUHierarchical<
+           MINE_KERNEL(StepGPUHierarchical) < TEST_DIM, TEST_CELL_DIM,
+           TEST_DATA_TYPE>>));
 }
 
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */

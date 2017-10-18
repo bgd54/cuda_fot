@@ -15,9 +15,7 @@
 
 constexpr MY_SIZE DEFAULT_BLOCK_SIZE = 128;
 
-template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          typename DataType = float>
-struct Problem {
+template <bool SOA = false, typename DataType = float> struct Problem {
   static constexpr unsigned MESH_DIM = MESH_DIM_MACRO;
 
   Mesh mesh;
@@ -28,17 +26,19 @@ struct Problem {
 
   /* ctor/dtor {{{1 */
 protected:
-  Problem(Mesh &&mesh_, MY_SIZE block_size_)
+  Problem(Mesh &&mesh_, MY_SIZE point_dim, MY_SIZE cell_dim,
+          MY_SIZE block_size_)
       : mesh(std::move(mesh_)),
-        cell_weights(data_t::create<DataType>(mesh.numCells(), CellDim)),
-        point_weights(data_t::create<DataType>(mesh.numPoints(), PointDim)),
+        cell_weights(data_t::create<DataType>(mesh.numCells(), cell_dim)),
+        point_weights(data_t::create<DataType>(mesh.numPoints(), point_dim)),
         block_size{block_size_} {}
 
 public:
-  Problem(std::istream &mesh_is, MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
+  Problem(std::istream &mesh_is, MY_SIZE point_dim, MY_SIZE cell_dim,
+          MY_SIZE _block_size = DEFAULT_BLOCK_SIZE)
       : mesh(mesh_is, MESH_DIM),
-        cell_weights(data_t::create<DataType>(mesh.numCells(), CellDim)),
-        point_weights(data_t::create<DataType>(mesh.numPoints(), PointDim)),
+        cell_weights(data_t::create<DataType>(mesh.numCells(), cell_dim)),
+        point_weights(data_t::create<DataType>(mesh.numPoints(), point_dim)),
         block_size{_block_size} {}
 
   ~Problem() {}
@@ -79,15 +79,16 @@ public:
                   point_weights.begin<DataType>());
       TIMER_TOGGLE(t);
     }
-    PRINT_BANDWIDTH(t, "loopCPUCellCentred",
-                    (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
-                                         CellDim * mesh.numCells()) +
-                     1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-                        num,
-                    (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
-                                         CellDim * mesh.numCells()) +
-                     1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-                        num);
+    PRINT_BANDWIDTH(
+        t, "loopCPUCellCentred",
+        (sizeof(DataType) * (2.0 * point_weights.getDim() * mesh.numPoints() +
+                             cell_weights.getDim() * mesh.numCells()) +
+         1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
+            num,
+        (sizeof(DataType) * (2.0 * point_weights.getDim() * mesh.numPoints() +
+                             cell_weights.getDim() * mesh.numCells()) +
+         1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
+            num);
     free(temp);
   } /*}}}*/
 
@@ -105,7 +106,8 @@ public:
   } /*}}}*/
 
   template <class UserFunc> void loopCPUCellCentredOMP(MY_SIZE num) { /*{{{*/
-    data_t temp(data_t::create<DataType>(point_weights.getSize(), PointDim));
+    data_t temp(data_t::create<DataType>(point_weights.getSize(),
+                                         point_weights.getDim()));
     std::vector<std::vector<MY_SIZE>> partition = mesh.colourCells();
     MY_SIZE num_of_colours = partition.size();
     TIMER_START(t);
@@ -130,15 +132,16 @@ public:
       }
       TIMER_TOGGLE(t);
     }
-    PRINT_BANDWIDTH(t, "loopCPUCellCentredOMP",
-                    (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
-                                         CellDim * mesh.numCells()) +
-                     1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-                        num,
-                    (sizeof(DataType) * (2.0 * PointDim * mesh.numPoints() +
-                                         CellDim * mesh.numCells()) +
-                     1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-                        num);
+    PRINT_BANDWIDTH(
+        t, "loopCPUCellCentredOMP",
+        (sizeof(DataType) * (2.0 * point_weights.getDim() * mesh.numPoints() +
+                             cell_weights.getDim() * mesh.numCells()) +
+         1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
+            num,
+        (sizeof(DataType) * (2.0 * point_weights.getDim() * mesh.numPoints() +
+                             cell_weights.getDim() * mesh.numCells()) +
+         1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
+            num);
   } /*}}}*/
 
   void reorder() {
