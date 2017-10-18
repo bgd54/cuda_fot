@@ -660,45 +660,57 @@ void testReordering(
   } /* 1}}}*/
 
 void testImplementations() {
-  // auto glob_algo = &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-  //                     loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) <
-  //                     TEST_DIM,
-  //                                        TEST_CELL_DIM, TEST_DATA_TYPE>> ;
-  // auto hier_algo =
-  //    &Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-  //        loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
-  //                            TEST_CELL_DIM, TEST_DATA_TYPE>> ;
-  // auto glob_algo_SOA =
-  //    &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-  //        loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
-  //                           TEST_CELL_DIM, TEST_DATA_TYPE>> ;
-  // auto hier_algo_SOA =
-  //    &Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-  //        loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
-  //                            TEST_CELL_DIM, TEST_DATA_TYPE>> ;
-  std::cout << "========================================" << std::endl;
-  std::cout << "#         Sequential - OpenMP          #" << std::endl;
-  TEST_TWO_IMPLEMENTATIONS(
-      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-           loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
-                              TEST_DATA_TYPE>>),
-      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
-           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
-                                 TEST_DATA_TYPE>>),
-      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-           loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
-                              TEST_DATA_TYPE>>),
-      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
-           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
-                                 TEST_DATA_TYPE>>));
+  // std::cout << "========================================" << std::endl;
+  // std::cout << "#         Sequential - OpenMP          #" << std::endl;
+  // TEST_TWO_IMPLEMENTATIONS(
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+  //         loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
+  //                            TEST_DATA_TYPE>>),
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+  //         TEST_CELL_DIM,
+  //                               TEST_DATA_TYPE>>),
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+  //         loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM,
+  //                            TEST_DATA_TYPE>>),
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+  //         TEST_CELL_DIM,
+  //                               TEST_DATA_TYPE>>));
 
   // std::cout << "========================================" << std::endl;
   // std::cout << "#         OpenMP - GPU Global          #" << std::endl;
-  // testTwoImplementations(omp_algo, glob_algo, omp_algo_SOA, glob_algo_SOA);
+  // TEST_TWO_IMPLEMENTATIONS(
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+  //         TEST_CELL_DIM,
+  //                               TEST_DATA_TYPE>>),
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+  //         loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
+  //                            TEST_CELL_DIM, TEST_DATA_TYPE>>),
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+  //         loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+  //         TEST_CELL_DIM,
+  //                               TEST_DATA_TYPE>>),
+  //    (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+  //         loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
+  //                            TEST_CELL_DIM, TEST_DATA_TYPE>>));
 
-  // std::cout << "========================================" << std::endl;
-  // std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
-  // testTwoImplementations(omp_algo, hier_algo, omp_algo_SOA, hier_algo_SOA);
+  std::cout << "========================================" << std::endl;
+  std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
+  TEST_TWO_IMPLEMENTATIONS(
+      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
+                                 TEST_DATA_TYPE>>),
+      (&Problem<TEST_DIM, TEST_CELL_DIM, false, TEST_DATA_TYPE>::
+           loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
+                               TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+           loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM,
+                                 TEST_DATA_TYPE>>),
+      (&Problem<TEST_DIM, TEST_CELL_DIM, true, TEST_DATA_TYPE>::
+           loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) < TEST_DIM,
+                               TEST_CELL_DIM, TEST_DATA_TYPE>>));
 }
 
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */
