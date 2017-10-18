@@ -15,12 +15,10 @@
 
 #include "problem.hpp"
 
-template <unsigned MeshDim, unsigned PointDim = 1, unsigned CellDim = 1,
-          bool SOA = false, typename DataType = float>
+template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
+          typename DataType = float>
 struct HierarchicalColourMemory {
   using colourset_t = Mesh::colourset_t;
-  static_assert(Problem<PointDim, CellDim, SOA, DataType>::MESH_DIM == MeshDim,
-                "Mesh dimension should be the same as in Problem");
   struct MemoryOfOneColour {
     std::vector<DataType>
         cell_weights; // restructured so it can be indexed with tid
@@ -61,7 +59,6 @@ struct HierarchicalColourMemory {
      */
     const Mesh &mesh = problem.mesh;
     assert(mesh.cell_to_node.getTypeSize() == sizeof(MY_SIZE));
-    assert(mesh.cell_to_node.getDim() == MeshDim);
     const MY_SIZE block_size = problem.block_size;
     std::vector<colourset_t> point_colours(mesh.numPoints(), 0);
     colourset_t used_colours;
@@ -143,7 +140,7 @@ struct HierarchicalColourMemory {
           colours[colour].block_offsets.back() + block_to - block_from);
     }
     copyCellWeights(problem, block_colours, tmp_cell_weights);
-    cellListSOA();
+    cellListSOA(problem.mesh.cell_to_node.getDim());
   }
 
 private:
@@ -154,9 +151,9 @@ private:
     colourset_t result;
     for (MY_SIZE i = from; i < to; ++i) {
       MY_SIZE cell_ind = partition_to_cell[i].second;
-      for (MY_SIZE j = 0; j < MeshDim; ++j) {
+      for (MY_SIZE j = 0; j < cell_to_node.getDim(); ++j) {
         result |= point_colours[cell_to_node.operator[]<MY_SIZE>(
-            MeshDim *cell_ind + j)];
+            cell_to_node.getDim() * cell_ind + j)];
       }
     }
     return result;
@@ -176,6 +173,7 @@ private:
               std::vector<DataType> &tmp_cell_weights) {
     const Mesh &mesh = problem.mesh;
     const data_t &cell_to_node = mesh.cell_to_node;
+    const MY_SIZE mesh_dim = cell_to_node.getDim();
     colourset_t colourset(1ull << colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
     const MY_SIZE colour_from = colour.cell_colours.size();
@@ -183,16 +181,16 @@ private:
         points_to_cells; // points -> vector of (cell_ind, point_offset)
     for (MY_SIZE i = from; i < to; ++i) {
       MY_SIZE cell_ind = partition_to_cell[i].second;
-      for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-        point_colours[cell_to_node.operator[]<MY_SIZE>(MeshDim *cell_ind +
+      for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
+        point_colours[cell_to_node.operator[]<MY_SIZE>(mesh_dim *cell_ind +
                                                        offset)] |= colourset;
-        points_to_cells[cell_to_node.operator[]<MY_SIZE>(MeshDim *cell_ind +
+        points_to_cells[cell_to_node.operator[]<MY_SIZE>(mesh_dim *cell_ind +
                                                          offset)]
             .emplace_back(i - from, offset);
       }
       block_colours[i] = colour_ind;
     }
-    std::vector<MY_SIZE> c_cell_list(MeshDim * (to - from));
+    std::vector<MY_SIZE> c_cell_list(mesh_dim * (to - from));
     std::vector<MY_SIZE> points_to_be_cached;
     for (const auto &t : points_to_cells) {
       MY_SIZE point_ind = t.first;
@@ -200,18 +198,19 @@ private:
       for (const std::pair<MY_SIZE, MY_SIZE> c : cell_inds) {
         MY_SIZE ind = c.first;
         MY_SIZE offset = c.second;
-        c_cell_list[MeshDim * ind + offset] = points_to_be_cached.size();
+        c_cell_list[mesh_dim * ind + offset] = points_to_be_cached.size();
       }
       points_to_be_cached.push_back(point_ind);
     }
     colour.cell_list.insert(colour.cell_list.end(), c_cell_list.begin(),
                             c_cell_list.end());
-    colourCells(to - from, colour, c_cell_list, points_to_be_cached.size());
+    colourCells(to - from, colour, c_cell_list, points_to_be_cached.size(),
+                mesh_dim);
     const MY_SIZE colour_to = colour.cell_colours.size();
     sortCellsByColours(colour_from, colour_to, from, to, colour_ind,
-                       tmp_cell_weights);
+                       tmp_cell_weights, mesh_dim);
     // permuteCachedPoints(points_to_be_cached, colour_from,
-    //                                      colour_to, colour_ind);
+    //                                      colour_to, colour_ind, mesh_dim);
     colour.points_to_be_cached.insert(colour.points_to_be_cached.end(),
                                       points_to_be_cached.begin(),
                                       points_to_be_cached.end());
@@ -220,7 +219,8 @@ private:
   }
 
   void colourCells(MY_SIZE block_size, MemoryOfOneColour &block,
-                   const std::vector<MY_SIZE> &cell_list, MY_SIZE num_point) {
+                   const std::vector<MY_SIZE> &cell_list, MY_SIZE num_point,
+                   MY_SIZE mesh_dim) {
     static std::vector<colourset_t> point_colours;
     point_colours.resize(num_point);
     memset(point_colours.data(), 0, sizeof(colourset_t) * point_colours.size());
@@ -229,8 +229,8 @@ private:
     colourset_t used_colours;
     for (MY_SIZE i = 0; i < block_size; ++i) {
       colourset_t occupied_colours;
-      for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-        occupied_colours |= point_colours[cell_list[MeshDim * i + offset]];
+      for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
+        occupied_colours |= point_colours[cell_list[mesh_dim * i + offset]];
       }
       colourset_t available_colours = ~occupied_colours & used_colours;
       if (available_colours.none()) {
@@ -244,8 +244,8 @@ private:
       block.cell_colours.push_back(colour);
       ++set_sizes[colour];
       colourset_t colourset(1ull << colour);
-      for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
-        point_colours[cell_list[MeshDim * i + offset]] |= colourset;
+      for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
+        point_colours[cell_list[mesh_dim * i + offset]] |= colourset;
       }
     }
     block.num_cell_colours.push_back(num_cell_colours);
@@ -253,32 +253,32 @@ private:
 
   void sortCellsByColours(MY_SIZE colour_from, MY_SIZE colour_to, MY_SIZE from,
                           MY_SIZE to, MY_SIZE block_colour,
-                          std::vector<DataType> &tmp_cell_weights) {
-    std::vector<std::tuple<std::uint8_t, std::array<MY_SIZE, MeshDim>, MY_SIZE>>
-        tmp(colour_to - colour_from);
+                          std::vector<DataType> &tmp_cell_weights,
+                          MY_SIZE mesh_dim) {
+    std::vector<std::tuple<std::uint8_t, std::vector<MY_SIZE>, MY_SIZE>> tmp(
+        colour_to - colour_from);
     MemoryOfOneColour &memory = colours[block_colour];
     for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
       const MY_SIZE j = i + colour_from;
       tmp[i] = std::make_tuple(memory.cell_colours[j],
-                               std::array<MY_SIZE, MeshDim>(), i);
-      std::copy(memory.cell_list.begin() + MeshDim * j,
-                memory.cell_list.begin() + MeshDim * (j + 1),
+                               std::vector<MY_SIZE>(mesh_dim), i);
+      std::copy(memory.cell_list.begin() + mesh_dim * j,
+                memory.cell_list.begin() + mesh_dim * (j + 1),
                 std::get<1>(tmp[i]).begin());
     }
     std::stable_sort(
         tmp.begin(), tmp.end(),
-        [](const std::tuple<std::uint8_t, std::array<MY_SIZE, MeshDim>, MY_SIZE>
-               &a,
-           const std::tuple<std::uint8_t, std::array<MY_SIZE, MeshDim>, MY_SIZE>
-               &b) { return std::get<0>(a) < std::get<0>(b); });
+        [](const std::tuple<std::uint8_t, std::vector<MY_SIZE>, MY_SIZE> &a,
+           const std::tuple<std::uint8_t, std::vector<MY_SIZE>, MY_SIZE> &b) {
+          return std::get<0>(a) < std::get<0>(b);
+        });
     std::vector<MY_SIZE> inverse_permutation(colour_to - colour_from);
     for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
       const MY_SIZE j = i + colour_from;
-      std::array<MY_SIZE, MeshDim> cell_points;
-      std::tie(memory.cell_colours[j], cell_points, inverse_permutation[i]) =
-          tmp[i];
-      std::copy(cell_points.begin(), cell_points.end(),
-                memory.cell_list.begin() + MeshDim * j);
+      memory.cell_colours[j] = std::get<0>(tmp[i]);
+      inverse_permutation[i] = std::get<2>(tmp[i]);
+      std::copy(std::get<1>(tmp[i]).begin(), std::get<1>(tmp[i]).end(),
+                memory.cell_list.begin() + mesh_dim * j);
     }
     std::vector<typename std::vector<DataType>::iterator> begins(CellDim);
     for (MY_SIZE i = 0; i < CellDim; ++i) {
@@ -294,22 +294,22 @@ private:
 
   void permuteCachedPoints(std::vector<MY_SIZE> &points_to_be_cached,
                            MY_SIZE colour_from, MY_SIZE colour_to,
-                           MY_SIZE colour_ind) {
+                           MY_SIZE colour_ind, MY_SIZE mesh_dim) {
     std::set<MY_SIZE> seen_points;
     std::vector<MY_SIZE> &cell_list = colours[colour_ind].cell_list;
     std::vector<MY_SIZE> new_points_to_be_cached;
     new_points_to_be_cached.reserve(points_to_be_cached.size());
     std::vector<MY_SIZE> permutation(points_to_be_cached.size());
-    for (MY_SIZE offset = 0; offset < MeshDim; ++offset) {
+    for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
       for (MY_SIZE i = 0; i < colour_to - colour_from; ++i) {
-        MY_SIZE point_ind = cell_list[MeshDim * (colour_from + i) + offset];
+        MY_SIZE point_ind = cell_list[mesh_dim * (colour_from + i) + offset];
         assert(point_ind < permutation.size());
         auto r = seen_points.insert(point_ind);
         if (r.second) {
           permutation[point_ind] = new_points_to_be_cached.size();
           new_points_to_be_cached.push_back(points_to_be_cached[point_ind]);
         }
-        cell_list[MeshDim * (colour_from + i) + offset] =
+        cell_list[mesh_dim * (colour_from + i) + offset] =
             permutation[point_ind];
       }
     }
@@ -318,9 +318,9 @@ private:
               points_to_be_cached.begin());
   }
 
-  void cellListSOA() {
+  void cellListSOA(MY_SIZE mesh_dim) {
     for (MemoryOfOneColour &memory : colours) {
-      AOStoSOA(memory.cell_list, MeshDim);
+      AOStoSOA(memory.cell_list, mesh_dim);
     }
   }
 
@@ -328,7 +328,8 @@ private:
                        const std::vector<std::uint8_t> &block_colours,
                        const std::vector<DataType> &tmp_cell_weights) {
     for (MY_SIZE i = 0; i < colours.size(); ++i) {
-      colours[i].cell_weights.reserve(colours[i].cell_list.size() / MeshDim);
+      colours[i].cell_weights.reserve(colours[i].cell_list.size() /
+                                      problem.mesh.cell_to_node.getDim());
     }
     for (MY_SIZE d = 0; d < CellDim; ++d) {
       for (MY_SIZE i = 0; i < problem.mesh.numCells(); ++i) {

@@ -171,7 +171,7 @@ template <class UserFunc>
 void Problem<PointDim, CellDim, SOA, DataType>::loopGPUHierarchical(
     MY_SIZE num) {
   TIMER_START(t_colouring);
-  HierarchicalColourMemory<MESH_DIM, PointDim, CellDim, SOA, DataType> memory(
+  HierarchicalColourMemory<PointDim, CellDim, SOA, DataType> memory(
       *this, partition_vector);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
@@ -187,7 +187,7 @@ void Problem<PointDim, CellDim, SOA, DataType>::loopGPUHierarchical(
   MY_SIZE total_shared_size = 0;
   size_t total_num_cache_lines = 0;
   for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {
-    const typename HierarchicalColourMemory<MESH_DIM, PointDim, CellDim, SOA,
+    const typename HierarchicalColourMemory<PointDim, CellDim, SOA,
                                             DataType>::MemoryOfOneColour
         &memory_of_one_colour = memory.colours[i];
     MY_SIZE num_threads = memory_of_one_colour.cell_list.size() / MESH_DIM;
