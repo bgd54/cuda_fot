@@ -19,18 +19,12 @@ __global__ void copyKernel(const float *__restrict__ a, float *__restrict__ b,
   int tid = blockDim.x * blockIdx.x + threadIdx.x;
   const float4 *__restrict__ a_ = reinterpret_cast<const float4 *>(a);
   float4 *__restrict__ b_ = reinterpret_cast<float4 *>(b);
-  if (tid * 4 < size) {
+  if ((tid + 1) * 4 <= size) {
     b_[tid] = a_[tid];
-  }
-}
-
-__global__ void copyKernel(const double *__restrict__ a, double *__restrict__ b,
-                           MY_SIZE size) {
-  int tid = blockDim.x * blockIdx.x + threadIdx.x;
-  const double2 *__restrict__ a_ = reinterpret_cast<const double2 *>(a);
-  double2 *__restrict__ b_ = reinterpret_cast<double2 *>(b);
-  if (tid * 2 < size) {
-    b_[tid] = a_[tid];
+  } else {
+    for (MY_SIZE i = 0; i + tid * 4 < size; ++i) {
+      b[4 * tid + i] = a[4 * tid + i];
+    }
   }
 }
 /* 1}}} */
