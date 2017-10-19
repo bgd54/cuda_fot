@@ -267,6 +267,32 @@ void reorderDataInverseVectorSOA(
   }
 }
 
+template <typename UnsignedType>
+void reorderDataInverseSOA(data_t &point_data, MY_SIZE from, MY_SIZE to,
+                           const std::vector<UnsignedType> &permutation) {
+  const MY_SIZE data_dim = point_data.getDim();
+  assert(data_dim >= 1);
+  const MY_SIZE size = to - from;
+  const unsigned type_size = point_data.getTypeSize();
+  assert(permutation.size() == size);
+  data_t old_data(size, data_dim, type_size);
+  for (MY_SIZE d = 0; d < data_dim; ++d) {
+    std::copy_n(point_data.begin() +
+                    type_size * (d * point_data.getSize() + from),
+                type_size * size, old_data.begin() + type_size * d * size);
+  }
+  for (MY_SIZE i = 0; i < size; ++i) {
+    for (MY_SIZE d = 0; d < data_dim; ++d) {
+      MY_SIZE old_ind = index<true>(size, permutation[i], data_dim, d);
+      MY_SIZE new_ind =
+          index<true>(point_data.getSize(), from + i, data_dim, d);
+      point_data[new_ind] = old_data[old_ind];
+      std::copy_n(old_data.begin() + old_ind * type_size, type_size,
+                  point_data.begin() + new_ind * type_size);
+    }
+  }
+}
+
 template <class Iterator>
 inline void AOStoSOA(Iterator begin, Iterator end, unsigned Dim) {
   MY_SIZE size = std::distance(begin, end);

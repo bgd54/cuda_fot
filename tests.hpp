@@ -11,19 +11,18 @@
 #define CONCAT2(a, b) CONCAT(a, b)
 #define MINE_KERNEL(kname) mine::CONCAT2(kname, MESH_DIM_MACRO)
 
-template <bool SOA = false, typename DataType = float>
-using implementation_algorithm_t = void (Problem<SOA, DataType>::*)(MY_SIZE);
+template <bool SOA = false>
+using implementation_algorithm_t = void (Problem<SOA>::*)(MY_SIZE);
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
-void testTwoImplementations(
-    MY_SIZE num, MY_SIZE N, MY_SIZE M,
-    implementation_algorithm_t<SOA, DataType> algorithm1,
-    implementation_algorithm_t<SOA, DataType> algorithm2) {
+void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
+                            implementation_algorithm_t<SOA> algorithm1,
+                            implementation_algorithm_t<SOA> algorithm2) {
   std::cout << "========================================" << std::endl;
   std::cout << "Two implementation test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-  std::cout << ", MeshDim: " << Problem<SOA, DataType>::MESH_DIM;
+  std::cout << ", MeshDim: " << Problem<SOA>::MESH_DIM;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
@@ -39,7 +38,7 @@ void testTwoImplementations(
 #endif // VERBOSE_TEST
   {
     srand(1);
-    Problem<SOA, DataType> problem(
+    Problem<SOA> problem(
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M));
     result1.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -109,7 +108,7 @@ void testTwoImplementations(
 #endif // VERBOSE_TEST
   {
     srand(1);
-    Problem<SOA, DataType> problem{
+    Problem<SOA> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -197,7 +196,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
   std::cout << "========================================" << std::endl;
   std::cout << "Partition test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-  std::cout << ", MeshDim: " << Problem<SOA, DataType>::MESH_DIM;
+  std::cout << ", MeshDim: " << Problem<SOA>::MESH_DIM;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
@@ -205,16 +204,16 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
   std::cout << "========================================" << std::endl;
 
   std::vector<DataType> result1, result2;
-  std::vector<MY_SIZE> not_changed, not_changed2;
   DataType maxdiff = 0;
+#ifdef VERBOSE_TEST
+  std::vector<MY_SIZE> not_changed, not_changed2;
   MY_SIZE ind_max = 0, dim_max = 0;
   bool single_change_in_node = false;
+#endif // VERBOSE_TEST
   {
     srand(1);
-    Problem<SOA, DataType> problem{
+    Problem<SOA> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
-    // std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
-    // Problem<SOA, DataType> problem(f);
     assert(problem.mesh.numPoints() == N * M);
     result1.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -227,39 +226,48 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     }
 
     // run algorithm
-    problem.template loopCPUCellCentredOMP<MINE_KERNEL(StepSeq) < PointDim,
+    problem.template loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < PointDim,
                                            CellDim, DataType>> (num);
 
     // Partition after
     problem.partition(1.01);
-    // std::ifstream f_part("/data/mgiles/asulyok/grid_4_100x200.metis_part");
-    // problem.readPartition(f_part);
     problem.reorderToPartition();
     problem.renumberPoints();
 
+#ifdef VERBOSE_TEST
     DataType abs_max = 0;
+#endif // VERBOSE_TEST
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
+#ifdef VERBOSE_TEST
       MY_SIZE value_changed = PointDim;
+#endif // VERBOSE_TEST
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+#ifdef VERBOSE_TEST
         if (result1[ind] ==
             problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
+#endif // VERBOSE_TEST
         result1[ind] = problem.point_weights.template operator[]<DataType>(ind);
+#ifdef VERBOSE_TEST
         if (abs_max <
             problem.point_weights.template operator[]<DataType>(ind)) {
           abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
+#endif // VERBOSE_TEST
       }
+#ifdef VERBOSE_TEST
       if (value_changed != PointDim && value_changed != 0) {
         single_change_in_node = true;
       }
+#endif // VERBOSE_TEST
     }
+#ifdef VERBOSE_TEST
     std::cout << "Nodes stayed: " << not_changed.size() << "/"
               << problem.mesh.numPoints() << std::endl;
     if (single_change_in_node) {
@@ -271,16 +279,17 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     }
     std::cout << "Abs max: " << abs_max << " node: " << ind_max
               << " dim: " << dim_max << std::endl;
+#endif // VERBOSE_TEST
   }
 
+#ifdef VERBOSE_TEST
   MY_SIZE ind_diff = 0, dim_diff = 0;
   DataType max = 0;
   single_change_in_node = false;
+#endif // VERBOSE_TEST
   {
     srand(1);
-    // std::ifstream f("/data/mgiles/asulyok/grid_4_100x200.metis");
-    // Problem<SOA, DataType> problem(f);
-    Problem<SOA, DataType> problem{
+    Problem<SOA> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -293,25 +302,31 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     }
     // Create partitioning
     problem.partition(1.01);
-    // std::ifstream f_part("/data/mgiles/asulyok/grid_4_100x200.metis_part");
-    // problem.readPartition(f_part);
     problem.reorderToPartition();
     problem.renumberPoints();
 
     // run algorithm
-    problem.loopGPUHierarchical(num);
+    problem.template loopGPUHierarchical<
+        MINE_KERNEL(StepGPUHierarchical) < PointDim, CellDim, DataType>> (num);
+
+#ifdef VERBOSE_TEST
     DataType abs_max = 0;
+#endif // VERBOSE_TEST
 
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(); ++i) {
+#ifdef VERBOSE_TEST
       MY_SIZE value_changed = PointDim;
+#endif // VERBOSE_TEST
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(), i, PointDim, d);
+#ifdef VERBOSE_TEST
         if (result2[ind] ==
             problem.point_weights.template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed2.push_back(i);
           value_changed--;
         }
+#endif // VERBOSE_TEST
         DataType diff =
             std::abs(problem.point_weights.template operator[]<DataType>(ind) -
                      result1[ind]) /
@@ -319,21 +334,28 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
                      problem.point_weights.template operator[]<DataType>(ind));
         if (diff >= maxdiff) {
           maxdiff = diff;
+#ifdef VERBOSE_TEST
           ind_diff = i;
           dim_diff = d;
           max = problem.point_weights.template operator[]<DataType>(ind);
+#endif // VERBOSE_TEST
         }
+#ifdef VERBOSE_TEST
         if (abs_max <
             problem.point_weights.template operator[]<DataType>(ind)) {
           abs_max = problem.point_weights.template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
+#endif // VERBOSE_TEST
       }
+#ifdef VERBOSE_TEST
       if (value_changed != PointDim && value_changed != 0) {
         single_change_in_node = true;
       }
+#endif // VERBOSE_TEST
     }
+#ifdef VERBOSE_TEST
     std::cout << "Nodes stayed: " << not_changed2.size() << "/"
               << problem.mesh.numPoints() << std::endl;
     if (single_change_in_node) {
@@ -350,6 +372,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     MY_SIZE ind =
         index<SOA>(problem.mesh.numPoints(), ind_diff, PointDim, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
+#endif // VERBOSE_TEST
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
   }
@@ -358,12 +381,12 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
-                    implementation_algorithm_t<SOA, DataType> algorithm1,
-                    implementation_algorithm_t<SOA, DataType> algorithm2) {
+                    implementation_algorithm_t<SOA> algorithm1,
+                    implementation_algorithm_t<SOA> algorithm2) {
   std::cout << "========================================" << std::endl;
   std::cout << "Two implementation test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-  std::cout << ", MeshDim: " << Problem<SOA, DataType>::MESH_DIM;
+  std::cout << ", MeshDim: " << Problem<SOA>::MESH_DIM;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
   std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
   std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
@@ -377,7 +400,7 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   bool single_change_in_node = false;
   {
     srand(1);
-    Problem<SOA, DataType> problem{
+    Problem<SOA> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     // reorder first
     problem.reorder();
@@ -436,7 +459,7 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   single_change_in_node = false;
   {
     srand(1);
-    Problem<SOA, DataType> problem{
+    Problem<SOA> problem{
         StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints() * PointDim);
     // save data before test
@@ -657,42 +680,41 @@ void testImplementations() {
   std::cout << "========================================" << std::endl;
   std::cout << "#         Sequential - OpenMP          #" << std::endl;
   TEST_TWO_IMPLEMENTATIONS(
-      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentred<
-           MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
-           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentred<
-           MINE_KERNEL(StepSeq) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
-           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>));
+      (&Problem<false>::loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM,
+                                           TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                              TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopCPUCellCentred<MINE_KERNEL(StepSeq) < TEST_DIM,
+                                          TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                             TEST_CELL_DIM, TEST_DATA_TYPE>>));
 
   std::cout << "========================================" << std::endl;
   std::cout << "#         OpenMP - GPU Global          #" << std::endl;
   TEST_TWO_IMPLEMENTATIONS(
-      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
-           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<false, TEST_DATA_TYPE>::loopGPUCellCentred<
-           MINE_KERNEL(StepGPUGlobal) < TEST_DIM, TEST_CELL_DIM,
-           TEST_DATA_TYPE>>),
-      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
-           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<true, TEST_DATA_TYPE>::loopGPUCellCentred<
-           MINE_KERNEL(StepGPUGlobal) < TEST_DIM, TEST_CELL_DIM,
-           TEST_DATA_TYPE>>));
+      (&Problem<false>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                              TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false>::loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) <
+                                               TEST_DIM,
+                                           TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                             TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopGPUCellCentred<MINE_KERNEL(StepGPUGlobal) < TEST_DIM,
+                                          TEST_CELL_DIM, TEST_DATA_TYPE>>));
 
   std::cout << "========================================" << std::endl;
   std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
   TEST_TWO_IMPLEMENTATIONS(
-      (&Problem<false, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
-           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<false, TEST_DATA_TYPE>::loopGPUHierarchical<
-           MINE_KERNEL(StepGPUHierarchical) < TEST_DIM, TEST_CELL_DIM,
-           TEST_DATA_TYPE>>),
-      (&Problem<true, TEST_DATA_TYPE>::loopCPUCellCentredOMP<
-           MINE_KERNEL(StepOMP) < TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
-      (&Problem<true, TEST_DATA_TYPE>::loopGPUHierarchical<
-           MINE_KERNEL(StepGPUHierarchical) < TEST_DIM, TEST_CELL_DIM,
-           TEST_DATA_TYPE>>));
+      (&Problem<false>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                              TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false>::loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) <
+                                                TEST_DIM,
+                                            TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
+                                             TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopGPUHierarchical<MINE_KERNEL(StepGPUHierarchical) <
+                                               TEST_DIM,
+                                           TEST_CELL_DIM, TEST_DATA_TYPE>>));
 }
 
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */

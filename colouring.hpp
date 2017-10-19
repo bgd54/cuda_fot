@@ -15,14 +15,12 @@
 
 #include "problem.hpp"
 
-template <bool SOA = false, typename DataType = float>
-struct HierarchicalColourMemory {
+template <bool SOA = false> struct HierarchicalColourMemory {
   using colourset_t = Mesh::colourset_t;
   struct MemoryOfOneColour {
-    std::vector<DataType>
+    std::vector<char>
         cell_weights; // restructured so it can be indexed with tid
-                      // it's a vector, because it's not necessarily block_size
-                      // long; also I don't want mem. management just now
+    // it's a vector, because it's not necessarily block_size long
     std::vector<MY_SIZE> points_to_be_cached;
     std::vector<MY_SIZE> points_to_be_cached_offsets = {0};
     // every thread caches the one with index
@@ -38,7 +36,7 @@ struct HierarchicalColourMemory {
   };
   std::vector<MemoryOfOneColour> colours;
 
-  HierarchicalColourMemory(const Problem<SOA, DataType> &problem,
+  HierarchicalColourMemory(const Problem<SOA> &problem,
                            const std::vector<MY_SIZE> &partition_vector = {}) {
     /* Algorithm:
      *   - loop through `block_size` blocks
@@ -62,9 +60,11 @@ struct HierarchicalColourMemory {
     colourset_t used_colours;
     std::vector<MY_SIZE> set_sizes;
     std::vector<std::uint8_t> block_colours(mesh.numCells());
-    std::vector<DataType> tmp_cell_weights(
-        problem.cell_weights.template cbegin<DataType>(),
-        problem.cell_weights.template cend<DataType>());
+    data_t tmp_cell_weights(problem.cell_weights.getSize(),
+                            problem.cell_weights.getDim(),
+                            problem.cell_weights.getTypeSize());
+    std::copy(problem.cell_weights.cbegin(), problem.cell_weights.cend(),
+              tmp_cell_weights.begin());
     std::vector<MY_SIZE> blocks;
     std::vector<std::pair<MY_SIZE, MY_SIZE>> partition_to_cell;
     std::vector<MY_SIZE> cell_inverse_permutation(mesh.numCells());
@@ -90,16 +90,9 @@ struct HierarchicalColourMemory {
       }
       assert(blocks.back() != partition_vector.size());
       blocks.push_back(partition_vector.size());
-      std::vector<typename std::vector<DataType>::iterator> begins(
-          problem.cell_weights.getDim());
-      for (MY_SIZE i = 0; i < problem.cell_weights.getDim(); ++i) {
-        begins[i] =
-            std::next(tmp_cell_weights.begin(), i * problem.mesh.numCells());
-      }
-      typename std::vector<DataType>::iterator end_first =
-          std::next(tmp_cell_weights.begin(), problem.mesh.numCells());
-      reorderDataInverseVectorSOA<DataType, MY_SIZE>(begins, end_first,
-                                                     cell_inverse_permutation);
+      reorderDataInverseSOA<MY_SIZE>(tmp_cell_weights, 0,
+                                     problem.mesh.numCells(),
+                                     cell_inverse_permutation);
     } else {
       for (MY_SIZE i = 0; i < problem.mesh.numCells(); i += block_size) {
         blocks.emplace_back(i);
@@ -162,14 +155,12 @@ private:
    * Colours every point written by the cells in the block and also
    * collects all points accessed by the cells in the block.
    */
-  void
-  colourBlock(MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
-              std::vector<colourset_t> &point_colours,
-              const Problem<SOA, DataType> &problem,
-              std::vector<MemoryOfOneColour> &colours,
-              const std::vector<std::pair<MY_SIZE, MY_SIZE>> &partition_to_cell,
-              std::vector<std::uint8_t> &block_colours,
-              std::vector<DataType> &tmp_cell_weights) {
+  void colourBlock(
+      MY_SIZE from, MY_SIZE to, MY_SIZE colour_ind,
+      std::vector<colourset_t> &point_colours, const Problem<SOA> &problem,
+      std::vector<MemoryOfOneColour> &colours,
+      const std::vector<std::pair<MY_SIZE, MY_SIZE>> &partition_to_cell,
+      std::vector<std::uint8_t> &block_colours, data_t &tmp_cell_weights) {
     const Mesh &mesh = problem.mesh;
     const data_t &cell_to_node = mesh.cell_to_node;
     const MY_SIZE mesh_dim = cell_to_node.getDim();
@@ -207,8 +198,7 @@ private:
                 mesh_dim);
     const MY_SIZE colour_to = colour.cell_colours.size();
     sortCellsByColours(colour_from, colour_to, from, to, colour_ind,
-                       tmp_cell_weights, mesh_dim,
-                       problem.cell_weights.getDim());
+                       tmp_cell_weights, mesh_dim);
     // permuteCachedPoints(points_to_be_cached, colour_from,
     //                                      colour_to, colour_ind, mesh_dim);
     colour.points_to_be_cached.insert(colour.points_to_be_cached.end(),
@@ -253,8 +243,7 @@ private:
 
   void sortCellsByColours(MY_SIZE colour_from, MY_SIZE colour_to, MY_SIZE from,
                           MY_SIZE to, MY_SIZE block_colour,
-                          std::vector<DataType> &tmp_cell_weights,
-                          MY_SIZE mesh_dim, MY_SIZE cell_dim) {
+                          data_t &tmp_cell_weights, MY_SIZE mesh_dim) {
     std::vector<std::tuple<std::uint8_t, std::vector<MY_SIZE>, MY_SIZE>> tmp(
         colour_to - colour_from);
     MemoryOfOneColour &memory = colours[block_colour];
@@ -280,16 +269,8 @@ private:
       std::copy(std::get<1>(tmp[i]).begin(), std::get<1>(tmp[i]).end(),
                 memory.cell_list.begin() + mesh_dim * j);
     }
-    std::vector<typename std::vector<DataType>::iterator> begins(cell_dim);
-    for (MY_SIZE i = 0; i < cell_dim; ++i) {
-      MY_SIZE dim_pos =
-          index<true>(tmp_cell_weights.size() / cell_dim, from, cell_dim, i);
-      begins[i] = std::next(tmp_cell_weights.begin(), dim_pos);
-    }
-    typename std::vector<DataType>::iterator end_first =
-        std::next(tmp_cell_weights.begin(), to);
-    reorderDataInverseVectorSOA<DataType, MY_SIZE>(begins, end_first,
-                                                   inverse_permutation);
+    reorderDataInverseSOA<MY_SIZE>(tmp_cell_weights, from, to,
+                                   inverse_permutation);
   }
 
   void permuteCachedPoints(std::vector<MY_SIZE> &points_to_be_cached,
@@ -324,19 +305,24 @@ private:
     }
   }
 
-  void copyCellWeights(const Problem<SOA, DataType> &problem,
+  void copyCellWeights(const Problem<SOA> &problem,
                        const std::vector<std::uint8_t> &block_colours,
-                       const std::vector<DataType> &tmp_cell_weights) {
+                       const data_t &tmp_cell_weights) {
+    const unsigned type_size = problem.cell_weights.getTypeSize();
     for (MY_SIZE i = 0; i < colours.size(); ++i) {
       colours[i].cell_weights.reserve(colours[i].cell_list.size() /
-                                      problem.mesh.cell_to_node.getDim());
+                                      problem.mesh.cell_to_node.getDim() *
+                                      type_size);
     }
     for (MY_SIZE d = 0; d < problem.cell_weights.getDim(); ++d) {
       for (MY_SIZE i = 0; i < problem.mesh.numCells(); ++i) {
         MY_SIZE colour = block_colours[i];
-        DataType weight = tmp_cell_weights[index<true>(
-            problem.mesh.numCells(), i, problem.cell_weights.getDim(), d)];
-        colours[colour].cell_weights.push_back(weight);
+        MY_SIZE glob_index = index<true>(problem.mesh.numCells(), i,
+                                         problem.cell_weights.getDim(), d);
+        colours[colour].cell_weights.insert(
+            colours[colour].cell_weights.end(),
+            tmp_cell_weights.cbegin() + glob_index * type_size,
+            tmp_cell_weights.cbegin() + (glob_index + 1) * type_size);
       }
     }
   }
