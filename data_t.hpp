@@ -18,8 +18,6 @@ private:
 
 public:
   // constructors
-  // TODO see if we need this
-  // data_t() : size(0), data(nullptr), data_d(nullptr) {}
   data_t(MY_SIZE set_s, MY_SIZE set_dim, unsigned type_size);
   template <typename T> static data_t create(MY_SIZE size, MY_SIZE dim) {
     return data_t(size, dim, sizeof(T));
@@ -74,18 +72,6 @@ public:
     return reinterpret_cast<T *>(data_d);
   }
 };
-
-// template <bool Cond, typename T1, typename T2> struct choose_t {};
-
-// template <typename T1, typename T2> struct choose_t<true, T1, T2> {
-//  typedef T1 type;
-//  static type &&ret_value(T1 &&v, T2 &&) { return std::move(v); }
-//};
-
-// template <typename T1, typename T2> struct choose_t<false, T1, T2> {
-//  typedef T2 type;
-//  static type &&ret_value(T1 &&, T2 &&v) { return std::move(v); }
-//};
 
 data_t::data_t(MY_SIZE set_s, MY_SIZE set_dim, MY_SIZE type_size_)
     : size(set_s), dim(set_dim), type_size(type_size_), data(nullptr),
