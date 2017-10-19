@@ -84,11 +84,6 @@ public:
                          (2.0 * point_weights.getDim() * mesh.numPoints() +
                           cell_weights.getDim() * mesh.numCells()) +
                      1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-                        num,
-                    (point_weights.getTypeSize() *
-                         (2.0 * point_weights.getDim() * mesh.numPoints() +
-                          cell_weights.getDim() * mesh.numCells()) +
-                     1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
                         num);
     free(temp);
   } /*}}}*/
@@ -138,11 +133,6 @@ public:
       TIMER_TOGGLE(t);
     }
     PRINT_BANDWIDTH(t, "loopCPUCellCentredOMP",
-                    (point_weights.getTypeSize() *
-                         (2.0 * point_weights.getDim() * mesh.numPoints() +
-                          cell_weights.getDim() * mesh.numCells()) +
-                     1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-                        num,
                     (point_weights.getTypeSize() *
                          (2.0 * point_weights.getDim() * mesh.numPoints() +
                           cell_weights.getDim() * mesh.numCells()) +

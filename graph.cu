@@ -134,13 +134,7 @@ void Problem<SOA>::loopGPUCellCentred(MY_SIZE num) {
            (2.0 * point_weights.getDim() * mesh.numPoints() +
             cell_weights.getDim() * mesh.numCells()) +
        1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-          num,
-      (point_weights.getTypeSize() * mesh.numPoints() * point_weights.getDim() *
-           2.0 + // point_weights
-       cell_weights.getTypeSize() * mesh.numCells() * cell_weights.getDim() *
-           1.0 +                                          // d_cell_weights
-       1.0 * sizeof(MY_SIZE) * mesh.numCells() * MESH_DIM // d_cell_list
-       ) * num);
+          num);
   std::cout << " Needed " << num_of_colours << " colours" << std::endl;
   std::cout << "  average cache_line / block: "
             << static_cast<double>(total_num_cache_lines) / total_num_blocks
@@ -150,12 +144,7 @@ void Problem<SOA>::loopGPUCellCentred(MY_SIZE num) {
       num * (total_num_cache_lines * 32.0 * 2 +
              1.0 * cell_weights.getDim() * mesh.numCells() *
                  point_weights.getDim() +
-             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)),
-      num * (2 * 32.0 * total_num_cache_lines + // indirect accessed cache lines
-             cell_weights.getTypeSize() * mesh.numCells() *
-                 cell_weights.getDim() * 1.0 +                  // cell_weights
-             1.0 * sizeof(MY_SIZE) * mesh.numCells() * MESH_DIM // cell_list
-             ));
+             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
   point_weights.flushToHost();
 }
 /* 1}}} */
@@ -252,22 +241,8 @@ void Problem<SOA>::loopGPUHierarchical(MY_SIZE num) {
       num * ((2.0 * point_weights.getDim() * mesh.numPoints() +
               cell_weights.getDim() * mesh.numCells()) *
                  point_weights.getTypeSize() +
-             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)),
-      num * (point_weights.getTypeSize() * mesh.numPoints() *
-                 point_weights.getDim() * 2.0 + // point_weights
-             cell_weights.getTypeSize() * mesh.numCells() *
-                 cell_weights.getDim() * 1.0 + // cell_weights
-             sizeof(MY_SIZE) * mesh.numCells() * 1.0 * MESH_DIM + // cell_list
-             sizeof(MY_SIZE) * total_cache_size * 1.0 +
-             sizeof(MY_SIZE) *
-                 (total_num_blocks * 1.0 +
-                  memory.colours.size()) + // points_to_be_cached_offsets
-             sizeof(MY_SIZE) * (total_num_blocks * 1.0) + // block_offsets
-             sizeof(std::uint8_t) * mesh.numCells()       // cell_colours
-             ));
+             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
   PRINT_BANDWIDTH(timer_copy, " -copy",
-                  2.0 * num * point_weights.getTypeSize() *
-                      point_weights.getDim() * mesh.numPoints(),
                   2.0 * num * point_weights.getTypeSize() *
                       point_weights.getDim() * mesh.numPoints());
   std::cout << "  reuse factor: "
@@ -288,18 +263,7 @@ void Problem<SOA>::loopGPUHierarchical(MY_SIZE num) {
       num * (total_num_cache_lines * 32.0 * 2 +
              1.0 * cell_weights.getDim() * mesh.numCells() *
                  point_weights.getTypeSize() +
-             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)),
-      num * (2 * 32.0 * total_num_cache_lines + // indirect accessed cache lines
-             cell_weights.getTypeSize() * mesh.numCells() *
-                 cell_weights.getDim() * 1.0 + // cell_weights
-             sizeof(MY_SIZE) * mesh.numCells() * 1.0 * MESH_DIM + // cell_list
-             sizeof(MY_SIZE) * total_cache_size * 1.0 +
-             sizeof(MY_SIZE) *
-                 (total_num_blocks * 1.0 +
-                  memory.colours.size()) + // points_to_be_cached_offsets
-             sizeof(MY_SIZE) * (total_num_blocks * 1.0) + // block_offsets
-             sizeof(std::uint8_t) * mesh.numCells()       // cell_colours
-             ));
+             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
   avg_num_cell_colours /= total_num_blocks;
   std::cout << "  average number of colours used: " << avg_num_cell_colours
             << std::endl;

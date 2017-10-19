@@ -11,15 +11,13 @@
     std::cout << std::endl;                                                    \
   } while (0)
 #define TIMER_TOGGLE(t) t.toggle()
-#define PRINT_BANDWIDTH(t, pre, data, tot_data)                                \
+#define PRINT_BANDWIDTH(t, pre, data)                                          \
   do {                                                                         \
     auto time = t.getTime();                                                   \
     std::cout << pre << ":" << std::endl                                       \
               << "  time:             " << time << " ms\n"                     \
               << "  useful bandwidth: "                                        \
               << static_cast<double>(data) / time * 1000.0 << " B/s\n"         \
-              << "  total bandwidth:  "                                        \
-              << static_cast<double>(tot_data) / time * 1000.0 << "B/s"        \
               << std::endl;                                                    \
   } while (0)
 #define CUDA_TIMER_START(t) CudaTimer t
@@ -29,7 +27,7 @@
 #define TIMER_START(t)
 #define TIMER_PRINT(t, pre)
 #define TIMER_TOGGLE(t)
-#define PRINT_BANDWIDTH(t, pre, data, tot_data)
+#define PRINT_BANDWIDTH(t, pre, data)
 #define CUDA_TIMER_START(t)
 
 #endif
