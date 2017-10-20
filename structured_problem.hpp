@@ -3,7 +3,8 @@
 
 #include "problem.hpp"
 
-template <unsigned PointDim, unsigned CellDim, bool SOA, typename DataType>
+template <unsigned MeshDim, unsigned PointDim, unsigned CellDim, bool SOA,
+          typename DataType>
 class StructuredProblem : public Problem<SOA> {
 public:
   using Base = Problem<SOA>;
@@ -17,8 +18,8 @@ public:
       const std::vector<MY_SIZE> &grid_dim,
       std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
       bool use_coordinates = false)
-      : Base(Grid(grid_dim, Base::MESH_DIM, block_dims, use_coordinates),
-             PointDim, CellDim, sizeof(DataType),
+      : Base(Grid(grid_dim, MeshDim, block_dims, use_coordinates),
+             {{PointDim, sizeof(DataType)}}, {{CellDim, sizeof(DataType)}},
              calculateBlockSize(block_dims)) {
     reset();
   }
@@ -26,14 +27,14 @@ public:
   ~StructuredProblem() {}
 
   void reset() {
-    for (DataType *it = this->point_weights.template begin<DataType>();
-         it != this->point_weights.template end<DataType>(); ++it) {
+    for (DataType *it = this->point_weights[0].template begin<DataType>();
+         it != this->point_weights[0].template end<DataType>(); ++it) {
       DataType &w = *it;
       w = DataType(rand() % 10000) / 5000.f;
       w *= 0.001;
     }
-    for (DataType *it = this->cell_weights.template begin<DataType>();
-         it != this->cell_weights.template end<DataType>(); ++it) {
+    for (DataType *it = this->cell_weights[0].template begin<DataType>();
+         it != this->cell_weights[0].template end<DataType>(); ++it) {
       DataType &weight = *it;
       weight = DataType(rand() % 10000 + 1) / 5000.0;
       weight *= 0.001;
@@ -41,7 +42,7 @@ public:
   }
 
   static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
-    if (Base::MESH_DIM == 2) {
+    if (MeshDim == 2) {
       if (block_dims.first == 0) {
         return block_dims.second;
       } else if (block_dims == std::pair<MY_SIZE, MY_SIZE>{9, 8}) {

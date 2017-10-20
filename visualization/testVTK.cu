@@ -24,7 +24,7 @@ void writeGlobalColouringVTK(const std::string &filename,
     }
     bid++;
   }
-  writeMeshToVTKAscii(filename, mesh.cell_to_node, mesh.point_coordinates,
+  writeMeshToVTKAscii(filename, mesh.cell_to_node[0], mesh.point_coordinates,
                       data);
 }
 
@@ -35,13 +35,15 @@ void writeGlobalColouringVTK(const std::string &filename,
 /*  constexpr unsigned MESH_DIM = Problem<>::MESH_DIM;*/
 /*  std::cout << "Number of block colours: " << memory.colours.size()*/
 /*            << std::endl;*/
-/*  data_t cell_list(data_t::create<MY_SIZE>(problem.mesh.numCells(), MESH_DIM));*/
+/*  data_t cell_list(data_t::create<MY_SIZE>(problem.mesh.numCells(),
+ * MESH_DIM));*/
 /*  std::vector<std::vector<std::uint16_t>> data(3);*/
 /*  MY_SIZE blk_col_ind = 0, blk_ind = 0;*/
 /*  MY_SIZE cell_ind = 0;*/
 /*  for (const auto &m : memory.colours) {*/
 /*    data[VTK_IND_THR_COL].insert(data[VTK_IND_THR_COL].end(),*/
-/*                                 m.cell_colours.begin(), m.cell_colours.end());*/
+/*                                 m.cell_colours.begin(),
+ * m.cell_colours.end());*/
 /*    data[VTK_IND_BLK_COL].insert(data[VTK_IND_BLK_COL].end(),*/
 /*                                 m.cell_colours.size(), blk_col_ind++);*/
 /*    assert(MESH_DIM * m.cell_colours.size() == m.cell_list.size());*/
@@ -84,7 +86,7 @@ void writePartitionVTK(const std::string &filename,
   for (MY_SIZE i = 0; i < mesh.numCells(); ++i) {
     data[VTK_IND_BLK_ID][i] = partition[i];
   }
-  writeMeshToVTKAscii(filename, mesh.cell_to_node, mesh.point_coordinates,
+  writeMeshToVTKAscii(filename, mesh.cell_to_node[0], mesh.point_coordinates,
                       data);
 }
 

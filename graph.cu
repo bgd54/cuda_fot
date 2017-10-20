@@ -290,18 +290,19 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
             << SOA << "\n     Data type: "
             << (sizeof(DataType) == sizeof(float) ? "float" : "double")
             << std::endl;
-  std::function<void(implementation_algorithm_t<SOA>)> run = [&](
-      implementation_algorithm_t<SOA> algo) {
-    Problem<SOA> problem(std::move(
-        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M, block_dims)));
-    std::cout << "--Problem created" << std::endl;
-    (problem.*algo)(num);
-    std::cout << "--Problem finished." << std::endl;
-  };
+  std::function<void(implementation_algorithm_t<SOA>)> run =
+      [&](implementation_algorithm_t<SOA> algo) {
+        Problem<SOA> problem(
+            std::move(StructuredProblem<2, PointDim, CellDim, SOA, DataType>(
+                N, M, block_dims)));
+        std::cout << "--Problem created" << std::endl;
+        (problem.*algo)(num);
+        std::cout << "--Problem finished." << std::endl;
+      };
   run(&Problem<SOA>::template loopGPUCellCentred<
-          MINE_KERNEL(StepGPUGlobal) < PointDim, CellDim, DataType>>);
+          mine::StepGPUGlobal2 < PointDim, CellDim, DataType>>);
   run(&Problem<SOA>::template loopGPUHierarchical<
-          MINE_KERNEL(StepGPUHierarchical) < PointDim, CellDim, DataType>>);
+          mine::StepGPUHierarchical2 < PointDim, CellDim, DataType>>);
   std::cout << "Finished." << std::endl;
 }
 
@@ -397,8 +398,8 @@ void generateTimesDifferentBlockDims() {
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
   testImplementations();
-  testReordering();
-  testPartitioning();
+  /*testReordering();*/
+  /*testPartitioning();*/
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
   return 0;

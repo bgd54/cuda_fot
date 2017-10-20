@@ -17,7 +17,7 @@
 
 struct InvalidInputFile {
   std::string input_type;
-  MY_SIZE line;
+  MY_SIZE mapping_ind, line;
 };
 
 class Mesh {
@@ -26,20 +26,28 @@ public:
   using colourset_t = std::bitset<64>;
 
 private:
-  MY_SIZE num_points, num_cells;
+  std::vector<MY_SIZE> num_points;
 
 public:
-  data_t cell_to_node;
+  std::vector<data_t> cell_to_node;
 
   /* Initialisation {{{1 */
 protected:
-  Mesh(MY_SIZE _num_points, MY_SIZE _num_cells, unsigned mesh_dim,
-       const MY_SIZE *_cell_to_node = nullptr)
-      : num_points{_num_points}, num_cells{_num_cells},
-        cell_to_node(data_t::create<MY_SIZE>(num_cells, mesh_dim)) {
-    if (_cell_to_node) {
-      std::copy(_cell_to_node, _cell_to_node + mesh_dim * num_cells,
-                cell_to_node.begin<MY_SIZE>());
+  Mesh(const std::vector<MY_SIZE> &_num_points, MY_SIZE _num_cells,
+       const std::vector<unsigned> &mesh_dim,
+       const std::vector<const MY_SIZE *> &_cell_to_node = {})
+      : num_points{_num_points}, cell_to_node{} {
+    assert(_cell_to_node.empty() || _cell_to_node.size() == _num_points.size());
+    assert(_num_points.size() == mesh_dim.size());
+    for (size_t i = 0; i < _num_points.size(); ++i) {
+      cell_to_node.emplace_back(
+          data_t::create<MY_SIZE>(_num_cells, mesh_dim[i]));
+    }
+    for (size_t i = 0; i < _cell_to_node.size(); ++i) {
+      if (_cell_to_node[i]) {
+        std::copy_n(_cell_to_node[i], mesh_dim[i] * numCells(),
+                    cell_to_node[i].begin<MY_SIZE>());
+      }
     }
   }
 
@@ -53,19 +61,32 @@ public:
    * and
    *     endpoint respectively ("\d+\s+\d+")
    */
-  Mesh(std::istream &is, unsigned mesh_dim)
-      : num_points{0}, num_cells{0},
-        cell_to_node(data_t::create<MY_SIZE>(
-            (is >> num_points >> num_cells, num_cells), mesh_dim)) {
-    if (!is) {
-      throw InvalidInputFile{"graph input", 0};
-    }
-    for (MY_SIZE i = 0; i < num_cells; ++i) {
-      for (MY_SIZE j = 0; j < mesh_dim; ++j) {
-        is >> cell_to_node.operator[]<MY_SIZE>(mesh_dim *i + j);
-      }
+  Mesh(const std::vector<std::istream *> &iis,
+       const std::vector<unsigned> &mesh_dim)
+      : num_points(iis.size(), 0), cell_to_node{} {
+    assert(iis.size() == mesh_dim.size());
+    MY_SIZE num_cells = 0;
+    for (size_t mapping_ind = 0; mapping_ind < iis.size(); ++mapping_ind) {
+      std::istream &is = *iis[mapping_ind];
       if (!is) {
-        throw InvalidInputFile{"graph input", i};
+        throw InvalidInputFile{"graph input", static_cast<MY_SIZE>(mapping_ind),
+                               0};
+      }
+      MY_SIZE _num_points, _num_cells;
+      is >> _num_points >> _num_cells;
+      assert(mapping_ind == 0 || num_cells == _num_cells);
+      num_cells = _num_cells;
+      cell_to_node.emplace_back(
+          data_t::create<MY_SIZE>(num_cells, mesh_dim[mapping_ind]));
+      for (MY_SIZE i = 0; i < num_cells; ++i) {
+        for (MY_SIZE j = 0; j < mesh_dim[mapping_ind]; ++j) {
+          is >> cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+                    mesh_dim[mapping_ind] * i + j);
+        }
+        if (!is) {
+          throw InvalidInputFile{"graph input",
+                                 static_cast<MY_SIZE>(mapping_ind), i};
+        }
       }
     }
   }
@@ -76,15 +97,11 @@ public:
   Mesh &operator=(const Mesh &) = delete;
 
   Mesh(Mesh &&other)
-      : num_points{other.num_points}, num_cells{other.num_cells},
-        cell_to_node{std::move(other.cell_to_node)} {
-    other.num_points = 0;
-    other.num_cells = 0;
-  }
+      : num_points{other.num_points},
+        cell_to_node{std::move(other.cell_to_node)} {}
 
   Mesh &operator=(Mesh &&rhs) {
     std::swap(num_points, rhs.num_points);
-    std::swap(num_cells, rhs.num_cells);
     std::swap(cell_to_node, rhs.cell_to_node);
     return *this;
   }
@@ -97,15 +114,25 @@ public:
       to = numCells();
     }
     std::vector<std::vector<MY_SIZE>> cell_partitions;
-    std::vector<colourset_t> point_colours(numPoints(), 0);
+    std::vector<std::vector<colourset_t>> point_colours{};
+    for (size_t mapping_ind = 0; mapping_ind < cell_to_node.size();
+         ++mapping_ind) {
+      point_colours.push_back(
+          std::vector<colourset_t>(numPoints(mapping_ind), 0));
+    }
     std::vector<MY_SIZE> set_sizes(64, 0);
-    const unsigned mesh_dim = cell_to_node.getDim();
     colourset_t used_colours;
     for (MY_SIZE i = from; i < to; ++i) {
       colourset_t occupied_colours;
-      for (MY_SIZE j = 0; j < mesh_dim; ++j) {
-        occupied_colours |=
-            point_colours[cell_to_node.operator[]<MY_SIZE>(mesh_dim *i + j)];
+      for (unsigned mapping_ind = 0; mapping_ind < cell_to_node.size();
+           ++mapping_ind) {
+        const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
+        for (MY_SIZE j = 0; j < mesh_dim; ++j) {
+          occupied_colours |=
+              point_colours[mapping_ind]
+                           [cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+                               mesh_dim *i + j)];
+        }
       }
       colourset_t available_colours = ~occupied_colours & used_colours;
       if (available_colours.none()) {
@@ -117,18 +144,32 @@ public:
       std::uint8_t colour = getAvailableColour(available_colours, set_sizes);
       cell_partitions[colour].push_back(i);
       colourset_t colourset(1ull << colour);
-      for (MY_SIZE j = 0; j < mesh_dim; ++j) {
-        point_colours[cell_to_node.operator[]<MY_SIZE>(mesh_dim *i + j)] |=
-            colourset;
+      for (size_t mapping_ind = 0; mapping_ind < cell_to_node.size();
+           ++mapping_ind) {
+        const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
+        for (MY_SIZE j = 0; j < mesh_dim; ++j) {
+          point_colours[mapping_ind]
+                       [cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+                           mesh_dim *i + j)] |= colourset;
+        }
       }
       ++set_sizes[colour];
     }
     return cell_partitions;
   }
 
-  MY_SIZE numCells() const { return num_cells; }
+  MY_SIZE numCells() const {
+    assert(!cell_to_node.empty());
+    return cell_to_node[0].getSize();
+  }
 
-  MY_SIZE numPoints() const { return num_points; }
+  MY_SIZE numPoints(unsigned mapping_ind) const {
+    return num_points[mapping_ind];
+  }
+
+  const std::vector<MY_SIZE> numPoints() const { return num_points; }
+
+  unsigned numMappings() const { return cell_to_node.size(); }
 
   /**
    * Writes the cell list in the following format:
@@ -137,13 +178,13 @@ public:
    *   - the following `numCells()` lines contain MeshDim numbers separated
    *     by spaces: the points incident to the cell
    */
-  void writeCellList(std::ostream &os) const {
-    os << numPoints() << " " << numCells() << std::endl;
-    const unsigned mesh_dim = cell_to_node.getDim();
+  void writeCellList(std::ostream &os, unsigned mapping_ind) const {
+    os << numPoints(mapping_ind) << " " << numCells() << std::endl;
+    const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
     for (std::size_t i = 0; i < numCells(); ++i) {
       for (unsigned j = 0; j < mesh_dim; ++j) {
         os << (j > 0 ? " " : "")
-           << cell_to_node.operator[]<MY_SIZE>(mesh_dim *i + j);
+           << cell_to_node[mapping_ind].operator[]<MY_SIZE>(mesh_dim *i + j);
       }
       os << std::endl;
     }
@@ -156,14 +197,16 @@ public:
   std::vector<MY_SIZE>
   reorder(const std::vector<UnsignedType> &point_permutation) {
     // Permute cell_to_node
-    renumberPoints(point_permutation);
-    const unsigned mesh_dim = cell_to_node.getDim();
+    assert(!cell_to_node.empty());
+    assert(point_permutation.size() == numPoints(0));
+    renumberPoints(point_permutation, 0);
+    const unsigned mesh_dim = cell_to_node[0].getDim();
     std::vector<std::vector<MY_SIZE>> cell_tmp(numCells(),
                                                std::vector<MY_SIZE>(mesh_dim));
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       cell_tmp[i][mesh_dim] = i;
-      std::copy(cell_to_node.begin<MY_SIZE>() + mesh_dim * i,
-                cell_to_node.begin<MY_SIZE>() + mesh_dim * (i + 1),
+      std::copy(cell_to_node[0].begin<MY_SIZE>() + mesh_dim * i,
+                cell_to_node[0].begin<MY_SIZE>() + mesh_dim * (i + 1),
                 cell_tmp[i].begin());
       std::sort(cell_tmp[i].begin(), cell_tmp[i].begin() + mesh_dim);
     }
@@ -172,7 +215,9 @@ public:
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       inv_permutation[i] = cell_tmp[i][mesh_dim];
     }
-    reorderDataInverse<false>(cell_to_node, inv_permutation);
+    for (data_t &mapping : cell_to_node) {
+      reorderDataInverse<false>(mapping, inv_permutation);
+    }
     return inv_permutation;
   }
 
@@ -190,16 +235,23 @@ public:
       partition_vector[i] = tmp[i][0];
       inv_permutation[i] = tmp[i][1];
     }
-    reorderDataInverse<false>(cell_to_node, inv_permutation);
+    for (data_t &mapping : cell_to_node) {
+      reorderDataInverse<false>(mapping, inv_permutation);
+    }
     return inv_permutation;
   }
 
-  std::vector<MY_SIZE> getPointRenumberingPermutation() const {
-    std::vector<MY_SIZE> permutation(numPoints(), numPoints());
+  std::vector<MY_SIZE>
+  getPointRenumberingPermutation(unsigned mapping_ind) const {
+    std::vector<MY_SIZE> permutation(numPoints(mapping_ind),
+                                     numPoints(mapping_ind));
     MY_SIZE new_ind = 0;
-    for (MY_SIZE i = 0; i < cell_to_node.getDim() * numCells(); ++i) {
-      if (permutation[cell_to_node.operator[]<MY_SIZE>(i)] == numPoints()) {
-        permutation[cell_to_node.operator[]<MY_SIZE>(i)] = new_ind++;
+    for (MY_SIZE i = 0; i < cell_to_node[mapping_ind].getDim() * numCells();
+         ++i) {
+      if (permutation[cell_to_node[mapping_ind].operator[]<MY_SIZE>(i)] ==
+          numPoints(mapping_ind)) {
+        permutation[cell_to_node[mapping_ind].operator[]<MY_SIZE>(i)] =
+            new_ind++;
       }
     }
     // Currently not supporting isolated points
@@ -211,10 +263,12 @@ public:
 
   template <class UnsignedType>
   const std::vector<UnsignedType> &
-  renumberPoints(const std::vector<UnsignedType> &permutation) {
+  renumberPoints(const std::vector<UnsignedType> &permutation,
+                 unsigned mapping_ind) {
     assert(std::size_t(std::numeric_limits<UnsignedType>::max()) >=
-           numPoints());
-    std::for_each(cell_to_node.begin<MY_SIZE>(), cell_to_node.end<MY_SIZE>(),
+           numPoints(mapping_ind));
+    std::for_each(cell_to_node[mapping_ind].begin<MY_SIZE>(),
+                  cell_to_node[mapping_ind].end<MY_SIZE>(),
                   [&permutation](MY_SIZE &a) { a = permutation[a]; });
     return permutation;
   }
@@ -240,37 +294,46 @@ public:
   }
 
   Mesh getCellToCellGraph() const {
-    const std::multimap<MY_SIZE, MY_SIZE> point_to_cell =
-        GraphCSR<MY_SIZE>::getPointToCell(cell_to_node);
-    std::vector<MY_SIZE> cell_to_cell;
-    const unsigned mesh_dim = cell_to_node.getDim();
-    for (MY_SIZE i = 0; i < numCells(); ++i) {
-      for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
-        MY_SIZE point = cell_to_node.operator[]<MY_SIZE>(mesh_dim *i + offset);
-        const auto cell_range = point_to_cell.equal_range(point);
-        for (auto it = cell_range.first; it != cell_range.second; ++it) {
-          MY_SIZE other_cell = it->second;
-          if (other_cell > i) {
-            cell_to_cell.push_back(i);
-            cell_to_cell.push_back(other_cell);
+    std::set<std::pair<MY_SIZE, MY_SIZE>> cell_to_cell;
+    for (unsigned mapping_ind = 0; mapping_ind < cell_to_cell.size();
+         ++mapping_ind) {
+      const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
+      const std::multimap<MY_SIZE, MY_SIZE> point_to_cell =
+          GraphCSR<MY_SIZE>::getPointToCell(cell_to_node[mapping_ind]);
+      for (MY_SIZE i = 0; i < numCells(); ++i) {
+        for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
+          MY_SIZE point = cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+              mesh_dim *i + offset);
+          const auto cell_range = point_to_cell.equal_range(point);
+          for (auto it = cell_range.first; it != cell_range.second; ++it) {
+            MY_SIZE other_cell = it->second;
+            if (other_cell > i) {
+              cell_to_cell.insert(std::pair<MY_SIZE, MY_SIZE>(i, other_cell));
+            }
           }
         }
       }
     }
-    return Mesh(numCells(), cell_to_cell.size() / 2, 2, cell_to_cell.data());
+    std::vector<MY_SIZE> _cell_to_cell;
+    for (std::pair<MY_SIZE, MY_SIZE> c : cell_to_cell) {
+      _cell_to_cell.push_back(c.first);
+      _cell_to_cell.push_back(c.second);
+    }
+    return Mesh({numCells()}, cell_to_cell.size(), {2}, {_cell_to_cell.data()});
   }
 
   std::vector<std::vector<MY_SIZE>>
-  getPointToPartition(const std::vector<MY_SIZE> &partition) const {
-    std::vector<std::set<MY_SIZE>> _result(num_points);
-    const unsigned mesh_dim = cell_to_node.getDim();
-    for (MY_SIZE i = 0; i < cell_to_node.getSize(); ++i) {
+  getPointToPartition(const std::vector<MY_SIZE> &partition,
+                      unsigned mapping_ind) const {
+    std::vector<std::set<MY_SIZE>> _result(numPoints(mapping_ind));
+    const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
+    for (MY_SIZE i = 0; i < cell_to_node[mapping_ind].getSize(); ++i) {
       for (MY_SIZE j = 0; j < mesh_dim; ++j) {
-        _result[cell_to_node.operator[]<MY_SIZE>(mesh_dim *i + j)].insert(
-            partition[i]);
+        _result[cell_to_node[mapping_ind].operator[]<MY_SIZE>(mesh_dim *i + j)]
+            .insert(partition[i]);
       }
     }
-    std::vector<std::vector<MY_SIZE>> result(num_points);
+    std::vector<std::vector<MY_SIZE>> result(numPoints(mapping_ind));
     std::transform(_result.begin(), _result.end(), result.begin(),
                    [](const std::set<MY_SIZE> &a) {
                      return std::vector<MY_SIZE>(a.begin(), a.end());
@@ -300,5 +363,5 @@ public:
   }
 };
 
-// vim:set et sw=2 ts=2 fdm=marker:
+// vim:set et sts=2 sw=2 ts=2 fdm=marker:
 #endif /* end of include guard: MESH_HPP_JLID0VDH */
