@@ -21,6 +21,7 @@
               << std::endl;                                                    \
   } while (0)
 #define CUDA_TIMER_START(t) CudaTimer t
+#define PRINT(a) std::cout << "  " << a << std::endl
 
 #else // don't use timer
 
@@ -29,6 +30,7 @@
 #define TIMER_TOGGLE(t)
 #define PRINT_BANDWIDTH(t, pre, data)
 #define CUDA_TIMER_START(t)
+#define PRINT(a)
 
 #endif
 

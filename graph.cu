@@ -67,85 +67,108 @@ void Problem<SOA>::loopGPUCellCentred(MY_SIZE num) {
   std::vector<std::vector<MY_SIZE>> partition = mesh.colourCells();
   MY_SIZE num_of_colours = partition.size();
   assert(num_of_colours > 0);
-  data_t point_weights2(point_weights.getSize(), point_weights.getDim(),
-                        point_weights.getTypeSize());
-  std::copy(point_weights.begin(), point_weights.end(), point_weights2.begin());
-  std::vector<data_t> d_cell_lists;
-  std::vector<data_t> d_cell_weights;
+  data_t point_weights2(point_weights[0].getSize(), point_weights[0].getDim(),
+                        point_weights[0].getTypeSize());
+  std::copy(point_weights[0].begin(), point_weights[0].end(),
+            point_weights2.begin());
+  std::vector<std::vector<data_t>> d_cell_lists;
+  std::vector<device_data_t> d_cell_to_node_ptrs;
+  std::vector<std::vector<data_t>> d_cell_weights;
+  std::vector<device_data_t> d_cell_data;
   MY_SIZE total_num_cache_lines = 0;
   MY_SIZE total_num_blocks = 0;
   for (const std::vector<MY_SIZE> &colour : partition) {
-    d_cell_lists.emplace_back(data_t::create<MY_SIZE>(colour.size(), MESH_DIM));
-    d_cell_weights.emplace_back(colour.size(), cell_weights.getDim(),
-                                cell_weights.getTypeSize());
-    for (std::size_t i = 0; i < colour.size(); ++i) {
-      std::copy_n(mesh.cell_to_node.begin<MY_SIZE>() + MESH_DIM * colour[i],
-                  MESH_DIM,
-                  d_cell_lists.back().begin<MY_SIZE>() + MESH_DIM * i);
-      for (unsigned d = 0; d < cell_weights.getDim(); ++d) {
-        std::copy_n(
-            cell_weights.begin() +
-                cell_weights.getTypeSize() *
-                    index<true>(mesh.numCells(), colour[i],
-                                cell_weights.getDim(), d),
-            cell_weights.getTypeSize(),
-            d_cell_weights.back().begin() +
-                cell_weights.getTypeSize() *
-                    index<true>(colour.size(), i, cell_weights.getDim(), d));
+    d_cell_lists.emplace_back();
+    d_cell_weights.emplace_back();
+    std::vector<const MY_SIZE *> _cell_to_node;
+    for (unsigned mapping_ind = 0; mapping_ind < mesh.numMappings();
+         ++mapping_ind) {
+      const unsigned mesh_dim = mesh.cell_to_node[mapping_ind].getDim();
+      d_cell_lists.back().emplace_back(
+          data_t::create<MY_SIZE>(colour.size(), mesh_dim));
+      for (std::size_t i = 0; i < colour.size(); ++i) {
+        std::copy_n(mesh.cell_to_node[mapping_ind].begin<MY_SIZE>() +
+                        mesh_dim * colour[i],
+                    mesh_dim,
+                    d_cell_lists.back().back().begin<MY_SIZE>() + mesh_dim * i);
       }
+      d_cell_lists.back().back().initDeviceMemory();
+      _cell_to_node.push_back(
+          d_cell_lists.back().back().getDeviceData<MY_SIZE>());
     }
-    d_cell_lists.back().initDeviceMemory();
-    d_cell_weights.back().initDeviceMemory();
+    d_cell_to_node_ptrs.emplace_back(device_data_t::create(_cell_to_node));
+    std::vector<const void *> _cell_data;
+    for (unsigned cw_ind = 0; cw_ind < cell_weights.size(); ++cw_ind) {
+      const MY_SIZE cell_dim = cell_weights[cw_ind].getDim();
+      d_cell_weights.back().emplace_back(colour.size(), cell_dim,
+                                         cell_weights[cw_ind].getTypeSize());
+      for (std::size_t i = 0; i < colour.size(); ++i) {
+        for (unsigned d = 0; d < cell_dim; ++d) {
+          std::copy_n(
+              cell_weights[cw_ind].begin() +
+                  cell_weights[cw_ind].getTypeSize() *
+                      index<true>(mesh.numCells(), colour[i], cell_dim, d),
+              cell_weights[cw_ind].getTypeSize(),
+              d_cell_weights.back().back().begin() +
+                  cell_weights[cw_ind].getTypeSize() *
+                      index<true>(colour.size(), i, cell_dim, d));
+        }
+      }
+      d_cell_weights.back().back().initDeviceMemory();
+      _cell_data.push_back(d_cell_weights.back().back().getDeviceData());
+    }
+    d_cell_data.emplace_back(device_data_t::create(_cell_data));
     MY_SIZE num_blocks = std::ceil(static_cast<double>(colour.size()) /
                                    static_cast<double>(block_size));
     total_num_blocks += num_blocks;
     for (MY_SIZE i = 0; i < num_blocks; ++i) {
       total_num_cache_lines += countCacheLinesForBlock<SOA>(
-          d_cell_lists.back().begin<MY_SIZE>() + MESH_DIM * block_size * i,
-          d_cell_lists.back().begin<MY_SIZE>() +
-              MESH_DIM * std::min<MY_SIZE>(colour.size(), block_size * (i + 1)),
-          point_weights.getDim(), point_weights.getTypeSize());
+          d_cell_lists.back()[0].begin<MY_SIZE>() +
+              mesh.cell_to_node[0].getDim() * block_size * i,
+          d_cell_lists.back()[0].begin<MY_SIZE>() +
+              mesh.cell_to_node[0].getDim() *
+                  std::min<MY_SIZE>(colour.size(), block_size * (i + 1)),
+          point_weights[0].getDim(), point_weights[0].getTypeSize());
     }
   }
-  point_weights.initDeviceMemory();
+  std::vector<const void *> point_data;
+  for (data_t &pw : point_weights) {
+    pw.initDeviceMemory();
+    point_data.push_back(pw.getDeviceData());
+  }
+  device_data_t d_point_data(device_data_t::create(point_data));
+  device_data_t d_point_stride(device_data_t::create(mesh.numPoints()));
+  std::vector<const MY_SIZE *> cell_to_node;
   point_weights2.initDeviceMemory();
   CUDA_TIMER_START(t);
   for (MY_SIZE i = 0; i < num; ++i) {
     for (MY_SIZE c = 0; c < num_of_colours; ++c) {
       MY_SIZE num_blocks = std::ceil(static_cast<double>(partition[c].size()) /
                                      static_cast<double>(block_size));
-      UserFunc::template call<SOA>(
-          point_weights.getDeviceData(), point_weights2.getDeviceData(),
-          d_cell_weights[c].getDeviceData(),
-          d_cell_lists[c].getDeviceData<MY_SIZE>(), partition[c].size(),
-          mesh.numPoints(), partition[c].size(), num_blocks, block_size);
+      UserFunc::template call<SOA>(d_point_data, point_weights2.getDeviceData(),
+                                   d_cell_data[c], d_cell_to_node_ptrs[c],
+                                   partition[c].size(), d_point_stride,
+                                   partition[c].size(), num_blocks, block_size);
       checkCudaErrors(cudaDeviceSynchronize());
     }
     TIMER_TOGGLE(t);
     checkCudaErrors(cudaMemcpy(
-        point_weights.getDeviceData(), point_weights2.getDeviceData(),
-        point_weights.getTypeSize() * mesh.numPoints() * point_weights.getDim(),
+        point_weights[0].getDeviceData(), point_weights2.getDeviceData(),
+        point_weights[0].getTypeSize() * mesh.numPoints(0) *
+            point_weights[0].getDim(),
         cudaMemcpyDeviceToDevice));
     TIMER_TOGGLE(t);
   }
-  PRINT_BANDWIDTH(
-      t, "loopGPUCellCentred",
-      (point_weights.getTypeSize() *
-           (2.0 * point_weights.getDim() * mesh.numPoints() +
-            cell_weights.getDim() * mesh.numCells()) +
-       1.0 * MESH_DIM * sizeof(MY_SIZE) * mesh.numCells()) *
-          num);
-  std::cout << " Needed " << num_of_colours << " colours" << std::endl;
-  std::cout << "  average cache_line / block: "
-            << static_cast<double>(total_num_cache_lines) / total_num_blocks
-            << std::endl;
-  PRINT_BANDWIDTH(
-      t, " -cache line",
-      num * (total_num_cache_lines * 32.0 * 2 +
-             1.0 * cell_weights.getDim() * mesh.numCells() *
-                 point_weights.getDim() +
-             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
-  point_weights.flushToHost();
+  PRINT_BANDWIDTH(t, "loopGPUCellCentred", calcDataSize() * num);
+  PRINT("Needed " << num_of_colours << " colours");
+  PRINT("average cache_line / block: "
+        << static_cast<double>(total_num_cache_lines) / total_num_blocks);
+  PRINT_BANDWIDTH(t, " -cache line",
+                  num * (total_num_cache_lines * 32.0 * 2 +
+                         1.0 * cell_weights.getDim() * mesh.numCells() *
+                             point_weights.getDim() +
+                         1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
+  point_weights[0].flushToHost();
 }
 /* 1}}} */
 
@@ -300,9 +323,9 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
         std::cout << "--Problem finished." << std::endl;
       };
   run(&Problem<SOA>::template loopGPUCellCentred<
-          mine::StepGPUGlobal2 < PointDim, CellDim, DataType>>);
+      mine::StepGPUGlobal<2, PointDim, CellDim, DataType>>);
   run(&Problem<SOA>::template loopGPUHierarchical<
-          mine::StepGPUHierarchical2 < PointDim, CellDim, DataType>>);
+      mine::StepGPUHierarchical<2, PointDim, CellDim, DataType>>);
   std::cout << "Finished." << std::endl;
 }
 
@@ -328,23 +351,26 @@ void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
   generateTimesWithBlockDims<PointDim, CellDim, SOA, DataType>(N, M, {16, 16});
 }
 
-void testReordering() {
+template <unsigned MeshDim> void testReordering() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
   constexpr unsigned TEST_DIM = 4;
   constexpr unsigned TEST_CELL_DIM = 4;
-  testReordering<TEST_DIM, TEST_CELL_DIM, false, float>(
-      num, N, M,
-      &Problem<false>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-                                             TEST_CELL_DIM, float>>,
-      &Problem<false>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-                                             TEST_CELL_DIM, float>>);
-  testReordering<TEST_DIM, TEST_CELL_DIM, true, float>(
-      num, N, M,
-      &Problem<true>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-                                            TEST_CELL_DIM, float>>,
-      &Problem<true>::loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < TEST_DIM,
-                                            TEST_CELL_DIM, float>>);
+  testReordering<MeshDim, TEST_DIM, TEST_CELL_DIM, false, float>(
+      num, N, M, &Problem<false>::loopCPUCellCentredOMP<
+                     mine::StepOMP<MeshDim, TEST_DIM, TEST_CELL_DIM, float>>,
+      &Problem<false>::loopCPUCellCentredOMP<
+          mine::StepOMP<MeshDim, TEST_DIM, TEST_CELL_DIM, float>>);
+  testReordering<MeshDim, TEST_DIM, TEST_CELL_DIM, true, float>(
+      num, N, M, &Problem<true>::loopCPUCellCentredOMP<
+                     mine::StepOMP<MeshDim, TEST_DIM, TEST_CELL_DIM, float>>,
+      &Problem<true>::loopCPUCellCentredOMP<
+          mine::StepOMP<MeshDim, TEST_DIM, TEST_CELL_DIM, float>>);
+}
+
+void testReordering() {
+  testReordering<2>();
+  testReordering<4>();
 }
 
 void testPartitioning() {
@@ -397,8 +423,8 @@ void generateTimesDifferentBlockDims() {
 
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
-  testImplementations();
-  /*testReordering();*/
+  /*testImplementations();*/
+  testReordering();
   /*testPartitioning();*/
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/

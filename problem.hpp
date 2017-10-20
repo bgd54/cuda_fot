@@ -94,7 +94,7 @@ public:
          ++cell_ind_base) {
       UserFunc::template call<SOA>(point_data.data(), temp, cell_data.data(),
                                    cell_to_node.data(), cell_ind_base,
-                                   mesh.numPoints(), mesh.numCells());
+                                   mesh.numPoints().data(), mesh.numCells());
     }
   } /*}}}*/
 
@@ -137,7 +137,7 @@ public:
       MY_SIZE ind = inds[i];
       UserFunc::template call<SOA>(point_data.data(), out.begin(),
                                    cell_data.data(), cell_to_node.data(), ind,
-                                   mesh.numPoints(), mesh.numCells());
+                                   mesh.numPoints().data(), mesh.numCells());
     }
   } /*}}}*/
 
