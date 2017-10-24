@@ -744,22 +744,17 @@ template <unsigned MeshDim> void testImplementations() {
       (&Problem<true>::loopGPUCellCentred<mine::StepGPUGlobal<
            MeshDim, TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>));
 
-  // std::cout << "========================================" << std::endl;
-  // std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
-  // TEST_TWO_IMPLEMENTATIONS(
-  //    (&Problem<false>::loopCPUCellCentredOMP<mine::StepOMP) <MeshDim,
-  //    TEST_DIM,
-  //                                            TEST_CELL_DIM,
-  //                                            TEST_DATA_TYPE>>),
-  //    (&Problem<false>::loopGPUHierarchical<mine::StepGPUHierarchical) <
-  //                                              MeshDim, TEST_DIM,
-  //                                          TEST_CELL_DIM, TEST_DATA_TYPE>>),
-  //    (&Problem<true>::loopCPUCellCentredOMP<mine::StepOMP) <MeshDim,
-  //    TEST_DIM,
-  //                                           TEST_CELL_DIM, TEST_DATA_TYPE>>),
-  //    (&Problem<true>::loopGPUHierarchical<mine::StepGPUHierarchical) <
-  //                                             MeshDim, TEST_DIM,
-  //                                         TEST_CELL_DIM, TEST_DATA_TYPE>>));
+  std::cout << "========================================" << std::endl;
+  std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
+  TEST_TWO_IMPLEMENTATIONS(
+      (&Problem<false>::loopCPUCellCentredOMP<
+          mine::StepOMP<MeshDim, TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<false>::loopGPUHierarchical<mine::StepGPUHierarchical<
+           MeshDim, TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopCPUCellCentredOMP<
+          mine::StepOMP<MeshDim, TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>),
+      (&Problem<true>::loopGPUHierarchical<mine::StepGPUHierarchical<
+           MeshDim, TEST_DIM, TEST_CELL_DIM, TEST_DATA_TYPE>>));
 }
 
 void testImplementations() {

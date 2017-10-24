@@ -237,6 +237,21 @@ void reorderDataInverse(data_t &point_data,
   }
 }
 
+template <typename UnsignedType>
+void reorderDataInverseAOS(std::vector<MY_SIZE>::iterator point_data,
+                           const std::vector<UnsignedType> &permutation,
+                           MY_SIZE dim) {
+  MY_SIZE size = permutation.size();
+  std::vector<MY_SIZE> old_data(point_data, point_data + dim * size);
+  for (MY_SIZE i = 0; i < size; ++i) {
+    for (MY_SIZE d = 0; d < dim; ++d) {
+      MY_SIZE old_ind = index<false>(size, permutation[i], dim, d);
+      MY_SIZE new_ind = index<false>(size, i, dim, d);
+      *(point_data + new_ind) = old_data[old_ind];
+    }
+  }
+}
+
 /**
  * Reorders data using the inverse of the permutation given
  * Specialised for SOA structures, where the reordering is only on part of the

@@ -543,7 +543,7 @@ __global__ void stepGPUHierarchical4(
     const void **_point_data, void *_point_data_out,
     const MY_SIZE *points_to_be_cached,
     const MY_SIZE *points_to_be_cached_offsets, const void **_cell_data,
-    const MY_SIZE *cell_to_node, const std::uint8_t *num_cell_colours,
+    const MY_SIZE **cell_to_node, const std::uint8_t *num_cell_colours,
     const std::uint8_t *cell_colours, const MY_SIZE *block_offsets,
     MY_SIZE num_cells, const MY_SIZE *point_stride, MY_SIZE cell_stride);
 

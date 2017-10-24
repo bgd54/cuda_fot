@@ -163,11 +163,7 @@ void Problem<SOA>::loopGPUCellCentred(MY_SIZE num) {
   PRINT("Needed " << num_of_colours << " colours");
   PRINT("average cache_line / block: "
         << static_cast<double>(total_num_cache_lines) / total_num_blocks);
-  PRINT_BANDWIDTH(t, " -cache line",
-                  num * (total_num_cache_lines * 32.0 * 2 +
-                         1.0 * cell_weights.getDim() * mesh.numCells() *
-                             point_weights.getDim() +
-                         1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
+  PRINT_BANDWIDTH(t, " -cache line", num * (total_num_cache_lines * 32.0 * 2));
   point_weights[0].flushToHost();
 }
 /* 1}}} */
@@ -180,11 +176,11 @@ void Problem<SOA>::loopGPUHierarchical(MY_SIZE num) {
   HierarchicalColourMemory<SOA> memory(*this, partition_vector);
   TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
   const auto d_memory = memory.getDeviceMemoryOfOneColour();
-  data_t point_weights_out(point_weights.getSize(), point_weights.getDim(),
-                           point_weights.getTypeSize());
-  std::copy(point_weights.begin(), point_weights.end(),
+  data_t point_weights_out(point_weights[0].getSize(),
+                           point_weights[0].getDim(),
+                           point_weights[0].getTypeSize());
+  std::copy(point_weights[0].begin(), point_weights[0].end(),
             point_weights_out.begin());
-  point_weights.initDeviceMemory();
   point_weights_out.initDeviceMemory();
   MY_SIZE total_cache_size = 0; // for bandwidth calculations
   double avg_num_cell_colours = 0;
@@ -194,7 +190,11 @@ void Problem<SOA>::loopGPUHierarchical(MY_SIZE num) {
   for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {
     const typename HierarchicalColourMemory<SOA>::MemoryOfOneColour
         &memory_of_one_colour = memory.colours[i];
-    MY_SIZE num_threads = memory_of_one_colour.cell_list.size() / MESH_DIM;
+    assert(memory.colours[i].cell_list[0].size() %
+               mesh.cell_to_node[0].getDim() ==
+           0);
+    MY_SIZE num_threads = memory_of_one_colour.cell_list[0].size() /
+                          mesh.cell_to_node[0].getDim();
     MY_SIZE num_blocks = static_cast<MY_SIZE>(
         std::ceil(static_cast<double>(num_threads) / block_size));
     total_cache_size += memory_of_one_colour.points_to_be_cached.size();
@@ -211,9 +211,17 @@ void Problem<SOA>::loopGPUHierarchical(MY_SIZE num) {
                   memory_of_one_colour.points_to_be_cached_offsets[j],
               memory_of_one_colour.points_to_be_cached.begin() +
                   memory_of_one_colour.points_to_be_cached_offsets[j + 1],
-              point_weights.getDim(), point_weights.getTypeSize());
+              point_weights[0].getDim(), point_weights[0].getTypeSize());
     }
   }
+  std::vector<const char *> point_data(mesh.numMappings());
+  std::transform(point_weights.begin(), point_weights.end(), point_data.begin(),
+                 [](data_t &a) {
+                   a.initDeviceMemory();
+                   return a.getDeviceData();
+                 });
+  device_data_t d_point_data(device_data_t::create(point_data));
+  device_data_t d_point_stride(device_data_t::create(mesh.numPoints()));
   // -----------------------
   // -  Start computation  -
   // -----------------------
@@ -224,76 +232,64 @@ void Problem<SOA>::loopGPUHierarchical(MY_SIZE num) {
   for (MY_SIZE iteration = 0; iteration < num; ++iteration) {
     for (MY_SIZE colour_ind = 0; colour_ind < memory.colours.size();
          ++colour_ind) {
-      assert(memory.colours[colour_ind].cell_list.size() % MESH_DIM == 0);
-      MY_SIZE num_threads =
-          memory.colours[colour_ind].cell_list.size() / MESH_DIM;
+      MY_SIZE num_threads = memory.colours[colour_ind].cell_list[0].size() /
+                            mesh.cell_to_node[0].getDim();
       MY_SIZE num_blocks = memory.colours[colour_ind].num_cell_colours.size();
       assert(num_blocks == memory.colours[colour_ind].block_offsets.size() - 1);
       // + 32 in case it needs to avoid shared mem bank collisions
-      MY_SIZE cache_size = point_weights.getTypeSize() *
+      MY_SIZE cache_size = point_weights[0].getTypeSize() *
                            (d_memory[colour_ind].shared_size + 32) *
-                           point_weights.getDim();
+                           point_weights[0].getDim();
       TIMER_TOGGLE(timer_calc);
       UserFunc::template call<SOA>(
-          point_weights.getDeviceData(), point_weights_out.getDeviceData(),
+          static_cast<const void **>(d_point_data),
+          point_weights_out.getDeviceData(),
           static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached),
           static_cast<MY_SIZE *>(
               d_memory[colour_ind].points_to_be_cached_offsets),
-          d_memory[colour_ind].cell_weights,
-          static_cast<MY_SIZE *>(d_memory[colour_ind].cell_list),
+          static_cast<const void **>(d_memory[colour_ind].cell_weights.ptrs),
+          static_cast<const MY_SIZE **>(d_memory[colour_ind].cell_list.ptrs),
           static_cast<std::uint8_t *>(d_memory[colour_ind].num_cell_colours),
           static_cast<std::uint8_t *>(d_memory[colour_ind].cell_colours),
           static_cast<MY_SIZE *>(d_memory[colour_ind].block_offsets),
-          num_threads, mesh.numPoints(), num_threads, num_blocks, block_size,
+          num_threads, d_point_stride, num_threads, num_blocks, block_size,
           cache_size);
       TIMER_TOGGLE(timer_calc);
       checkCudaErrors(cudaDeviceSynchronize());
     }
-    assert(point_weights.getTypeSize() % sizeof(float) == 0);
-    MY_SIZE copy_size = mesh.numPoints() * point_weights.getDim() *
-                        point_weights.getTypeSize() / sizeof(float);
+    assert(point_weights[0].getTypeSize() % sizeof(float) == 0);
+    MY_SIZE copy_size = mesh.numPoints(0) * point_weights[0].getDim() *
+                        point_weights[0].getTypeSize() / sizeof(float);
     TIMER_TOGGLE(timer_copy);
     MY_SIZE num_copy_blocks = std::ceil(static_cast<float>(copy_size) / 512.0);
     copyKernel<<<num_copy_blocks, 512>>>(
         reinterpret_cast<float *>(point_weights_out.getDeviceData()),
-        reinterpret_cast<float *>(point_weights.getDeviceData()), copy_size);
+        reinterpret_cast<float *>(point_weights[0].getDeviceData()), copy_size);
     TIMER_TOGGLE(timer_copy);
   }
-  PRINT_BANDWIDTH(
-      timer_calc, "GPU HierarchicalColouring",
-      num * ((2.0 * point_weights.getDim() * mesh.numPoints() +
-              cell_weights.getDim() * mesh.numCells()) *
-                 point_weights.getTypeSize() +
-             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
+  PRINT_BANDWIDTH(timer_calc, "GPU HierarchicalColouring",
+                  num * calcDataSize());
   PRINT_BANDWIDTH(timer_copy, " -copy",
-                  2.0 * num * point_weights.getTypeSize() *
-                      point_weights.getDim() * mesh.numPoints());
-  std::cout << "  reuse factor: "
-            << static_cast<double>(total_cache_size) /
-                   (MESH_DIM * mesh.numCells())
-            << std::endl;
-  std::cout
-      << "  cache/shared mem: "
-      << static_cast<double>(total_cache_size) / total_shared_size
-      << "\n  shared mem reuse factor (total shared / (MeshDim * #cells)): "
-      << static_cast<double>(total_shared_size) / (MESH_DIM * mesh.numCells())
-      << std::endl;
-  std::cout << "  average cache_line / block: "
-            << static_cast<double>(total_num_cache_lines) / total_num_blocks
-            << std::endl;
-  PRINT_BANDWIDTH(
-      timer_calc, " -cache line",
-      num * (total_num_cache_lines * 32.0 * 2 +
-             1.0 * cell_weights.getDim() * mesh.numCells() *
-                 point_weights.getTypeSize() +
-             1.0 * MESH_DIM * mesh.numCells() * sizeof(MY_SIZE)));
+                  2.0 * num * point_weights[0].getTypeSize() *
+                      point_weights[0].getDim() * mesh.numPoints(0));
+  PRINT("reuse factor: " << static_cast<double>(total_cache_size) /
+                                (mesh.cell_to_node[0].getDim() *
+                                 mesh.numCells()));
+  PRINT("cache/shared mem: " << static_cast<double>(total_cache_size) /
+                                    total_shared_size);
+  PRINT("shared mem reuse factor (total shared / (MeshDim * #cells)): "
+        << static_cast<double>(total_shared_size) /
+               (mesh.cell_to_node[0].getDim() * mesh.numCells()));
+  PRINT("average cache_line / block: "
+        << static_cast<double>(total_num_cache_lines) / total_num_blocks);
+  PRINT_BANDWIDTH(timer_calc, " -cache line",
+                  num * (total_num_cache_lines * 32.0 * 2));
   avg_num_cell_colours /= total_num_blocks;
-  std::cout << "  average number of colours used: " << avg_num_cell_colours
-            << std::endl;
+  PRINT("average number of colours used: " << avg_num_cell_colours);
   // ---------------
   // -  Finish up  -
   // ---------------
-  point_weights.flushToHost();
+  point_weights[0].flushToHost();
 }
 /* 1}}} */
 
