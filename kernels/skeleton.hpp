@@ -50,20 +50,24 @@ using StepOMP = StepSeq;
 
 // GPU global kernel
 template <bool SOA>
-__global__ void stepGPUGlobal(const void **_point_data, void *_point_data_out,
-                              const void **_cell_data,
-                              const MY_SIZE **cell_to_node, MY_SIZE num_cells,
-                              MY_SIZE *point_stride, MY_SIZE cell_stride);
+__global__ void
+stepGPUGlobal(const void **__restrict__ _point_data,
+              void *__restrict__ _point_data_out,
+              const void **__restrict__ _cell_data,
+              const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
+              MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride);
 
 struct StepGPUGlobal {
   static constexpr unsigned MESH_DIM = 1;
   static constexpr unsigned POINT_DIM = 1;
   static constexpr unsigned CELL_DIM = 1;
   template <bool SOA>
-  static void
-  call(const void **point_data, void *point_data_out, const void **cell_data,
-       const MY_SIZE **cell_to_node, MY_SIZE num_cells, MY_SIZE *point_stride,
-       MY_SIZE cell_stride, MY_SIZE num_blocks, MY_SIZE block_size) {
+  static void call(const void **__restrict__ point_data,
+                   void *__restrict__ point_data_out,
+                   const void **__restrict__ cell_data,
+                   const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
+                   MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride,
+                   MY_SIZE num_blocks, MY_SIZE block_size) {
     // nvcc doesn't support a static method as a kernel
     stepGPUGlobal<SOA><<<num_blocks, block_size>>>(
         point_data, point_data_out, cell_data, cell_to_node, num_cells,
@@ -72,16 +76,21 @@ struct StepGPUGlobal {
 };
 
 template <bool SOA>
-__global__ void stepGPUGlobal(const void **_point_data, void *_point_data_out,
-                              const void **_cell_data,
-                              const MY_SIZE **cell_to_node, MY_SIZE num_cells,
-                              MY_SIZE *point_stride, MY_SIZE cell_stride) {
+__global__ void
+stepGPUGlobal(const void **__restrict__ _point_data,
+              void *__restrict__ _point_data_out,
+              const void **__restrict__ _cell_data,
+              const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
+              MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
   DataType inc[StepGPUGlobal::MESH_DIM * StepGPUGlobal::POINT_DIM];
   if (ind < num_cells) {
-    const float *point_data0 = reinterpret_cast<const float *>(_point_data[0]);
-    float *point_data_out = reinterpret_cast<float *>(_point_data_out);
-    const float *cell_data0 = reinterpret_cast<const float *>(_cell_data[0]);
+    const float *__restrict__ point_data0 =
+        reinterpret_cast<const float *>(_point_data[0]);
+    float *__restrict__ point_data_out =
+        reinterpret_cast<float *>(_point_data_out);
+    const float *__restrict__ cell_data0 =
+        reinterpret_cast<const float *>(_cell_data[0]);
 
     unsigned used_point_dim = !SOA ? StepGPUGlobal::POINT_DIM : 1;
     const float *point_data0_cur =
@@ -106,12 +115,15 @@ __global__ void stepGPUGlobal(const void **_point_data, void *_point_data_out,
 // GPU hierarchical kernel
 template <bool SOA>
 __global__ void StepGPUHierarchical(
-    const void **_point_data, void *_point_data_out,
-    const MY_SIZE *points_to_be_cached,
-    const MY_SIZE *points_to_be_cached_offsets, const void **_cell_data,
-    const MY_SIZE **cell_to_node, const std::uint8_t *num_cell_colours,
-    const std::uint8_t *cell_colours, const MY_SIZE *block_offsets,
-    MY_SIZE num_cells, const MY_SIZE *point_stride, MY_SIZE cell_stride);
+    const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
+    const MY_SIZE *__restrict__ points_to_be_cached,
+    const MY_SIZE *__restrict__ points_to_be_cached_offsets,
+    const void **__restrict__ _cell_data,
+    const MY_SIZE **__restrict__ cell_to_node,
+    const std::uint8_t *__restrict__ num_cell_colours,
+    const std::uint8_t *__restrict__ cell_colours,
+    const MY_SIZE *__restrict__ block_offsets, MY_SIZE num_cells,
+    const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride);
 
 struct StepGPUHierarchical {
   static constexpr unsigned MESH_DIM = 1;
@@ -119,12 +131,15 @@ struct StepGPUHierarchical {
   static constexpr unsigned CELL_DIM = 1;
   template <bool SOA>
   static void
-  call(const void **point_data, void *point_data_out,
-       const MY_SIZE *points_to_be_cached,
-       const MY_SIZE *points_to_be_cached_offsets, const void **cell_data,
-       const MY_SIZE **cell_to_node, const std::uint8_t *num_cell_colours,
-       const std::uint8_t *cell_colours, const MY_SIZE *block_offsets,
-       MY_SIZE num_cells, const MY_SIZE *point_stride, MY_SIZE cell_stride,
+  call(const void **__restrict__ point_data, void *__restrict__ point_data_out,
+       const MY_SIZE *__restrict__ points_to_be_cached,
+       const MY_SIZE *__restrict__ points_to_be_cached_offsets,
+       const void **__restrict__ cell_data,
+       const MY_SIZE **__restrict__ cell_to_node,
+       const std::uint8_t *__restrict__ num_cell_colours,
+       const std::uint8_t *__restrict__ cell_colours,
+       const MY_SIZE *__restrict__ block_offsets, MY_SIZE num_cells,
+       const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride,
        MY_SIZE num_blocks, unsigned block_size, unsigned cache_size) {
     // nvcc doesn't support a static method as a kernel
     stepGPUHierarchical<<<num_blocks, block_size, cache_size>>>(
@@ -136,25 +151,29 @@ struct StepGPUHierarchical {
 
 template <bool SOA>
 __global__ void StepGPUHierarchical(
-    const void **_point_data, void *_point_data_out,
-    const MY_SIZE *points_to_be_cached,
-    const MY_SIZE *points_to_be_cached_offsets, const void **_cell_data,
-    const MY_SIZE **cell_to_node, const std::uint8_t *num_cell_colours,
-    const std::uint8_t *cell_colours, const MY_SIZE *block_offsets,
-    MY_SIZE num_cells, const MY_SIZE *point_stride, MY_SIZE cell_stride) {
-  const DataType *point_data0 =
+    const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
+    const MY_SIZE *__restrict__ points_to_be_cached,
+    const MY_SIZE *__restrict__ points_to_be_cached_offsets,
+    const void **__restrict__ _cell_data,
+    const MY_SIZE **__restrict__ cell_to_node,
+    const std::uint8_t *__restrict__ num_cell_colours,
+    const std::uint8_t *__restrict__ cell_colours,
+    const MY_SIZE *__restrict__ block_offsets, MY_SIZE num_cells,
+    const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
+  const DataType *__restrict__ point_data0 =
       reinterpret_cast<const DataType *>(_point_data[0]);
-  DataType *point_data_out = reinterpret_cast<DataType *>(_point_data_out);
-  const DataType *cell_data0 =
+  DataType *__restrict__ point_data_out =
+      reinterpret_cast<DataType *>(_point_data_out);
+  const DataType *__restrict__ cell_data0 =
       reinterpret_cast<const DataType *>(_cell_data[0]);
 
-  const float4 *__restrict__ point_data0_float4 =
+  const float4 *__restrict__ __restrict__ point_data0_float4 =
       reinterpret_cast<const float4 *>(point_data0);
-  float4 *__restrict__ point_data_out_float4 =
+  float4 *__restrict__ __restrict__ point_data_out_float4 =
       reinterpret_cast<float4 *>(point_data_out);
-  const double2 *__restrict__ point_data0_double2 =
+  const double2 *__restrict__ __restrict__ point_data0_double2 =
       reinterpret_cast<const double2 *>(point_data0);
-  double2 *__restrict__ point_data_out_double2 =
+  double2 *__restrict__ __restrict__ point_data_out_double2 =
       reinterpret_cast<double2 *>(point_data_out);
 
   constexpr unsigned MESH_DIM = StepGPUHierarchical::MESH_DIM;
