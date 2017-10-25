@@ -4,11 +4,15 @@
 #define USER_FUNCTION_SIGNATURE(fname) void fname
 #endif /* ifndef USER_FUNCTION_SIGNATURE */
 
+#ifndef RESTRICT
+#define RESTRICT
+#endif /* ifndef RESTRICT */ 
+
 template <unsigned PointDim, unsigned CellDim, class DataType, bool SOA>
 USER_FUNCTION_SIGNATURE(mine_func)
-(const DataType *left_point_data, const DataType *right_point_data,
- DataType *left_point_data_out, DataType *right_point_data_out,
- const DataType *cell_data, unsigned point_stride, unsigned cell_stride) {
+(const DataType *RESTRICT left_point_data, const DataType *RESTRICT right_point_data,
+ DataType *RESTRICT left_point_data_out, DataType *RESTRICT right_point_data_out,
+ const DataType *RESTRICT cell_data, unsigned point_stride, unsigned cell_stride) {
   point_stride = SOA ? point_stride : 1;
   static_assert(CellDim == PointDim || CellDim == 1, "CellDim makes no sense");
   for (unsigned point_d = 0; point_d < PointDim; ++point_d) {
@@ -24,11 +28,11 @@ USER_FUNCTION_SIGNATURE(mine_func)
 
 template <unsigned PointDim, unsigned CellDim, class DataType, bool SOA>
 USER_FUNCTION_SIGNATURE(mine_func)
-(const DataType *point_data0, const DataType *point_data1,
- const DataType *point_data2, const DataType *point_data3,
- DataType *point_data_out0, DataType *point_data_out1,
- DataType *point_data_out2, DataType *point_data_out3,
- const DataType *cell_data, unsigned point_stride, unsigned cell_stride) {
+(const DataType *RESTRICT point_data0, const DataType *RESTRICT point_data1,
+ const DataType *RESTRICT point_data2, const DataType *RESTRICT point_data3,
+ DataType *RESTRICT point_data_out0, DataType *RESTRICT point_data_out1,
+ DataType *RESTRICT point_data_out2, DataType *RESTRICT point_data_out3,
+ const DataType *RESTRICT cell_data, unsigned point_stride, unsigned cell_stride) {
   point_stride = SOA ? point_stride : 1;
   static_assert(CellDim == PointDim || CellDim == 1, "CellDim makes no sense");
   for (unsigned point_d = 0; point_d < PointDim; ++point_d) {
@@ -49,3 +53,4 @@ USER_FUNCTION_SIGNATURE(mine_func)
 }
 
 #undef USER_FUNCTION_SIGNATURE
+#undef RESTRICT
