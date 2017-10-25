@@ -190,203 +190,198 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   }
 }
 
-// template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-//          typename DataType = float>
-// void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
-//  std::cout << "========================================" << std::endl;
-//  std::cout << "Partition test" << std::endl;
-//  std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
-//  std::cout << ", MeshDim: " << Problem<SOA>::MESH_DIM;
-//  std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
-//  std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
-//  std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " <<
-//  M;
-//  std::cout << std::endl;
-//  std::cout << "========================================" << std::endl;
+template <unsigned MeshDim, unsigned PointDim = 1, unsigned CellDim = 1,
+          bool SOA = false, typename DataType = float>
+void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
+  std::cout << "========================================" << std::endl;
+  std::cout << "Partition test" << std::endl;
+  std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
+  std::cout << ", MeshDim: " << MeshDim;
+  std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
+  std::cout << (sizeof(DataType) == sizeof(float) ? "float" : "double");
+  std::cout << std::endl << "Iteration: " << num << " size: " << N << ", " << M;
+  std::cout << std::endl;
+  std::cout << "========================================" << std::endl;
 
-//  std::vector<DataType> result1, result2;
-//  DataType maxdiff = 0;
-//#ifdef VERBOSE_TEST
-//  std::vector<MY_SIZE> not_changed, not_changed2;
-//  MY_SIZE ind_max = 0, dim_max = 0;
-//  bool single_change_in_node = false;
-//#endif // VERBOSE_TEST
-//  {
-//    srand(1);
-//    Problem<SOA> problem{
-//        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
-//    assert(problem.mesh.numPoints(0) == N * M);
-//    result1.resize(problem.mesh.numPoints(0) * PointDim);
-//    // save data before test
-//    #pragma omp parallel for
-//    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
-//      for (MY_SIZE d = 0; d < PointDim; ++d) {
-//        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
-//        result1[ind] = problem.point_weights[0].template
-//        operator[]<DataType>(ind);
-//      }
-//    }
+  std::vector<DataType> result1, result2;
+  DataType maxdiff = 0;
+#ifdef VERBOSE_TEST
+  std::vector<MY_SIZE> not_changed, not_changed2;
+  MY_SIZE ind_max = 0, dim_max = 0;
+  bool single_change_in_node = false;
+#endif // VERBOSE_TEST
+  {
+    srand(1);
+    Problem<SOA> problem{
+        StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(N, M)};
+    assert(problem.mesh.numPoints(0) == N * M);
+    result1.resize(problem.mesh.numPoints(0) * PointDim);
+    // save data before test
+    #pragma omp parallel for
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
+        result1[ind] =
+            problem.point_weights[0].template operator[]<DataType>(ind);
+      }
+    }
 
-//    // run algorithm
-//    problem.template loopCPUCellCentredOMP<MINE_KERNEL(StepOMP) < PointDim,
-//                                           CellDim, DataType>> (num);
+    // run algorithm
+    problem.template loopCPUCellCentredOMP<
+        mine::StepOMP<MeshDim, PointDim, CellDim, DataType>>(num);
 
-//    // Partition after
-//    problem.partition(1.01);
-//    problem.reorderToPartition();
-//    problem.renumberPoints();
+    // Partition after
+    problem.partition(1.01);
+    problem.reorderToPartition();
+    problem.renumberPoints();
 
-//#ifdef VERBOSE_TEST
-//    DataType abs_max = 0;
-//#endif // VERBOSE_TEST
-//    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
-//#ifdef VERBOSE_TEST
-//      MY_SIZE value_changed = PointDim;
-//#endif // VERBOSE_TEST
-//      for (MY_SIZE d = 0; d < PointDim; ++d) {
-//        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
-//#ifdef VERBOSE_TEST
-//        if (result1[ind] ==
-//            problem.point_weights[0].template operator[]<DataType>(ind)) {
-//          if (value_changed == PointDim)
-//            not_changed.push_back(i);
-//          value_changed--;
-//        }
-//#endif // VERBOSE_TEST
-//        result1[ind] = problem.point_weights[0].template
-//        operator[]<DataType>(ind);
-//#ifdef VERBOSE_TEST
-//        if (abs_max <
-//            problem.point_weights[0].template operator[]<DataType>(ind)) {
-//          abs_max = problem.point_weights[0].template
-//          operator[]<DataType>(ind);
-//          ind_max = i;
-//          dim_max = d;
-//        }
-//#endif // VERBOSE_TEST
-//      }
-//#ifdef VERBOSE_TEST
-//      if (value_changed != PointDim && value_changed != 0) {
-//        single_change_in_node = true;
-//      }
-//#endif // VERBOSE_TEST
-//    }
-//#ifdef VERBOSE_TEST
-//    std::cout << "Nodes stayed: " << not_changed.size() << "/"
-//              << problem.mesh.numPoints(0) << std::endl;
-//    if (single_change_in_node) {
-//      std::cout << "WARNING node values updated only some dimension."
-//                << std::endl;
-//    }
-//    for (MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i) {
-//      std::cout << "  " << not_changed[i] << std::endl;
-//    }
-//    std::cout << "Abs max: " << abs_max << " node: " << ind_max
-//              << " dim: " << dim_max << std::endl;
-//#endif // VERBOSE_TEST
-//  }
+#ifdef VERBOSE_TEST
+    DataType abs_max = 0;
+#endif // VERBOSE_TEST
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+#ifdef VERBOSE_TEST
+      MY_SIZE value_changed = PointDim;
+#endif // VERBOSE_TEST
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
+#ifdef VERBOSE_TEST
+        if (result1[ind] ==
+            problem.point_weights[0].template operator[]<DataType>(ind)) {
+          if (value_changed == PointDim)
+            not_changed.push_back(i);
+          value_changed--;
+        }
+#endif // VERBOSE_TEST
+        result1[ind] =
+            problem.point_weights[0].template operator[]<DataType>(ind);
+#ifdef VERBOSE_TEST
+        if (abs_max <
+            problem.point_weights[0].template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights[0].template operator[]<DataType>(ind);
+          ind_max = i;
+          dim_max = d;
+        }
+#endif // VERBOSE_TEST
+      }
+#ifdef VERBOSE_TEST
+      if (value_changed != PointDim && value_changed != 0) {
+        single_change_in_node = true;
+      }
+#endif // VERBOSE_TEST
+    }
+#ifdef VERBOSE_TEST
+    std::cout << "Nodes stayed: " << not_changed.size() << "/"
+              << problem.mesh.numPoints(0) << std::endl;
+    if (single_change_in_node) {
+      std::cout << "WARNING node values updated only some dimension."
+                << std::endl;
+    }
+    for (MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i) {
+      std::cout << "  " << not_changed[i] << std::endl;
+    }
+    std::cout << "Abs max: " << abs_max << " node: " << ind_max
+              << " dim: " << dim_max << std::endl;
+#endif // VERBOSE_TEST
+  }
 
-//#ifdef VERBOSE_TEST
-//  MY_SIZE ind_diff = 0, dim_diff = 0;
-//  DataType max = 0;
-//  single_change_in_node = false;
-//#endif // VERBOSE_TEST
-//  {
-//    srand(1);
-//    Problem<SOA> problem{
-//        StructuredProblem<PointDim, CellDim, SOA, DataType>(N, M)};
-//    result2.resize(problem.mesh.numPoints(0) * PointDim);
-//    // save data before test
-//    #pragma omp parallel for
-//    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
-//      for (MY_SIZE d = 0; d < PointDim; ++d) {
-//        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
-//        result2[ind] = problem.point_weights[0].template
-//        operator[]<DataType>(ind);
-//      }
-//    }
-//    // Create partitioning
-//    problem.partition(1.01);
-//    problem.reorderToPartition();
-//    problem.renumberPoints();
+#ifdef VERBOSE_TEST
+  MY_SIZE ind_diff = 0, dim_diff = 0;
+  DataType max = 0;
+  single_change_in_node = false;
+#endif // VERBOSE_TEST
+  {
+    srand(1);
+    Problem<SOA> problem{
+        StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(N, M)};
+    result2.resize(problem.mesh.numPoints(0) * PointDim);
+    // save data before test
+    #pragma omp parallel for
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
+        result2[ind] =
+            problem.point_weights[0].template operator[]<DataType>(ind);
+      }
+    }
+    // Create partitioning
+    problem.partition(1.01);
+    problem.reorderToPartition();
+    problem.renumberPoints();
 
-//    // run algorithm
-//    problem.template loopGPUHierarchical<
-//        MINE_KERNEL(StepGPUHierarchical) < PointDim, CellDim, DataType>>
-//        (num);
+    // run algorithm
+    problem.template loopGPUHierarchical<
+        mine::StepGPUHierarchical<MeshDim, PointDim, CellDim, DataType>>(num);
 
-//#ifdef VERBOSE_TEST
-//    DataType abs_max = 0;
-//#endif // VERBOSE_TEST
+#ifdef VERBOSE_TEST
+    DataType abs_max = 0;
+#endif // VERBOSE_TEST
 
-//    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
-//#ifdef VERBOSE_TEST
-//      MY_SIZE value_changed = PointDim;
-//#endif // VERBOSE_TEST
-//      for (MY_SIZE d = 0; d < PointDim; ++d) {
-//        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
-//#ifdef VERBOSE_TEST
-//        if (result2[ind] ==
-//            problem.point_weights[0].template operator[]<DataType>(ind)) {
-//          if (value_changed == PointDim)
-//            not_changed2.push_back(i);
-//          value_changed--;
-//        }
-//#endif // VERBOSE_TEST
-//        DataType diff =
-//            std::abs(problem.point_weights[0].template
-//            operator[]<DataType>(ind) -
-//                     result1[ind]) /
-//            std::min(result1[ind],
-//                     problem.point_weights[0].template
-//                     operator[]<DataType>(ind));
-//        if (diff >= maxdiff) {
-//          maxdiff = diff;
-//#ifdef VERBOSE_TEST
-//          ind_diff = i;
-//          dim_diff = d;
-//          max = problem.point_weights[0].template operator[]<DataType>(ind);
-//#endif // VERBOSE_TEST
-//        }
-//#ifdef VERBOSE_TEST
-//        if (abs_max <
-//            problem.point_weights[0].template operator[]<DataType>(ind)) {
-//          abs_max = problem.point_weights[0].template
-//          operator[]<DataType>(ind);
-//          ind_max = i;
-//          dim_max = d;
-//        }
-//#endif // VERBOSE_TEST
-//      }
-//#ifdef VERBOSE_TEST
-//      if (value_changed != PointDim && value_changed != 0) {
-//        single_change_in_node = true;
-//      }
-//#endif // VERBOSE_TEST
-//    }
-//#ifdef VERBOSE_TEST
-//    std::cout << "Nodes stayed: " << not_changed2.size() << "/"
-//              << problem.mesh.numPoints(0) << std::endl;
-//    if (single_change_in_node) {
-//      std::cout << "WARNING node values updated only some dimension."
-//                << std::endl;
-//    }
-//    for (MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i) {
-//      std::cout << "  " << not_changed2[i] << std::endl;
-//    }
-//    std::cout << "Abs max: " << abs_max << " node: " << ind_max
-//              << " dim: " << dim_max << std::endl;
-//    std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
-//              << " dim: " << dim_diff << std::endl;
-//    MY_SIZE ind =
-//        index<SOA>(problem.mesh.numPoints(0), ind_diff, PointDim, dim_diff);
-//    std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
-//#endif // VERBOSE_TEST
-//    std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" :
-//    "FAILED")
-//              << std::endl;
-//  }
-//}
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+#ifdef VERBOSE_TEST
+      MY_SIZE value_changed = PointDim;
+#endif // VERBOSE_TEST
+      for (MY_SIZE d = 0; d < PointDim; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
+#ifdef VERBOSE_TEST
+        if (result2[ind] ==
+            problem.point_weights[0].template operator[]<DataType>(ind)) {
+          if (value_changed == PointDim)
+            not_changed2.push_back(i);
+          value_changed--;
+        }
+#endif // VERBOSE_TEST
+        DataType diff =
+            std::abs(
+                problem.point_weights[0].template operator[]<DataType>(ind) -
+                result1[ind]) /
+            std::min(
+                result1[ind],
+                problem.point_weights[0].template operator[]<DataType>(ind));
+        if (diff >= maxdiff) {
+          maxdiff = diff;
+#ifdef VERBOSE_TEST
+          ind_diff = i;
+          dim_diff = d;
+          max = problem.point_weights[0].template operator[]<DataType>(ind);
+#endif // VERBOSE_TEST
+        }
+#ifdef VERBOSE_TEST
+        if (abs_max <
+            problem.point_weights[0].template operator[]<DataType>(ind)) {
+          abs_max = problem.point_weights[0].template operator[]<DataType>(ind);
+          ind_max = i;
+          dim_max = d;
+        }
+#endif // VERBOSE_TEST
+      }
+#ifdef VERBOSE_TEST
+      if (value_changed != PointDim && value_changed != 0) {
+        single_change_in_node = true;
+      }
+#endif // VERBOSE_TEST
+    }
+#ifdef VERBOSE_TEST
+    std::cout << "Nodes stayed: " << not_changed2.size() << "/"
+              << problem.mesh.numPoints(0) << std::endl;
+    if (single_change_in_node) {
+      std::cout << "WARNING node values updated only some dimension."
+                << std::endl;
+    }
+    for (MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i) {
+      std::cout << "  " << not_changed2[i] << std::endl;
+    }
+    std::cout << "Abs max: " << abs_max << " node: " << ind_max
+              << " dim: " << dim_max << std::endl;
+    std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
+              << " dim: " << dim_diff << std::endl;
+    MY_SIZE ind =
+        index<SOA>(problem.mesh.numPoints(0), ind_diff, PointDim, dim_diff);
+    std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
+#endif // VERBOSE_TEST
+    std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
+              << std::endl;
+  }
+}
 
 template <unsigned MeshDim, unsigned PointDim = 1, unsigned CellDim = 1,
           bool SOA = false, typename DataType = float>

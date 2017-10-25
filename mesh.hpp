@@ -295,7 +295,7 @@ public:
 
   Mesh getCellToCellGraph() const {
     std::set<std::pair<MY_SIZE, MY_SIZE>> cell_to_cell;
-    for (unsigned mapping_ind = 0; mapping_ind < cell_to_cell.size();
+    for (unsigned mapping_ind = 0; mapping_ind < cell_to_node.size();
          ++mapping_ind) {
       const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
       const std::multimap<MY_SIZE, MY_SIZE> point_to_cell =

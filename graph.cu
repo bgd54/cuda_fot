@@ -369,13 +369,18 @@ void testReordering() {
   testReordering<4>();
 }
 
-void testPartitioning() {
+template <unsigned MeshDim> void testPartitioning() {
   MY_SIZE num = 500;
   MY_SIZE N = 100, M = 200;
   constexpr unsigned TEST_DIM = 4;
   constexpr unsigned TEST_CELL_DIM = 4;
-  testPartitioning<TEST_DIM, TEST_CELL_DIM, false, float>(num, N, M);
-  testPartitioning<TEST_DIM, TEST_CELL_DIM, true, float>(num, N, M);
+  testPartitioning<MeshDim, TEST_DIM, TEST_CELL_DIM, false, float>(num, N, M);
+  testPartitioning<MeshDim, TEST_DIM, TEST_CELL_DIM, true, float>(num, N, M);
+}
+
+void testPartitioning() {
+  testPartitioning<2>();
+  testPartitioning<4>();
 }
 
 void generateTimesDifferentBlockDims() {
@@ -420,8 +425,8 @@ void generateTimesDifferentBlockDims() {
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
   /*testImplementations();*/
-  testReordering();
-  /*testPartitioning();*/
+  /*testReordering();*/
+  testPartitioning();
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
   return 0;
