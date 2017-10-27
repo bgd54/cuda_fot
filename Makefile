@@ -10,7 +10,7 @@ NVCCFLAGS	:= -arch=sm_60 --use_fast_math
 NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
 #NVCCFLAGS   += --ptxas-options=-v
 
-OPTIMIZATION_FLAGS := -g -lineinfo
+OPTIMIZATION_FLAGS := -g -lineinfo -G
 #OPTIMIZATION_FLAGS := -g -pg -Xcompiler=-fno-inline -lineinfo
 #OPTIMIZATION_FLAGS := -O3 -DNDEBUG
 

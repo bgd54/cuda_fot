@@ -262,6 +262,7 @@ public:
   template <class DataType>
   void readPointData(std::istream &is, unsigned mapping_ind) {
     assert(mapping_ind < mesh.numMappings());
+    assert(point_weights[mapping_ind].getTypeSize() == sizeof(DataType));
     if (!is) {
       throw InvalidInputFile{"point data input", mapping_ind, 0};
     }
@@ -279,6 +280,7 @@ public:
 
   template <class DataType> void readCellData(std::istream &is, unsigned ind) {
     assert(ind < cell_weights.size());
+    assert(cell_weights[ind].getTypeSize() == sizeof(DataType));
     if (!is) {
       throw InvalidInputFile{"cell data input", ind, 0};
     }

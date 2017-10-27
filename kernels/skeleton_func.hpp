@@ -8,12 +8,10 @@
 #define RESTRICT
 #endif /* ifndef RESTRICT */
 
-template <bool SOA>
 USER_FUNCTION_SIGNATURE(const float *RESTRICT point_data,
                         float *RESTRICT point_data_out,
                         const float *RESTRICT cell_data, unsigned point_stride,
                         unsigned cell_stride) {
-  point_stride = SOA ? point_stride : 1;
   // code
 }
 

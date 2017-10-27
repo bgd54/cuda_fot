@@ -23,7 +23,7 @@ struct InvalidInputFile {
 class Mesh {
 public:
   // I assume 64 colour is enough
-  using colourset_t = std::bitset<64>;
+  using colourset_t = std::bitset<128>;
 
 private:
   std::vector<MY_SIZE> num_points;
@@ -74,6 +74,7 @@ public:
       }
       MY_SIZE _num_points, _num_cells;
       is >> _num_points >> _num_cells;
+      num_points[mapping_ind] = _num_points;
       assert(mapping_ind == 0 || num_cells == _num_cells);
       num_cells = _num_cells;
       cell_to_node.emplace_back(
@@ -82,6 +83,8 @@ public:
         for (MY_SIZE j = 0; j < mesh_dim[mapping_ind]; ++j) {
           is >> cell_to_node[mapping_ind].operator[]<MY_SIZE>(
                     mesh_dim[mapping_ind] * i + j);
+          assert(cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+                     mesh_dim[mapping_ind] * i + j) < numPoints(mapping_ind));
         }
         if (!is) {
           throw InvalidInputFile{"graph input",
@@ -115,8 +118,7 @@ public:
     }
     std::vector<std::vector<MY_SIZE>> cell_partitions;
     std::vector<std::vector<colourset_t>> point_colours{};
-    for (size_t mapping_ind = 0; mapping_ind < cell_to_node.size();
-         ++mapping_ind) {
+    for (size_t mapping_ind = 0; mapping_ind < 1; ++mapping_ind) {
       point_colours.push_back(
           std::vector<colourset_t>(numPoints(mapping_ind), 0));
     }
@@ -124,8 +126,7 @@ public:
     colourset_t used_colours;
     for (MY_SIZE i = from; i < to; ++i) {
       colourset_t occupied_colours;
-      for (unsigned mapping_ind = 0; mapping_ind < cell_to_node.size();
-           ++mapping_ind) {
+      for (unsigned mapping_ind = 0; mapping_ind < 1; ++mapping_ind) {
         const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
         for (MY_SIZE j = 0; j < mesh_dim; ++j) {
           occupied_colours |=
@@ -144,8 +145,7 @@ public:
       std::uint8_t colour = getAvailableColour(available_colours, set_sizes);
       cell_partitions[colour].push_back(i);
       colourset_t colourset(1ull << colour);
-      for (size_t mapping_ind = 0; mapping_ind < cell_to_node.size();
-           ++mapping_ind) {
+      for (size_t mapping_ind = 0; mapping_ind < 1; ++mapping_ind) {
         const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
         for (MY_SIZE j = 0; j < mesh_dim; ++j) {
           point_colours[mapping_ind]

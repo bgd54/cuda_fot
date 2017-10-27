@@ -32,14 +32,14 @@ struct StepSeq {
     const float *cell_data0_cur = cell_data0 + ind;
     float inc[MESH_DIM * POINT_DIM];
 
+    MY_SIZE _point_stride0 = SOA ? point_stride[0] : 1;
     // Calling user function
-    user_func_host(point_data0_cur, inc, cell_data0_cur, point_stride[0],
+    user_func_host(point_data0_cur, inc, cell_data0_cur, _point_stride0,
                    cell_stride);
 
     // Adding increment back
-    MY_SIZE _point_stride = SOA ? point_stride[0] : 1;
     for (unsigned i = 0; i < PointDim; ++i) {
-      point_data_out[i * _point_stride] += inc[i];
+      point_data_out_cur[i * _point_stride] += inc[i];
     }
   }
 };
@@ -83,7 +83,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
-  DataType inc[StepGPUGlobal::MESH_DIM * StepGPUGlobal::POINT_DIM];
+  float inc[StepGPUGlobal::MESH_DIM * StepGPUGlobal::POINT_DIM];
   if (ind < num_cells) {
     const float *__restrict__ point_data0 =
         reinterpret_cast<const float *>(_point_data[0]);
@@ -99,15 +99,16 @@ stepGPUGlobal(const void **__restrict__ _point_data,
         point_data_out + used_point_dim * cell_to_node[0][MESH_DIM * ind + 0];
     const float *cell_data0_cur = cell_data[0] + ind;
 
-    // Calling user function
-    user_func_gpu(point_data_cur, point_data_out_cur, cell_data_cur,
-                  point_stride[0], cell_stride);
+    MY_SIZE _point_stride0 = SOA ? point_stride0 : 1;
 
-    // Adding back the increment
-    MY_SIZE _point_stride = SOA ? point_stride[0] : 1;
+    // Calling user function
+    user_func_gpu(point_data_cur, inc, cell_data_cur, _point_stride0,
+                  cell_stride);
+
+// Adding back the increment
 #pragma unroll
-    for (unsigned i = 0; i < PointDim; ++i) {
-      point_data_out_cur[i * _point_stride] = inc[i];
+    for (unsigned i = 0; i < StepGPUGlobal::POINT_DIM; ++i) {
+      point_data_out_cur[i * _point_stride] += inc[i];
     }
   }
 }
@@ -160,6 +161,8 @@ __global__ void StepGPUHierarchical(
     const std::uint8_t *__restrict__ cell_colours,
     const MY_SIZE *__restrict__ block_offsets, MY_SIZE num_cells,
     const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
+  using DataType = float; // there are different algorithms based on the type of
+                          // the cached points
   const DataType *__restrict__ point_data0 =
       reinterpret_cast<const DataType *>(_point_data[0]);
   DataType *__restrict__ point_data_out =
@@ -202,8 +205,7 @@ __global__ void StepGPUHierarchical(
     shared_num_cached_points = num_cached_points;
   }
 
-  extern __shared__ __align__(alignof(DataType)) unsigned char shared[];
-  DataType *point_cache = reinterpret_cast<DataType *>(shared);
+  extern __shared__ DataType point_cache[];
 
   MY_SIZE block_size = block_offsets[bid + 1] - block_offsets[bid];
 
@@ -287,11 +289,12 @@ __global__ void StepGPUHierarchical(
   DataType increment[PointDim * MESH_DIM];
   DataType *point_data0_cur;
   if (tid < block_size) {
-    point_data0_left =
-        point_cache + cell_to_node[0][thread_ind + 0 * num_cells];
+    point_data0_cur = point_cache + cell_to_node[0][thread_ind + 0 * num_cells];
     const DataType *cell_data0_cur = cell_data0 + thread_ind;
-    mine_func_gpu<true>(point_data0_cur, increment + 0 * PointDim,
-                        cell_data0_cur, shared_num_cached_points, cell_stride);
+    // If more than one mapping:
+    // MY_SIZE _point_stride1 = SOA ? point_stride[1] : 1;
+    user_func_gpu(point_data0_cur, increment + 0 * PointDim, cell_data0_cur,
+                  shared_num_cached_points, cell_stride);
   }
 
   __syncthreads();

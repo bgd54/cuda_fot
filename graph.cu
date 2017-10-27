@@ -426,7 +426,8 @@ int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
   /*testImplementations();*/
   /*testReordering();*/
-  testPartitioning();
+  /*testPartitioning();*/
+  testMultipleMapping("./test_files/mmapping/", 1);
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
   return 0;

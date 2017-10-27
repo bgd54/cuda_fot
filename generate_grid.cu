@@ -6,16 +6,18 @@
 
 constexpr float PARTITION_TOLERANCE = 1.001;
 
-void generateOutputs(const std::string &fname, const std::vector<MY_SIZE> &grid_dim, MY_SIZE block_size) {
-  StructuredProblem<> problem (grid_dim, {0,block_size});
+void generateOutputs(const std::string &fname,
+                     const std::vector<MY_SIZE> &grid_dim, MY_SIZE block_size) {
+  StructuredProblem<MESH_DIM_MACRO, 1, 1, false, float> problem(
+      grid_dim, {0, block_size});
   {
-    std::ofstream f (fname);
-    problem.mesh.writeCellList(f);
+    std::ofstream f(fname);
+    problem.mesh.writeCellList(f, 0);
   }
   problem.reorder();
   {
-    std::ofstream f_gps (fname + ".gps");
-    problem.mesh.writeCellList(f_gps);
+    std::ofstream f_gps(fname + ".gps");
+    problem.mesh.writeCellList(f_gps, 0);
   }
   problem.partition(PARTITION_TOLERANCE);
   problem.reorderToPartition();
@@ -23,20 +25,23 @@ void generateOutputs(const std::string &fname, const std::vector<MY_SIZE> &grid_
   {
     std::ofstream f_metis(fname + ".metis");
     std::ofstream f_part(fname + ".metis_part");
-    problem.mesh.writeCellList(f_metis);
+    problem.mesh.writeCellList(f_metis, 0);
     problem.writePartition(f_part);
   }
 }
 
 int main(int argc, char **argv) {
-  if (argc < 2 + (MESH_DIM_MACRO == 4 ? 2 : 3)) {
+  if (argc < 2 + (MESH_DIM_MACRO == 8 ? 3 : 2)) {
     std::cerr << "Usage: " << argv[0] << " <unordered file name> <GridDim1>"
-      << " <GridDim2>" << (MESH_DIM_MACRO == 4 ? "" : 
-          MESH_DIM_MACRO == 8 ? " <GridDim3>" : " [<GridDim3>]") << "\n";
+              << " <GridDim2>"
+              << (MESH_DIM_MACRO == 4 ? "" : MESH_DIM_MACRO == 8
+                                                 ? " <GridDim3>"
+                                                 : " [<GridDim3>]")
+              << "\n";
     return 1;
   }
   MY_SIZE grid_dim_size = std::min(argc - 2, MESH_DIM_MACRO == 4 ? 2 : 3);
-  std::vector<MY_SIZE> grid_dim (grid_dim_size);
+  std::vector<MY_SIZE> grid_dim(grid_dim_size);
   for (size_t i = 0; i < grid_dim.size(); ++i) {
     grid_dim[i] = std::atol(argv[i + 2]);
   }

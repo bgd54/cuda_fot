@@ -2,6 +2,7 @@
 #define TESTS_HPP_HHJ8IWSK
 
 #include "kernels/mine.hpp"
+#include "kernels/mine2.hpp"
 #include "partition.hpp"
 #include "structured_problem.hpp"
 #include <iostream>
@@ -755,6 +756,259 @@ template <unsigned MeshDim> void testImplementations() {
 void testImplementations() {
   testImplementations<2>();
   testImplementations<4>();
+}
+
+/* testMultipleMapping {{{1 */
+template <bool SOA>
+void testMultipleMapping(const std::string &test_files_dir, MY_SIZE num,
+                         implementation_algorithm_t<SOA> algorithm1,
+                         implementation_algorithm_t<SOA> algorithm2) {
+  // both algorithms should be of the mine2 namespace
+  std::cout << "========================================" << std::endl;
+  std::cout << "Multiple mapping test ";
+  std::cout << (SOA ? "SOA" : "AOS");
+  std::cout << std::endl << "Iteration: " << num;
+  std::cout << std::endl;
+  std::cout << "========================================" << std::endl;
+
+  const std::string mesh0_file = test_files_dir + "mesh0";
+  const std::string mesh1_file = test_files_dir + "mesh1";
+  const std::string point_data0 = test_files_dir + "point_data0";
+  const std::string point_data1 = test_files_dir + "point_data1";
+  const std::string cell_data0 = test_files_dir + "cell_data0";
+  const std::string cell_data1 = test_files_dir + "cell_data1";
+  const std::string cell_data2 = test_files_dir + "cell_data2";
+  constexpr unsigned MESH_DIM0 = mine2::MESH_DIM0, MESH_DIM1 = mine2::MESH_DIM1;
+  constexpr unsigned POINT_DIM0 = mine2::POINT_DIM0,
+                     CELL_DIM0 = mine2::CELL_DIM0,
+                     POINT_DIM1 = mine2::POINT_DIM1,
+                     CELL_DIM1 = mine2::CELL_DIM1, CELL_DIM2 = mine2::CELL_DIM2;
+
+  std::vector<float> result1, result2;
+  float maxdiff = 0;
+#ifdef VERBOSE_TEST
+  std::vector<MY_SIZE> not_changed, not_changed2;
+  MY_SIZE ind_max = 0, dim_max = 0;
+  bool single_change_in_node = false;
+#endif // VERBOSE_TEST
+  {
+    srand(1);
+    std::ifstream mesh0_file_stream(mesh0_file);
+    std::ifstream mesh1_file_stream(mesh1_file);
+    Problem<SOA> problem(
+        std::vector<std::istream *>{&mesh0_file_stream, &mesh1_file_stream},
+        std::vector<MY_SIZE>{MESH_DIM0, MESH_DIM1},
+        std::vector<std::pair<MY_SIZE, unsigned>>{{POINT_DIM0, sizeof(float)},
+                                                  {POINT_DIM1, sizeof(float)}},
+        std::vector<std::pair<MY_SIZE, unsigned>>{{CELL_DIM0, sizeof(float)},
+                                                  {CELL_DIM1, sizeof(float)},
+                                                  {CELL_DIM2, sizeof(double)}});
+    result1.resize(problem.mesh.numPoints(0) * POINT_DIM0);
+    std::ifstream point_data0_stream(point_data0);
+    std::ifstream point_data1_stream(point_data1);
+    std::ifstream cell_data0_stream(cell_data0);
+    std::ifstream cell_data1_stream(cell_data1);
+    std::ifstream cell_data2_stream(cell_data2);
+    problem.template readPointData<float>(point_data0_stream, 0);
+    problem.template readPointData<float>(point_data1_stream, 1);
+    problem.template readCellData<float>(cell_data0_stream, 0);
+    problem.template readCellData<float>(cell_data1_stream, 1);
+    problem.template readCellData<double>(cell_data2_stream, 2);
+    // save data before test
+    #pragma omp parallel for
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+      for (MY_SIZE d = 0; d < POINT_DIM0; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, POINT_DIM0, d);
+        result1[ind] = problem.point_weights[0].template operator[]<float>(ind);
+      }
+    }
+
+    // run algorithm
+    (problem.*algorithm1)(num);
+
+#ifdef VERBOSE_TEST
+    float abs_max = 0;
+#endif // VERBOSE_TEST
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+#ifdef VERBOSE_TEST
+      MY_SIZE value_changed = POINT_DIM0;
+#endif // VERBOSE_TEST
+      for (MY_SIZE d = 0; d < POINT_DIM0; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, POINT_DIM0, d);
+#ifdef VERBOSE_TEST
+        if (result1[ind] ==
+            problem.point_weights[0].template operator[]<float>(ind)) {
+          if (value_changed == POINT_DIM0)
+            not_changed.push_back(i);
+          value_changed--;
+        }
+#endif // VERBOSE_TEST
+        result1[ind] = problem.point_weights[0].template operator[]<float>(ind);
+#ifdef VERBOSE_TEST
+        if (abs_max <
+            problem.point_weights[0].template operator[]<float>(ind)) {
+          abs_max = problem.point_weights[0].template operator[]<float>(ind);
+          ind_max = i;
+          dim_max = d;
+        }
+#endif // VERBOSE_TEST
+      }
+#ifdef VERBOSE_TEST
+      if (value_changed != POINT_DIM0 && value_changed != 0) {
+        single_change_in_node = true;
+      }
+#endif // VERBOSE_TEST
+    }
+#ifdef VERBOSE_TEST
+    std::cout << "Nodes stayed: " << not_changed.size() << "/"
+              << problem.mesh.numPoints(0) << std::endl;
+    if (single_change_in_node) {
+      std::cout << "WARNING node values updated only some dimension."
+                << std::endl;
+    }
+    for (MY_SIZE i = 0; i < 10 && i < not_changed.size(); ++i) {
+      std::cout << "  " << not_changed[i] << std::endl;
+    }
+    std::cout << "Abs max: " << abs_max << " node: " << ind_max
+              << " dim: " << dim_max << std::endl;
+#endif // VERBOSE_TEST
+  }
+
+#ifdef VERBOSE_TEST
+  MY_SIZE ind_diff = 0, dim_diff = 0;
+  float max = 0;
+  single_change_in_node = false;
+#endif // VERBOSE_TEST
+  {
+    srand(1);
+    std::ifstream mesh0_file_stream(mesh0_file);
+    std::ifstream mesh1_file_stream(mesh1_file);
+    Problem<SOA> problem(
+        std::vector<std::istream *>{&mesh0_file_stream, &mesh1_file_stream},
+        {MESH_DIM0, MESH_DIM1},
+        {{POINT_DIM0, sizeof(float)}, {POINT_DIM1, sizeof(float)}},
+        {{CELL_DIM0, sizeof(float)},
+         {CELL_DIM1, sizeof(float)},
+         {CELL_DIM2, sizeof(double)}});
+    result1.resize(problem.mesh.numPoints(0) * POINT_DIM0);
+    std::ifstream point_data0_stream(point_data0);
+    std::ifstream point_data1_stream(point_data1);
+    std::ifstream cell_data0_stream(cell_data0);
+    std::ifstream cell_data1_stream(cell_data1);
+    std::ifstream cell_data2_stream(cell_data2);
+    problem.template readPointData<float>(point_data0_stream, 0);
+    problem.template readPointData<float>(point_data1_stream, 1);
+    problem.template readCellData<float>(cell_data0_stream, 0);
+    problem.template readCellData<float>(cell_data1_stream, 1);
+    problem.template readCellData<double>(cell_data2_stream, 2);
+    result2.resize(problem.mesh.numPoints(0) * POINT_DIM0);
+    // save data before test
+    #pragma omp parallel for
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+      for (MY_SIZE d = 0; d < POINT_DIM0; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, POINT_DIM0, d);
+        result2[ind] = problem.point_weights[0].template operator[]<float>(ind);
+      }
+    }
+    // run algorithm
+    (problem.*algorithm2)(num);
+#ifdef VERBOSE_TEST
+    float abs_max = 0;
+#endif // VERBOSE_TEST
+
+    for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+#ifdef VERBOSE_TEST
+      MY_SIZE value_changed = POINT_DIM0;
+#endif // VERBOSE_TEST
+      for (MY_SIZE d = 0; d < POINT_DIM0; ++d) {
+        MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, POINT_DIM0, d);
+#ifdef VERBOSE_TEST
+        if (result2[ind] ==
+            problem.point_weights[0].template operator[]<float>(ind)) {
+          if (value_changed == POINT_DIM0)
+            not_changed2.push_back(i);
+          value_changed--;
+        }
+#endif // VERBOSE_TEST
+        float diff =
+            std::abs(problem.point_weights[0].template operator[]<float>(ind) -
+                     result1[ind]) /
+            std::min(result1[ind],
+                     problem.point_weights[0].template operator[]<float>(ind));
+        if (diff >= maxdiff) {
+          maxdiff = diff;
+#ifdef VERBOSE_TEST
+          ind_diff = i;
+          dim_diff = d;
+          max = problem.point_weights[0].template operator[]<float>(ind);
+#endif // VERBOSE_TEST
+        }
+#ifdef VERBOSE_TEST
+        if (abs_max <
+            problem.point_weights[0].template operator[]<float>(ind)) {
+          abs_max = problem.point_weights[0].template operator[]<float>(ind);
+          ind_max = i;
+          dim_max = d;
+        }
+#endif // VERBOSE_TEST
+      }
+#ifdef VERBOSE_TEST
+      if (value_changed != POINT_DIM0 && value_changed != 0) {
+        single_change_in_node = true;
+      }
+#endif // VERBOSE_TEST
+    }
+#ifdef VERBOSE_TEST
+    std::cout << "Nodes stayed: " << not_changed2.size() << "/"
+              << problem.mesh.numPoints(0) << std::endl;
+    if (single_change_in_node) {
+      std::cout << "WARNING node values updated only some dimension."
+                << std::endl;
+    }
+    for (MY_SIZE i = 0; i < 10 && i < not_changed2.size(); ++i) {
+      std::cout << "  " << not_changed2[i] << std::endl;
+    }
+    std::cout << "Abs max: " << abs_max << " node: " << ind_max
+              << " dim: " << dim_max << std::endl;
+    std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
+              << " dim: " << dim_diff << std::endl;
+    MY_SIZE ind =
+        index<SOA>(problem.mesh.numPoints(0), ind_diff, POINT_DIM0, dim_diff);
+    std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
+#endif // VERBOSE_TEST
+    std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
+              << std::endl;
+  }
+}
+/* 1}}} */
+
+void testMultipleMapping(const std::string &fname, MY_SIZE num) {
+  std::cout << "========================================" << std::endl;
+  std::cout << "#         Sequential - OpenMP          #" << std::endl;
+  testMultipleMapping<false>(
+      fname, num, &Problem<false>::loopCPUCellCentred<mine2::StepSeq>,
+      &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>);
+  testMultipleMapping<true>(
+      fname, num, &Problem<true>::loopCPUCellCentred<mine2::StepSeq>,
+      &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>);
+
+  std::cout << "========================================" << std::endl;
+  std::cout << "#         OpenMP - GPU Global          #" << std::endl;
+  testMultipleMapping<false>(
+      fname, num, &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<false>::loopGPUCellCentred<mine2::StepGPUGlobal>);
+  testMultipleMapping<true>(
+      fname, num, &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<true>::loopGPUCellCentred<mine2::StepGPUGlobal>);
+
+  std::cout << "========================================" << std::endl;
+  std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
+  testMultipleMapping<false>(
+      fname, num, &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<false>::loopGPUHierarchical<mine2::StepGPUHierarchical>);
+  testMultipleMapping<true>(
+      fname, num, &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<true>::loopGPUHierarchical<mine2::StepGPUHierarchical>);
 }
 
 #endif /* end of include guard: TESTS_HPP_HHJ8IWSK */

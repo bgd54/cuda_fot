@@ -161,7 +161,8 @@ private:
     const Mesh &mesh = problem.mesh;
     const data_t &cell_to_node = mesh.cell_to_node[0];
     const MY_SIZE mesh_dim = cell_to_node.getDim();
-    colourset_t colourset(1ull << colour_ind);
+    colourset_t colourset{};
+    colourset.set(colour_ind);
     MemoryOfOneColour &colour = colours[colour_ind];
     const MY_SIZE colour_from = colour.cell_colours.size();
     std::map<MY_SIZE, std::vector<std::pair<MY_SIZE, MY_SIZE>>>
@@ -326,7 +327,7 @@ private:
             colours[i].cell_list[0].size() /
             problem.mesh.cell_to_node[0].getDim() * type_size);
       }
-      for (MY_SIZE d = 0; d < problem.cell_weights[0].getDim(); ++d) {
+      for (MY_SIZE d = 0; d < problem.cell_weights[cw_ind].getDim(); ++d) {
         for (MY_SIZE i = 0; i < problem.mesh.numCells(); ++i) {
           MY_SIZE colour = block_colours[i];
           MY_SIZE glob_index = index<true>(

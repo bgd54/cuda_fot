@@ -40,3 +40,5 @@ test_scotch
 apply_reorder
 visualization/*.vtk
 visualization/testVTK
+test_files/*
+!test_files/gen*.py
