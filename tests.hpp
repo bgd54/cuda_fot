@@ -390,7 +390,7 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
                     implementation_algorithm_t<SOA> algorithm1,
                     implementation_algorithm_t<SOA> algorithm2) {
   std::cout << "========================================" << std::endl;
-  std::cout << "Two implementation test" << std::endl;
+  std::cout << "Reordering test" << std::endl;
   std::cout << "PointDim: " << PointDim << ", CellDim: " << CellDim;
   std::cout << ", MeshDim: " << MeshDim << std::endl;
   std::cout << (SOA ? ", SOA" : ", AOS") << ", Precision: ";
@@ -400,10 +400,12 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   std::cout << "========================================" << std::endl;
 
   std::vector<DataType> result1, result2;
-  std::vector<MY_SIZE> not_changed;
   DataType maxdiff = 0;
+#ifdef VERBOSE_TEST
+  std::vector<MY_SIZE> not_changed;
   MY_SIZE ind_max = 0, dim_max = 0;
   bool single_change_in_node = false;
+#endif  // VERBOSE_TEST
   {
     srand(1);
     Problem<SOA> problem{
@@ -425,30 +427,41 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
     // run algorithm
     (problem.*algorithm1)(num);
 
+#ifdef VERBOSE_TEST
     DataType abs_max = 0;
+#endif  // VERBOSE_TEST
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
+#ifdef VERBOSE_TEST
       MY_SIZE value_changed = PointDim;
+#endif  // VERBOSE_TEST
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
+#ifdef VERBOSE_TEST
         if (result1[ind] ==
             problem.point_weights[0].template operator[]<DataType>(ind)) {
           if (value_changed == PointDim)
             not_changed.push_back(i);
           value_changed--;
         }
+#endif  // VERBOSE_TEST
         result1[ind] =
             problem.point_weights[0].template operator[]<DataType>(ind);
+#ifdef VERBOSE_TEST
         if (abs_max <
             problem.point_weights[0].template operator[]<DataType>(ind)) {
           abs_max = problem.point_weights[0].template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
+#endif  // VERBOSE_TEST
       }
+#ifdef VERBOSE_TEST
       if (value_changed != PointDim && value_changed != 0) {
         single_change_in_node = true;
       }
+#endif  // VERBOSE_TEST
     }
+#ifdef VERBOSE_TEST
     std::cout << "Nodes stayed: " << not_changed.size() << "/"
               << problem.mesh.numPoints(0) << std::endl;
     if (single_change_in_node) {
@@ -460,11 +473,14 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
     }
     std::cout << "Abs max: " << abs_max << " node: " << ind_max
               << " dim: " << dim_max << std::endl;
+#endif  // VERBOSE_TEST
   }
 
+#ifdef VERBOSE_TEST
   MY_SIZE ind_diff = 0, dim_diff = 0;
   DataType max = 0;
   single_change_in_node = false;
+#endif  // VERBOSE_TEST
   {
     srand(1);
     Problem<SOA> problem{
@@ -485,7 +501,9 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
     // reorder after
     problem.reorder();
 
+#ifdef VERBOSE_TEST
     DataType abs_max = 0;
+#endif  // VERBOSE_TEST
 
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
@@ -499,18 +517,23 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
                 problem.point_weights[0].template operator[]<DataType>(ind));
         if (diff >= maxdiff) {
           maxdiff = diff;
+#ifdef VERBOSE_TEST
           ind_diff = i;
           dim_diff = d;
           max = problem.point_weights[0].template operator[]<DataType>(ind);
+#endif  // VERBOSE_TEST
         }
+#ifdef VERBOSE_TEST
         if (abs_max <
             problem.point_weights[0].template operator[]<DataType>(ind)) {
           abs_max = problem.point_weights[0].template operator[]<DataType>(ind);
           ind_max = i;
           dim_max = d;
         }
+#endif  // VERBOSE_TEST
       }
     }
+#ifdef VERBOSE_TEST
     std::cout << "Abs max: " << abs_max << " node: " << ind_max
               << " dim: " << dim_max << std::endl;
     std::cout << "MAX DIFF: " << maxdiff << " node: " << ind_diff
@@ -518,6 +541,7 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
     MY_SIZE ind =
         index<SOA>(problem.mesh.numPoints(0), ind_diff, PointDim, dim_diff);
     std::cout << "Values: " << result1[ind] << " / " << max << std::endl;
+#endif  // VERBOSE_TEST
     std::cout << "Test considered " << (maxdiff < 0.00001 ? "PASSED" : "FAILED")
               << std::endl;
   }
@@ -761,6 +785,7 @@ void testImplementations() {
 /* testMultipleMapping {{{1 */
 template <bool SOA>
 void testMultipleMapping(const std::string &test_files_dir, MY_SIZE num,
+                         bool reorder, bool partition,
                          implementation_algorithm_t<SOA> algorithm1,
                          implementation_algorithm_t<SOA> algorithm2) {
   // both algorithms should be of the mine2 namespace
@@ -820,6 +845,14 @@ void testMultipleMapping(const std::string &test_files_dir, MY_SIZE num,
       for (MY_SIZE d = 0; d < POINT_DIM0; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, POINT_DIM0, d);
         result1[ind] = problem.point_weights[0].template operator[]<float>(ind);
+      }
+    }
+    if (reorder) {
+      problem.reorder();
+      if (partition) {
+        problem.partition(1.01);
+        problem.reorderToPartition();
+        problem.renumberPoints();
       }
     }
 
@@ -912,6 +945,16 @@ void testMultipleMapping(const std::string &test_files_dir, MY_SIZE num,
     }
     // run algorithm
     (problem.*algorithm2)(num);
+
+    if (reorder || partition) {
+      problem.reorder();
+      if (partition) {
+        problem.partition(1.01);
+        problem.reorderToPartition();
+        problem.renumberPoints();
+      }
+    }
+
 #ifdef VERBOSE_TEST
     float abs_max = 0;
 #endif // VERBOSE_TEST
@@ -986,28 +1029,56 @@ void testMultipleMapping(const std::string &fname, MY_SIZE num) {
   std::cout << "========================================" << std::endl;
   std::cout << "#         Sequential - OpenMP          #" << std::endl;
   testMultipleMapping<false>(
-      fname, num, &Problem<false>::loopCPUCellCentred<mine2::StepSeq>,
+      fname, num, false, false,
+      &Problem<false>::loopCPUCellCentred<mine2::StepSeq>,
       &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>);
   testMultipleMapping<true>(
-      fname, num, &Problem<true>::loopCPUCellCentred<mine2::StepSeq>,
+      fname, num, false, false,
+      &Problem<true>::loopCPUCellCentred<mine2::StepSeq>,
       &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>);
 
   std::cout << "========================================" << std::endl;
   std::cout << "#         OpenMP - GPU Global          #" << std::endl;
   testMultipleMapping<false>(
-      fname, num, &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      fname, num, false, false,
+      &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
       &Problem<false>::loopGPUCellCentred<mine2::StepGPUGlobal>);
   testMultipleMapping<true>(
-      fname, num, &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      fname, num, false, false,
+      &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
       &Problem<true>::loopGPUCellCentred<mine2::StepGPUGlobal>);
 
   std::cout << "========================================" << std::endl;
   std::cout << "#       OpenMP - GPU Hierarchical      #" << std::endl;
   testMultipleMapping<false>(
-      fname, num, &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      fname, num, false, false,
+      &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
       &Problem<false>::loopGPUHierarchical<mine2::StepGPUHierarchical>);
   testMultipleMapping<true>(
-      fname, num, &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      fname, num, false, false,
+      &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<true>::loopGPUHierarchical<mine2::StepGPUHierarchical>);
+
+  std::cout << "========================================" << std::endl;
+  std::cout << "#          Reordering (OpenMP)         #" << std::endl;
+  testMultipleMapping<false>(
+      fname, num, true, false,
+      &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<false>::loopCPUCellCentredOMP<mine2::StepOMP>);
+  testMultipleMapping<true>(
+      fname, num, true, false,
+      &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>,
+      &Problem<true>::loopCPUCellCentredOMP<mine2::StepOMP>);
+
+  std::cout << "========================================" << std::endl;
+  std::cout << "#    Partitioning (GPU Hierarchical)   #" << std::endl;
+  testMultipleMapping<false>(
+      fname, num, true, true,
+      &Problem<false>::loopGPUHierarchical<mine2::StepGPUHierarchical>,
+      &Problem<false>::loopGPUHierarchical<mine2::StepGPUHierarchical>);
+  testMultipleMapping<true>(
+      fname, num, true, true,
+      &Problem<true>::loopGPUHierarchical<mine2::StepGPUHierarchical>,
       &Problem<true>::loopGPUHierarchical<mine2::StepGPUHierarchical>);
 }
 

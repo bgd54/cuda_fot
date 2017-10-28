@@ -100,8 +100,8 @@ public:
   Mesh &operator=(const Mesh &) = delete;
 
   Mesh(Mesh &&other)
-      : num_points{other.num_points},
-        cell_to_node{std::move(other.cell_to_node)} {}
+      : num_points{other.num_points}, cell_to_node{
+                                          std::move(other.cell_to_node)} {}
 
   Mesh &operator=(Mesh &&rhs) {
     std::swap(num_points, rhs.num_points);
@@ -130,9 +130,8 @@ public:
         const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
         for (MY_SIZE j = 0; j < mesh_dim; ++j) {
           occupied_colours |=
-              point_colours[mapping_ind]
-                           [cell_to_node[mapping_ind].operator[]<MY_SIZE>(
-                               mesh_dim *i + j)];
+              point_colours[mapping_ind][cell_to_node[mapping_ind].
+                                         operator[]<MY_SIZE>(mesh_dim *i + j)];
         }
       }
       colourset_t available_colours = ~occupied_colours & used_colours;
@@ -148,9 +147,9 @@ public:
       for (size_t mapping_ind = 0; mapping_ind < 1; ++mapping_ind) {
         const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
         for (MY_SIZE j = 0; j < mesh_dim; ++j) {
-          point_colours[mapping_ind]
-                       [cell_to_node[mapping_ind].operator[]<MY_SIZE>(
-                           mesh_dim *i + j)] |= colourset;
+          point_colours[mapping_ind][cell_to_node[mapping_ind].
+                                     operator[]<MY_SIZE>(mesh_dim *i + j)] |=
+              colourset;
         }
       }
       ++set_sizes[colour];
@@ -201,8 +200,8 @@ public:
     assert(point_permutation.size() == numPoints(0));
     renumberPoints(point_permutation, 0);
     const unsigned mesh_dim = cell_to_node[0].getDim();
-    std::vector<std::vector<MY_SIZE>> cell_tmp(numCells(),
-                                               std::vector<MY_SIZE>(mesh_dim));
+    std::vector<std::vector<MY_SIZE>> cell_tmp(
+        numCells(), std::vector<MY_SIZE>(mesh_dim + 1));
     for (MY_SIZE i = 0; i < numCells(); ++i) {
       cell_tmp[i][mesh_dim] = i;
       std::copy(cell_to_node[0].begin<MY_SIZE>() + mesh_dim * i,
