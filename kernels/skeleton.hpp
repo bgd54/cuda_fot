@@ -11,6 +11,15 @@ namespace skeleton {
 #define USER_FUNCTION_SIGNATURE __device__ void user_func_gpu
 #include "skeleton_func.hpp"
 
+/**
+ * SOA-AOS layouts:
+ * - the layout of `point_data` is controlled by the SOA template parameter
+ *   - if it's SOA, `point_stride` is the stride, otherwise that doesn't matter
+ * - the layout of `cell_data` is always SOA with stride `point_stride`
+ * - the layout of `cell_to_node` is AOS except for the hierarchical case, where
+ *   it is AOS
+ */
+
 // Sequential kernel
 struct StepSeq {
   static constexpr unsigned MESH_DIM = 1;
