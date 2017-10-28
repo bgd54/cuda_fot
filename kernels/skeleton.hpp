@@ -28,7 +28,8 @@ struct StepSeq {
   template <bool SOA>
   static void call(const void **_point_data, void *_point_data_out,
                    const void **_cell_data, const MY_SIZE **cell_to_node,
-                   MY_SIZE ind, unsigned *point_stride, unsigned cell_stride) {
+                   MY_SIZE ind, const unsigned *point_stride,
+                   unsigned cell_stride) {
     const float *point_data0 = reinterpret_cast<const float *>(_point_data[0]);
     float *point_data_out = reinterpret_cast<float *>(_point_data_out);
     const float *cell_data0 = reinterpret_cast<const float *>(_cell_data[0]);
@@ -121,7 +122,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
 
 // GPU hierarchical kernel
 template <bool SOA>
-__global__ void StepGPUHierarchical(
+__global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
@@ -146,7 +147,7 @@ struct StepGPUHierarchical {
        const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride,
        MY_SIZE num_blocks, unsigned block_size, unsigned cache_size) {
     // nvcc doesn't support a static method as a kernel
-    stepGPUHierarchical<<<num_blocks, block_size, cache_size>>>(
+    stepGPUHierarchical<SOA><<<num_blocks, block_size, cache_size>>>(
         point_data, point_data_out, points_to_be_cached,
         points_to_be_cached_offsets, cell_data, cell_to_node, num_cell_colours,
         cell_colours, block_offsets, num_cells, point_stride, cell_stride);

@@ -36,8 +36,9 @@
 *.bak*
 graph
 test
-test_scotch
+generate_grid
 apply_reorder
+res_calc
 visualization/*.vtk
 visualization/testVTK
 test_files/*
