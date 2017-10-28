@@ -11,6 +11,9 @@ namespace skeleton {
 #define USER_FUNCTION_SIGNATURE __device__ void user_func_gpu
 #include "skeleton_func.hpp"
 
+static constexpr unsigned MESH_DIM = 1;
+static constexpr unsigned POINT_DIM = 1;
+static constexpr unsigned CELL_DIM = 1;
 /**
  * SOA-AOS layouts:
  * - the layout of `point_data` is controlled by the SOA template parameter
@@ -22,9 +25,6 @@ namespace skeleton {
 
 // Sequential kernel
 struct StepSeq {
-  static constexpr unsigned MESH_DIM = 1;
-  static constexpr unsigned POINT_DIM = 1;
-  static constexpr unsigned CELL_DIM = 1;
   template <bool SOA>
   static void call(const void **_point_data, void *_point_data_out,
                    const void **_cell_data, const MY_SIZE **cell_to_node,
@@ -67,9 +67,6 @@ stepGPUGlobal(const void **__restrict__ _point_data,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride);
 
 struct StepGPUGlobal {
-  static constexpr unsigned MESH_DIM = 1;
-  static constexpr unsigned POINT_DIM = 1;
-  static constexpr unsigned CELL_DIM = 1;
   template <bool SOA>
   static void call(const void **__restrict__ point_data,
                    void *__restrict__ point_data_out,
@@ -92,7 +89,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
-  float inc[StepGPUGlobal::MESH_DIM * StepGPUGlobal::POINT_DIM];
+  float inc[MESH_DIM * POINT_DIM];
   if (ind < num_cells) {
     const float *__restrict__ point_data0 =
         reinterpret_cast<const float *>(_point_data[0]);
@@ -101,7 +98,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
     const float *__restrict__ cell_data0 =
         reinterpret_cast<const float *>(_cell_data[0]);
 
-    unsigned used_point_dim = !SOA ? StepGPUGlobal::POINT_DIM : 1;
+    unsigned used_point_dim = !SOA ? POINT_DIM : 1;
     const float *point_data0_cur =
         point_data0 + used_point_dim * cell_to_node[0][MESH_DIM * ind + 0];
     float *point_data_out_cur =
@@ -116,7 +113,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
 
 // Adding back the increment
 #pragma unroll
-    for (unsigned i = 0; i < StepGPUGlobal::POINT_DIM; ++i) {
+    for (unsigned i = 0; i < POINT_DIM; ++i) {
       point_data_out_cur[i * _point_stride] += inc[i];
     }
   }
@@ -136,9 +133,6 @@ __global__ void StepGPUHierarchical(
     const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride);
 
 struct StepGPUHierarchical {
-  static constexpr unsigned MESH_DIM = 1;
-  static constexpr unsigned POINT_DIM = 1;
-  static constexpr unsigned CELL_DIM = 1;
   template <bool SOA>
   static void
   call(const void **__restrict__ point_data, void *__restrict__ point_data_out,
@@ -179,16 +173,16 @@ __global__ void StepGPUHierarchical(
   const DataType *__restrict__ cell_data0 =
       reinterpret_cast<const DataType *>(_cell_data[0]);
 
-  const float4 *__restrict__ __restrict__ point_data0_float4 =
+  const float4 *__restrict__ point_data0_float4 =
       reinterpret_cast<const float4 *>(point_data0);
-  float4 *__restrict__ __restrict__ point_data_out_float4 =
+  float4 *__restrict__ point_data_out_float4 =
       reinterpret_cast<float4 *>(point_data_out);
-  const double2 *__restrict__ __restrict__ point_data0_double2 =
+  const double2 *__restrict__ point_data0_double2 =
       reinterpret_cast<const double2 *>(point_data0);
-  double2 *__restrict__ __restrict__ point_data_out_double2 =
+  double2 *__restrict__ point_data_out_double2 =
       reinterpret_cast<double2 *>(point_data_out);
 
-  constexpr unsigned MESH_DIM = StepGPUHierarchical::MESH_DIM;
+  constexpr unsigned MESH_DIM = MESH_DIM;
 
   const MY_SIZE bid = blockIdx.x;
   const MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;
