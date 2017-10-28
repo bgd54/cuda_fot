@@ -336,5 +336,21 @@ template <class T> inline void AOStoSOA(data_t &container) {
   AOStoSOA<T *>(container.begin<T>(), container.end<T>(), container.getDim());
 }
 
+/* copyKernel {{{1 */
+__global__ void copyKernel(const float *__restrict__ a, float *__restrict__ b,
+                           MY_SIZE size) {
+  int tid = blockDim.x * blockIdx.x + threadIdx.x;
+  const float4 *__restrict__ a_ = reinterpret_cast<const float4 *>(a);
+  float4 *__restrict__ b_ = reinterpret_cast<float4 *>(b);
+  if ((tid + 1) * 4 <= size) {
+    b_[tid] = a_[tid];
+  } else {
+    for (MY_SIZE i = 0; i + tid * 4 < size; ++i) {
+      b[4 * tid + i] = a[4 * tid + i];
+    }
+  }
+}
+/* 1}}} */
+
 #endif /* end of guard DATA_T_HPP */
 // vim:set et sw=2 ts=2 fdm=marker:
