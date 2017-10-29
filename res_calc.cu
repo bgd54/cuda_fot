@@ -55,23 +55,24 @@ void writeData(const std::string &output_file, const Problem<SOA> &problem) {
 template <bool SOA>
 void runProblem(const std::string &input_dir, MY_SIZE num,
                 const std::string &output_dir) {
-  Problem<SOA> problem = initProblem<SOA>(input_dir);
-  std::string fname_base = output_dir + "out_" + (SOA ? "SOA" : "AOS") + "_";
+  Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+  std::string fname_base = output_dir + "/out_" + (SOA ? "SOA" : "AOS") + "_";
 
-  readData(input_dir, problem);
+  readData(input_dir + "/", problem);
   problem.template loopCPUCellCentred<res_calc::StepSeq>(num);
   writeData(fname_base + "seq", problem);
 
-  readData(input_dir, problem);
+  readData(input_dir + "/", problem);
   problem.template loopCPUCellCentredOMP<res_calc::StepOMP>(num);
   writeData(fname_base + "omp", problem);
 
-  readData(input_dir, problem);
+  readData(input_dir + "/", problem);
   problem.template loopGPUCellCentred<res_calc::StepGPUGlobal>(num);
   writeData(fname_base + "glob", problem);
 
-  /* readData(input_dir, problem); */
-  /* problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num); */
+  /* readData(input_dir + "/", problem); */
+  /* problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+   */
   /* writeData(fname_base + "hier", problem); */
 }
 

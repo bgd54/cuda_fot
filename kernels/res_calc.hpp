@@ -123,11 +123,11 @@ stepGPUGlobal(const void **__restrict__ _point_data,
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
   if (ind < num_cells) {
     const double *point_data_x =
-        reinterpret_cast<const double *>(_point_data[0]);
-    const double *point_data_q =
         reinterpret_cast<const double *>(_point_data[1]);
-    const double *point_data_adt =
+    const double *point_data_q =
         reinterpret_cast<const double *>(_point_data[2]);
+    const double *point_data_adt =
+        reinterpret_cast<const double *>(_point_data[3]);
     double *point_data_out_res = reinterpret_cast<double *>(_point_data_out);
 
     unsigned used_point_dim_x = !SOA ? X_DIM : 1;
