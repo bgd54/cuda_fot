@@ -49,14 +49,14 @@ struct StepSeq {
         used_point_dim_x * cell_to_node[1][MAPPING_DIM * ind + 1];
     const double *point_data_q1 =
         point_data_q +
-        used_point_dim_q * cell_to_node[2][MAPPING_DIM * ind + 0];
+        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 0];
     const double *point_data_q2 =
         point_data_q +
-        used_point_dim_q * cell_to_node[2][MAPPING_DIM * ind + 1];
+        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 1];
     const double *point_data_adt1 =
-        point_data_adt + cell_to_node[3][MAPPING_DIM * ind + 0];
+        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 0];
     const double *point_data_adt2 =
-        point_data_adt + cell_to_node[3][MAPPING_DIM * ind + 1];
+        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 1];
 
     double *point_data_out_cur_res1 =
         point_data_out_res +
@@ -141,14 +141,14 @@ stepGPUGlobal(const void **__restrict__ _point_data,
         used_point_dim_x * cell_to_node[1][MAPPING_DIM * ind + 1];
     const double *point_data_q1 =
         point_data_q +
-        used_point_dim_q * cell_to_node[2][MAPPING_DIM * ind + 0];
+        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 0];
     const double *point_data_q2 =
         point_data_q +
-        used_point_dim_q * cell_to_node[2][MAPPING_DIM * ind + 1];
+        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 1];
     const double *point_data_adt1 =
-        point_data_adt + cell_to_node[3][MAPPING_DIM * ind + 0];
+        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 0];
     const double *point_data_adt2 =
-        point_data_adt + cell_to_node[3][MAPPING_DIM * ind + 1];
+        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 1];
 
     double *point_data_out_cur_res1 =
         point_data_out_res +
@@ -298,9 +298,9 @@ __global__ void StepGPUHierarchical(
         point_data_q +
         used_point_dim_q * cell_to_node[2][thread_ind + 1 * num_cells];
     const double *point_data_adt1 =
-        point_data_adt + cell_to_node[3][thread_ind + 0 * num_cells];
+        point_data_adt + cell_to_node[2][thread_ind + 0 * num_cells];
     const double *point_data_adt2 =
-        point_data_adt + cell_to_node[3][thread_ind + 1 * num_cells];
+        point_data_adt + cell_to_node[2][thread_ind + 1 * num_cells];
 
     // x
     MY_SIZE _point_stride0 = SOA ? point_stride[1] : 1;
