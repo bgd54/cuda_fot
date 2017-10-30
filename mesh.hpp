@@ -253,12 +253,13 @@ public:
             new_ind++;
       }
     }
-    assert(std::all_of(permutation.begin(), permutation.end(),
-                       [&permutation](MY_SIZE a) { return a < permutation.size();
-                       }) ||
-           std::none_of(
+    assert(std::all_of(
                permutation.begin(), permutation.end(),
-               [&permutation](MY_SIZE a) { return a == permutation.size() - 1; }));
+               [&permutation](MY_SIZE a) { return a < permutation.size(); }) ||
+           std::none_of(permutation.begin(), permutation.end(),
+                        [&permutation](MY_SIZE a) {
+                          return a == permutation.size() - 1;
+                        }));
     std::for_each(permutation.begin(), permutation.end(),
                   [&permutation](MY_SIZE &a) {
                     if (a == permutation.size()) {
