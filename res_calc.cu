@@ -73,6 +73,60 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
 }
 
 template <bool SOA>
+void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
+  std::cout << "========================================" << std::endl;
+  std::cout << "Multiple mapping test ";
+  std::cout << (SOA ? "SOA" : "AOS");
+  std::cout << std::endl << "Iteration: " << num;
+  std::cout << " Partition: " << std::boolalpha << partition;
+  std::cout << std::endl;
+  std::cout << "========================================" << std::endl;
+  Problem<SOA> problem1 = initProblem<SOA>(input_dir + "/");
+  readData(input_dir + "/", problem1);
+  Problem<SOA> problem2 = initProblem<SOA>(input_dir + "/");
+  readData(input_dir + "/", problem1);
+
+  problem1.reorder();
+  if (partition) {
+    problem1.partition(1.001);
+    problem1.reorderToPartition();
+    problem1.renumberPoints();
+  }
+
+  problem1.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+  problem2.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+
+  double max_diff = 0;
+  const MY_SIZE num_points = problem1.mesh.numPoints(0);
+  for (MY_SIZE i = 0; i < num_points; ++i) {
+    for (unsigned d = 0; d < res_calc::RES_DIM; ++d) {
+      const MY_SIZE ind1 = index<SOA>(
+          num_points, problem1.applied_permutation[i], res_calc::RES_DIM, d);
+      const MY_SIZE ind2 = index<SOA>(num_points, i, res_calc::RES_DIM, d);
+      const double data1 =
+          problem1.point_weights[0].template operator[]<double>(ind1);
+      const double data2 =
+          problem2.point_weights[0].template operator[]<double>(ind2);
+      const double diff = std::abs(data1 - data2) /
+                          (std::min(std::abs(data1), std::abs(data2)) + 1e-6);
+      if (max_diff < diff) {
+        max_diff = diff;
+      }
+    }
+  }
+
+  std::cout << "Test considered " << (max_diff < 1e-5 ? "PASSED" : "FAILED")
+            << std::endl;
+}
+
+void testReordering(const std::string &input_dir, MY_SIZE num) {
+  testReordering<false>(input_dir, num, false);
+  testReordering<false>(input_dir, num, true);
+  testReordering<true>(input_dir, num, false);
+  testReordering<true>(input_dir, num, true);
+}
+
+template <bool SOA>
 void measurement(const std::string &input_dir, MY_SIZE num) {
 
   {
@@ -139,6 +193,7 @@ int mainTest(int argc, char *argv[]) {
     return 1;
   }
   runProblem(argv[1], std::atol(argv[3]), argv[2]);
+  testReordering(argv[1], std::atol(argv[3]));
   return 0;
 }
 
