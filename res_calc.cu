@@ -40,16 +40,7 @@ void readData(const std::string &input_dir, Problem<SOA> &problem) {
 template <bool SOA>
 void writeData(const std::string &output_file, const Problem<SOA> &problem) {
   std::ofstream f(output_file);
-  const MY_SIZE num_points = problem.mesh.numPoints(0);
-  const MY_SIZE dim = problem.point_weights[0].getDim();
-  for (MY_SIZE i = 0; i < num_points; ++i) {
-    for (MY_SIZE j = 0; j < dim; ++j) {
-      const MY_SIZE ind = index<SOA>(num_points, i, dim, j);
-      f << (j ? " " : "")
-        << problem.point_weights[0].template operator[]<double>(ind);
-    }
-    f << std::endl;
-  }
+  problem.template writePointData<double>(f);
 }
 
 template <bool SOA>
@@ -81,16 +72,74 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
   runProblem<true>(input_dir, num, output_dir);
 }
 
-void printUsage(const char *program_name) {
+template <bool SOA>
+void measurement(const std::string &input_dir, MY_SIZE num) {
+
+  {
+    std::cout << "Running non reordered" << std::endl;
+    Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+    readData(input_dir + "/", problem);
+    std::cout << "Data read." << std::endl;
+    problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+  }
+
+  {
+    std::cout << "Running GPS reordered" << std::endl;
+    Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+    readData(input_dir + "/", problem);
+    TIMER_START(timer_gps);
+    problem.reorder();
+    TIMER_PRINT(timer_gps, "reordering");
+    problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+  }
+
+  {
+    std::cout << "Running partitioned" << std::endl;
+    Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+    readData(input_dir + "/", problem);
+    TIMER_START(timer_metis);
+    problem.reorder();
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+    TIMER_PRINT(timer_metis, "partitioning");
+    problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+  }
+}
+
+void measurement(const std::string &input_dir, MY_SIZE num) {
+  std::cout << "AOS" << std::endl;
+  measurement<false>(input_dir, num);
+  std::cout << "SOA" << std::endl;
+  measurement<true>(input_dir, num);
+}
+
+void printUsageTest(const char *program_name) {
   std::cerr << "Usage: " << program_name
             << " <input_dir> <output_dir> <iteration_number>" << std::endl;
 }
 
-int main(int argc, char *argv[]) {
+void printUsageMeasure(const char *program_name) {
+  std::cerr << "Usage: " << program_name << " <input_dir> <iteration_number>"
+            << std::endl;
+}
+
+int mainMeasure(int argc, char *argv[]) {
+  if (argc < 3) {
+    printUsageMeasure(argv[0]);
+    return 1;
+  }
+  measurement(argv[1], std::atol(argv[2]));
+  return 0;
+}
+
+int mainTest(int argc, char *argv[]) {
   if (argc < 4) {
-    printUsage(argv[0]);
+    printUsageTest(argv[0]);
     return 1;
   }
   runProblem(argv[1], std::atol(argv[3]), argv[2]);
   return 0;
 }
+
+int main(int argc, char *argv[]) { return mainTest(argc, argv); }
