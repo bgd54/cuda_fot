@@ -100,8 +100,8 @@ public:
   Mesh &operator=(const Mesh &) = delete;
 
   Mesh(Mesh &&other)
-      : num_points{other.num_points}, cell_to_node{
-                                          std::move(other.cell_to_node)} {}
+      : num_points{other.num_points},
+        cell_to_node{std::move(other.cell_to_node)} {}
 
   Mesh &operator=(Mesh &&rhs) {
     std::swap(num_points, rhs.num_points);
@@ -130,8 +130,9 @@ public:
         const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
         for (MY_SIZE j = 0; j < mesh_dim; ++j) {
           occupied_colours |=
-              point_colours[mapping_ind][cell_to_node[mapping_ind].
-                                         operator[]<MY_SIZE>(mesh_dim *i + j)];
+              point_colours[mapping_ind]
+                           [cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+                               mesh_dim *i + j)];
         }
       }
       colourset_t available_colours = ~occupied_colours & used_colours;
@@ -147,9 +148,9 @@ public:
       for (size_t mapping_ind = 0; mapping_ind < 1; ++mapping_ind) {
         const unsigned mesh_dim = cell_to_node[mapping_ind].getDim();
         for (MY_SIZE j = 0; j < mesh_dim; ++j) {
-          point_colours[mapping_ind][cell_to_node[mapping_ind].
-                                     operator[]<MY_SIZE>(mesh_dim *i + j)] |=
-              colourset;
+          point_colours[mapping_ind]
+                       [cell_to_node[mapping_ind].operator[]<MY_SIZE>(
+                           mesh_dim *i + j)] |= colourset;
         }
       }
       ++set_sizes[colour];
@@ -253,19 +254,15 @@ public:
             new_ind++;
       }
     }
-    assert(std::all_of(
-               permutation.begin(), permutation.end(),
-               [&permutation](MY_SIZE a) { return a < permutation.size(); }) ||
-           std::none_of(permutation.begin(), permutation.end(),
-                        [&permutation](MY_SIZE a) {
-                          return a == permutation.size() - 1;
-                        }));
     std::for_each(permutation.begin(), permutation.end(),
-                  [&permutation](MY_SIZE &a) {
+                  [&permutation, &new_ind](MY_SIZE &a) {
                     if (a == permutation.size()) {
-                      --a;
+                      a = new_ind++;
                     }
                   });
+    assert(std::all_of(
+        permutation.begin(), permutation.end(),
+        [&permutation](MY_SIZE a) { return a < permutation.size(); }));
     return permutation;
   }
 
@@ -365,6 +362,10 @@ public:
         [&point_to_partition](MY_SIZE a, MY_SIZE b) {
           if (point_to_partition[a].size() != point_to_partition[b].size()) {
             return point_to_partition[a].size() > point_to_partition[b].size();
+          } else if (point_to_partition[b].empty()) {
+            return true;
+          } else if (point_to_partition[a].empty()) {
+            return false;
           } else {
             return point_to_partition[a] > point_to_partition[b];
           }
