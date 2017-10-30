@@ -70,10 +70,9 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
   problem.template loopGPUCellCentred<res_calc::StepGPUGlobal>(num);
   writeData(fname_base + "glob", problem);
 
-  /* readData(input_dir + "/", problem); */
-  /* problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
-   */
-  /* writeData(fname_base + "hier", problem); */
+  readData(input_dir + "/", problem);
+  problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+  writeData(fname_base + "hier", problem);
 }
 
 void runProblem(const std::string &input_dir, MY_SIZE num,

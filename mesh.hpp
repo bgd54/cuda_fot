@@ -253,10 +253,19 @@ public:
             new_ind++;
       }
     }
-    // Currently not supporting isolated points
     assert(std::all_of(
-        permutation.begin(), permutation.end(),
-        [&permutation](MY_SIZE a) { return a < permutation.size(); }));
+               permutation.begin(), permutation.end(),
+               [&permutation](MY_SIZE a) { return a < permutation.size(); }) ||
+           std::none_of(permutation.begin(), permutation.end(),
+                        [&permutation](MY_SIZE a) {
+                          return a == permutation.size() - 1;
+                        }));
+    std::for_each(permutation.begin(), permutation.end(),
+                  [&permutation](MY_SIZE &a) {
+                    if (a == permutation.size()) {
+                      --a;
+                    }
+                  });
     return permutation;
   }
 
@@ -268,7 +277,10 @@ public:
            numPoints(mapping_ind));
     std::for_each(cell_to_node[mapping_ind].begin<MY_SIZE>(),
                   cell_to_node[mapping_ind].end<MY_SIZE>(),
-                  [&permutation](MY_SIZE &a) { a = permutation[a]; });
+                  [&permutation](MY_SIZE &a) {
+                    a = permutation[a];
+                    assert(a < permutation.size());
+                  });
     return permutation;
   }
 

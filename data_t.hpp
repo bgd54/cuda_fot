@@ -129,9 +129,10 @@ void data_t::flushToDevice() {
 }
 
 void data_t::initDeviceMemory() {
-  assert(data_d == nullptr);
   MY_SIZE bytes = size * dim * type_size;
-  checkCudaErrors(cudaMalloc((void **)&data_d, bytes));
+  if (data_d == nullptr) {
+    checkCudaErrors(cudaMalloc((void **)&data_d, bytes));
+  }
   checkCudaErrors(cudaMemcpy(data_d, data, bytes, cudaMemcpyHostToDevice));
 }
 

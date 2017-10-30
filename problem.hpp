@@ -27,6 +27,7 @@ template <bool SOA = false> struct Problem {
   std::vector<data_t> cell_weights;
   const MY_SIZE block_size; // GPU block size
   std::vector<MY_SIZE> partition_vector;
+  std::vector<MY_SIZE> applied_permutation;
 
   /* ctor/dtor {{{1 */
 protected:
@@ -107,9 +108,8 @@ public:
         for (std::size_t i = 0; i < colour.size(); ++i) {
           std::copy_n(mesh.cell_to_node[mapping_ind].begin<MY_SIZE>() +
                           mesh_dim * colour[i],
-                      mesh_dim,
-                      d_cell_lists.back().back().begin<MY_SIZE>() +
-                          mesh_dim * i);
+                      mesh_dim, d_cell_lists.back().back().begin<MY_SIZE>() +
+                                    mesh_dim * i);
         }
         d_cell_lists.back().back().initDeviceMemory();
         _cell_to_node.push_back(
@@ -347,9 +347,8 @@ public:
     for (MY_SIZE i = 0; i < num; ++i) {
       stepCPUCellCentred<UserFunc>(temp);
       TIMER_TOGGLE(t);
-      std::copy_n(temp,
-                  point_weights[0].getTypeSize() * mesh.numPoints(0) *
-                      point_weights[0].getDim(),
+      std::copy_n(temp, point_weights[0].getTypeSize() * mesh.numPoints(0) *
+                            point_weights[0].getDim(),
                   point_weights[0].begin());
       TIMER_TOGGLE(t);
     }
@@ -431,6 +430,15 @@ public:
     for (data_t &cw : cell_weights) {
       reorderDataInverse<true>(cw, inverse_permutation);
     }
+    if (applied_permutation.empty()) {
+      applied_permutation = std::vector<MY_SIZE>(point_permutation.begin(),
+                                                 point_permutation.end());
+    } else {
+      assert(applied_permutation.size() == point_permutation.size());
+      reorderDataInverseVectorSOA<MY_SIZE, SCOTCH_Num>(
+          {applied_permutation.begin()}, applied_permutation.end(),
+          point_permutation);
+    }
   }
 
   void partition(float tolerance, idx_t options[METIS_NOPTIONS] = NULL) {
@@ -465,6 +473,16 @@ public:
           mesh.getPointToPartition(partition_vector, mapping_ind));
       mesh.renumberPoints(permutation, mapping_ind);
       reorderData<SOA>(point_weights[mapping_ind], permutation);
+      if (mapping_ind == 0) {
+        if (applied_permutation.empty()) {
+          applied_permutation = std::move(permutation);
+        } else {
+          assert(applied_permutation.size() == permutation.size());
+          reorderDataInverseVectorSOA<MY_SIZE, MY_SIZE>(
+              {applied_permutation.begin()}, applied_permutation.end(),
+              permutation);
+        }
+      }
     }
   }
 
@@ -514,6 +532,21 @@ public:
       if (!is) {
         throw InvalidInputFile{"point data input", mapping_ind, i};
       }
+    }
+  }
+
+  template <class DataType> void writePointData(std::ostream &os) const {
+    const MY_SIZE num_points = mesh.numPoints(0);
+    const MY_SIZE dim = point_weights[0].getDim();
+    for (MY_SIZE i = 0; i < num_points; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE p =
+            applied_permutation.empty() ? i : applied_permutation[i];
+        const MY_SIZE ind = index<SOA>(num_points, p, dim, j);
+        os << (j ? " " : "")
+           << point_weights[0].template operator[]<double>(ind);
+      }
+      os << std::endl;
     }
   }
 

@@ -214,7 +214,7 @@ struct StepGPUHierarchical {
 };
 
 template <bool SOA>
-__global__ void StepGPUHierarchical(
+__global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
