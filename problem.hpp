@@ -400,8 +400,8 @@ public:
         stepCPUCellCentredOMP<UserFunc>(partition[c], temp);
       }
       TIMER_TOGGLE(t);
-      // Copy back from temp
-      #pragma omp parallel for
+    // Copy back from temp
+    #pragma omp parallel for
       for (MY_SIZE e = 0;
            e < point_weights[0].getTypeSize() * point_weights[0].getSize() *
                    point_weights[0].getDim();
@@ -435,9 +435,11 @@ public:
                                                  point_permutation.end());
     } else {
       assert(applied_permutation.size() == point_permutation.size());
-      reorderDataInverseVectorSOA<MY_SIZE, SCOTCH_Num>(
-          {applied_permutation.begin()}, applied_permutation.end(),
-          point_permutation);
+      reorderDataInverseVectorSOA<SCOTCH_Num, MY_SIZE>(
+          {point_permutation.begin()}, point_permutation.end(),
+          applied_permutation);
+      std::copy(point_permutation.begin(), point_permutation.end(),
+                applied_permutation.begin());
     }
   }
 
@@ -478,9 +480,12 @@ public:
           applied_permutation = std::move(permutation);
         } else {
           assert(applied_permutation.size() == permutation.size());
+          /* reorderDataInverseVectorSOA<MY_SIZE, MY_SIZE>( */
+          /*     {applied_permutation.begin()}, applied_permutation.end(), */
+          /*     permutation); */
           reorderDataInverseVectorSOA<MY_SIZE, MY_SIZE>(
-              {applied_permutation.begin()}, applied_permutation.end(),
-              permutation);
+              {permutation.begin()}, permutation.end(), applied_permutation);
+          std::swap(applied_permutation, permutation);
         }
       }
     }

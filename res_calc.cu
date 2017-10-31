@@ -75,7 +75,7 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
 template <bool SOA>
 void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
   std::cout << "========================================" << std::endl;
-  std::cout << "Multiple mapping test ";
+  std::cout << "Airfoil reordering test ";
   std::cout << (SOA ? "SOA" : "AOS");
   std::cout << std::endl << "Iteration: " << num;
   std::cout << " Partition: " << std::boolalpha << partition;
@@ -84,7 +84,7 @@ void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
   Problem<SOA> problem1 = initProblem<SOA>(input_dir + "/");
   readData(input_dir + "/", problem1);
   Problem<SOA> problem2 = initProblem<SOA>(input_dir + "/");
-  readData(input_dir + "/", problem1);
+  readData(input_dir + "/", problem2);
 
   problem1.reorder();
   if (partition) {
