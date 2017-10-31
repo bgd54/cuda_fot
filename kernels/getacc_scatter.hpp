@@ -1,8 +1,8 @@
-#ifndef RES_CALC_HPP_BTXZV4YZ
-#define RES_CALC_HPP_BTXZV4YZ
+#ifndef GETACC_SCATTER_HPP_BTXZV4YZ
+#define GETACC_SCATTER_HPP_BTXZV4YZ
 #include <algorithm>
 
-namespace res_calc {
+namespace getacc {
 // Sequential user function
 #define USER_FUNCTION_SIGNATURE inline void user_func_host
 #include "getacc_scatter_func.hpp"
@@ -237,42 +237,27 @@ __global__ void stepGPUHierarchical(
       reinterpret_cast<const DataType *>(_cell_data[4]);
 
   DataType *__restrict__ point_data_ndarea =
-      reinterpret_cast<const DataType *>(_point_data[1]);
+      reinterpret_cast<DataType *>(_point_data[1]);
   DataType *__restrict__ point_data_ndub =
-      reinterpret_cast<const DataType *>(_point_data[2]);
+      reinterpret_cast<DataType *>(_point_data[2]);
   DataType *__restrict__ point_data_dvb =
-      reinterpret_cast<const DataType *>(_point_data[3]);
-  DataType *__restrict__ point_data_out_ndmass =
+      reinterpret_cast<DataType *>(_point_data[3]);
+  DataType *__restrict__ point_data_ndmass =
       reinterpret_cast<DataType *>(_point_data_out);
-//-------------------------------------------------------
-  double2 *__restrict__ point_data_out_double2 =
-      reinterpret_cast<double2 *>(point_data_out_ndmass);
 
   const MY_SIZE bid = blockIdx.x;
   const MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;
   const MY_SIZE tid = threadIdx.x;
-
   const MY_SIZE cache_points_offset = points_to_be_cached_offsets[bid];
   const MY_SIZE num_cached_points =
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
-  MY_SIZE shared_num_cached_points;
-  if (32 % RES_DIM == 0) {
-    // Currently, shared memory bank conflict avoidance works only if 32 is
-    // divisible by RES_DIM
-    MY_SIZE needed_offset = 32 / RES_DIM;
-    if (num_cached_points % 32 <= needed_offset) {
-      shared_num_cached_points =
-          num_cached_points - (num_cached_points % 32) + needed_offset;
-    } else {
-      shared_num_cached_points =
-          num_cached_points - (num_cached_points % 32) + 32 + needed_offset;
-    }
-    assert(shared_num_cached_points >= num_cached_points);
-  } else {
-    shared_num_cached_points = num_cached_points;
-  }
+  MY_SIZE shared_num_cached_points = num_cached_points;
 
   extern __shared__ DataType point_cache[];
+  DataType * cache_data_ndmass = point_cache;
+  DataType * cache_data_ndarea = point_cache + shared_num_cache_datad_points;
+  DataType * cache_data_ndub = point_cache + 2* shared_num_cache_datad_points;
+  DataType * cache_data_ndvb = point_cache + 3* shared_num_cache_datad_points;
 
   MY_SIZE block_size = block_offsets[bid + 1] - block_offsets[bid];
 
@@ -286,15 +271,23 @@ __global__ void stepGPUHierarchical(
   // Cache in
   // ELM NEM KELL
   // Computation
-  DataType increment[RES_DIM * MAPPING_DIM];
+  DataType inc[MAPPING_DIM*4];
+  #pragma unroll
+  for(int i =0; i< MAPPING_DIM*4; ++i)
+    inc[i]=0;
   DataType *point_data0_res1, *point_data0_res2;
+  int map0idx, map1idx, map2idx, map3idx;
   if (tid < block_size) {
 
-    const double *cur_cnmass = cnmass + ind; 
-    const double *cur_rho = rho + ind; 
-    const double *cur_cnwt = cnwt + ind; 
-    const double *cur_cnfx = cnfx + ind; 
-    const double *cur_cnfy = cnfy + ind; 
+    map0idx = cell_to_node[0][thread_ind + num_cells * 0];
+    map1idx = cell_to_node[0][thread_ind + num_cells * 1];
+    map2idx = cell_to_node[0][thread_ind + num_cells * 2];
+    map3idx = cell_to_node[0][thread_ind + num_cells * 3];
+    const double *cur_cnmass = cnmass + thread_ind; 
+    const double *cur_rho = rho + thread_ind; 
+    const double *cur_cnwt = cnwt + thread_ind; 
+    const double *cur_cnfx = cnfx + thread_ind; 
+    const double *cur_cnfy = cnfy + thread_ind; 
 
 
     user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
@@ -306,9 +299,12 @@ __global__ void stepGPUHierarchical(
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = tid; i < shared_num_cached_points * RES_DIM;
+  for (MY_SIZE i = tid; i < shared_num_cached_points;
        i += blockDim.x) {
-    point_cache[i] = 0;
+    cache_data_ndmass[i] = 0;
+    cache_data_ndarea[i] = 0;
+    cache_data_ndub[i] = 0;
+    cache_data_ndvb[i] = 0;
   }
 
   __syncthreads();
@@ -317,59 +313,47 @@ __global__ void stepGPUHierarchical(
   for (std::uint8_t cur_colour = 0; cur_colour < num_cell_colours[bid];
        ++cur_colour) {
     if (our_colour == cur_colour) {
-      for (unsigned i = 0; i < RES_DIM; ++i) {
-        point_data0_res1[i * shared_num_cached_points] +=
-            increment[i + 0 * RES_DIM];
-        point_data0_res2[i * shared_num_cached_points] +=
-            increment[i + 1 * RES_DIM];
-      }
+      cache_data_ndmass[map0idx] += inc[0];
+      cache_data_ndmass[map1idx] += inc[1];
+      cache_data_ndmass[map2idx] += inc[2];
+      cache_data_ndmass[map3idx] += inc[3];
+      cache_data_ndarea[map0idx] += inc[MAPPING_DIM + 0];
+      cache_data_ndarea[map1idx] += inc[MAPPING_DIM + 1];
+      cache_data_ndarea[map2idx] += inc[MAPPING_DIM + 2];
+      cache_data_ndarea[map3idx] += inc[MAPPING_DIM + 3];
+      cache_data_ndub[map0idx] += inc[2*MAPPING_DIM + 0];
+      cache_data_ndub[map1idx] += inc[2*MAPPING_DIM + 1];
+      cache_data_ndub[map2idx] += inc[2*MAPPING_DIM + 2];
+      cache_data_ndub[map3idx] += inc[2*MAPPING_DIM + 3];
+      cache_data_ndvb[map0idx] += inc[3*MAPPING_DIM + 0];
+      cache_data_ndvb[map1idx] += inc[3*MAPPING_DIM + 1];
+      cache_data_ndvb[map2idx] += inc[3*MAPPING_DIM + 2];
+      cache_data_ndvb[map3idx] += inc[3*MAPPING_DIM + 3];
+
     }
     __syncthreads();
   }
 
   // Cache out
-  if (!SOA) {
-    if (!SOA && RES_DIM % 2 == 0 && std::is_same<DataType, double>::value) {
-      for (MY_SIZE i = tid; i < RES_DIM * num_cached_points / 2;
-           i += blockDim.x) {
-        MY_SIZE point_ind = i * 2 / RES_DIM;
-        MY_SIZE d = (i * 2) % RES_DIM;
-        MY_SIZE g_ind = index<SOA>(
-            point_stride[0],
-            points_to_be_cached[cache_points_offset + point_ind], RES_DIM, d);
-        MY_SIZE c_ind0 =
-            index<true>(shared_num_cached_points, point_ind, RES_DIM, d + 0);
-        MY_SIZE c_ind1 =
-            index<true>(shared_num_cached_points, point_ind, RES_DIM, d + 1);
-        double2 result = point_data_out_double2[g_ind / 2];
-        result.x += point_cache[c_ind0];
-        result.y += point_cache[c_ind1];
-        point_data_out_double2[g_ind / 2] = result;
-      }
-    }
-  } else {
-    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
-      MY_SIZE g_point_to_be_cached =
-          points_to_be_cached[cache_points_offset + i];
-      DataType result[RES_DIM];
-#pragma unroll
-      for (MY_SIZE d = 0; d < RES_DIM; ++d) {
-        MY_SIZE write_g_ind =
-            index<SOA>(point_stride[0], g_point_to_be_cached, RES_DIM, d);
-        MY_SIZE write_c_ind =
-            index<true>(shared_num_cached_points, i, RES_DIM, d);
-
-        result[d] = point_data_out_res[write_g_ind] + point_cache[write_c_ind];
-      }
-#pragma unroll
-      for (MY_SIZE d = 0; d < RES_DIM; ++d) {
-        MY_SIZE write_g_ind =
-            index<SOA>(point_stride[0], g_point_to_be_cached, RES_DIM, d);
-        point_data_out_res[write_g_ind] = result[d];
-      }
-    }
+  for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
+    MY_SIZE point_ind = i;
+    MY_SIZE d = 0;
+    MY_SIZE g_ind = index<SOA>(
+        point_stride[0],
+        points_to_be_cached[cache_points_offset + point_ind], INC_DIM, d);
+    MY_SIZE c_ind =
+        index<true>(shared_num_cached_points, point_ind, INC_DIM, d);
+    DataType result = point_data_ndmass[g_ind] + cache_data_ndmass[c_ind];
+    point_data_ndmass[g_ind] = result;
+    result = point_data_ndarea[g_ind] + cache_data_ndarea[c_ind];
+    point_data_ndarea[g_ind] = result;
+    result = point_data_ndub[g_ind] + cache_data_ndub[c_ind];
+    point_data_ndub[g_ind] = result;
+    result = point_data_ndvb[g_ind] + cache_data_ndvb[c_ind];
+    point_data_ndvb[g_ind] = result;
   }
+
 }
 }
-#endif /* end of include guard: RES_CALC_HPP_BTXZV4YZ */
+#endif /* end of include guard: GETACC_SCATTER_HPP_BTXZV4YZ */
 // vim:set et sts=2 sw=2 ts=2:
