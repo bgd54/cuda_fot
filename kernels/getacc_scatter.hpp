@@ -44,57 +44,44 @@ struct StepSeq {
     const double *cell_data_cnfy = reinterpret_cast<const double *>(_cell_data[4]);
 
     const double *cur_cnmass = cell_data_cnmass + ind; 
-    const double *cur_cnmass = cell_data_rho + ind; 
-    const double *cur_cnmass = cell_data_cnwt + ind; 
-    const double *cur_cnmass = cell_data_cnfx + ind; 
-    const double *cur_cnmass = cell_data_cnfy + ind; 
+    const double *cur_rho = cell_data_rho + ind; 
+    const double *cur_cnwt = cell_data_cnwt + ind; 
+    const double *cur_cnfx = cell_data_cnfx + ind; 
+    const double *cur_cnfy = cell_data_cnfy + ind; 
    
+    int map0idx = cell_to_node[0][MAPPING_DIM * ind + 0];
+    int map1idx = cell_to_node[0][MAPPING_DIM * ind + 1];
+    int map2idx = cell_to_node[0][MAPPING_DIM * ind + 2];
+    int map3idx = cell_to_node[0][MAPPING_DIM * ind + 3];
 
-    unsigned used_point_dim_INC = 1;
 
-    double *point_data_cur_ndarea1 =
-        point_data_ndarea + cell_to_node[0][MAPPING_DIM * ind + 0];
-//_____________________________________________________________________
+    double inc[MAPPING_DIM * INC_DIM * 4/*4 incremented array*/];
+    for(int i = 0; i < MAPPING_DIM*INC_DIM*4; ++i)
+      inc[i] = 0;
 
-    const double *point_data_x2 =
-        point_data_x +
-        used_point_dim_x * cell_to_node[1][MAPPING_DIM * ind + 1];
-    const double *point_data_q1 =
-        point_data_q +
-        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 0];
-    const double *point_data_q2 =
-        point_data_q +
-        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 1];
-    const double *point_data_adt1 =
-        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 0];
-    const double *point_data_adt2 =
-        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 1];
-
-    double *point_data_out_cur_res1 =
-        point_data_out_res +
-        used_point_dim_RES * cell_to_node[0][MAPPING_DIM * ind + 0];
-    double *point_data_out_cur_res2 =
-        point_data_out_res +
-        used_point_dim_RES * cell_to_node[0][MAPPING_DIM * ind + 1];
-
-    double inc[MAPPING_DIM * RES_DIM];
-
-    // x
-    MY_SIZE _point_stride0 = SOA ? point_stride[1] : 1;
-    // q
-    MY_SIZE _point_stride1 = SOA ? point_stride[2] : 1;
-    // res
-    MY_SIZE _point_stride3 = SOA ? point_stride[0] : 1;
     // Calling user function
-    user_func_host(point_data_x1, point_data_x2, point_data_q1, point_data_q2,
-                   point_data_adt1, point_data_adt2, inc, &inc[RES_DIM],
-                   _point_stride0, _point_stride1);
+    user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
+                   inc + 0, inc + 1,inc + 2,inc + 3,inc + 4,inc + 5,inc + 6,
+                   inc + 7,inc + 8,inc + 9,inc + 10,inc + 11,inc + 12,
+                   inc + 13,inc + 14,inc + 15,cell_stride);
 
     // Adding increment back
-    for (unsigned i = 0; i < RES_DIM; ++i) {
-      point_data_out_cur_res1[i * _point_stride3] += inc[i];
-      point_data_out_cur_res2[i * _point_stride3] += inc[i + RES_DIM];
-    }
+    point_data_out_ndmass[map0idx] += inc[0];
+    point_data_out_ndmass[map1idx] += inc[1];
+    point_data_out_ndmass[map2idx] += inc[2];
+    point_data_out_ndmass[map3idx] += inc[3];
+    point_data_ndarea[map0idx] += inc[MAPPING_DIM + 0];
+    point_data_ndarea[map1idx] += inc[MAPPING_DIM + 1];
+    point_data_ndarea[map2idx] += inc[MAPPING_DIM + 2];
+    point_data_ndarea[map3idx] += inc[MAPPING_DIM + 3];
+    point_data_ndub[map0idx] += inc[2*MAPPING_DIM + 0];
+    point_data_ndub[map1idx] += inc[2*MAPPING_DIM + 1];
+    point_data_ndub[map2idx] += inc[2*MAPPING_DIM + 2];
+    point_data_ndub[map3idx] += inc[2*MAPPING_DIM + 3];
+    point_data_ndvb[map0idx] += inc[3*MAPPING_DIM + 0];
+    point_data_ndvb[map1idx] += inc[3*MAPPING_DIM + 1];
+    point_data_ndvb[map2idx] += inc[3*MAPPING_DIM + 2];
+    point_data_ndvb[map3idx] += inc[3*MAPPING_DIM + 3];
   }
 };
 
@@ -134,60 +121,58 @@ stepGPUGlobal(const void **__restrict__ _point_data,
               MY_SIZE *__restrict__ point_stride, MY_SIZE) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
   if (ind < num_cells) {
-    const double *point_data_x =
+    double *point_data_ndarea =
         reinterpret_cast<const double *>(_point_data[1]);
-    const double *point_data_q =
+    double *point_data_ndub =
         reinterpret_cast<const double *>(_point_data[2]);
-    const double *point_data_adt =
+    double *point_data_ndvb =
         reinterpret_cast<const double *>(_point_data[3]);
-    double *point_data_out_res = reinterpret_cast<double *>(_point_data_out);
+    double *point_data_out_ndmass = reinterpret_cast<double *>(_point_data_out);
+    const double *cell_data_cnmass = reinterpret_cast<const double *>(_cell_data[0]);
+    const double *cell_data_rho = reinterpret_cast<const double *>(_cell_data[1]);
+    const double *cell_data_cnwt = reinterpret_cast<const double *>(_cell_data[2]);
+    const double *cell_data_cnfx = reinterpret_cast<const double *>(_cell_data[3]);
+    const double *cell_data_cnfy = reinterpret_cast<const double *>(_cell_data[4]);
 
-    unsigned used_point_dim_x = !SOA ? X_DIM : 1;
-    unsigned used_point_dim_q = !SOA ? Q_DIM : 1;
-    unsigned used_point_dim_RES = !SOA ? RES_DIM : 1;
-    const double *point_data_x1 =
-        point_data_x +
-        used_point_dim_x * cell_to_node[1][MAPPING_DIM * ind + 0];
-    const double *point_data_x2 =
-        point_data_x +
-        used_point_dim_x * cell_to_node[1][MAPPING_DIM * ind + 1];
-    const double *point_data_q1 =
-        point_data_q +
-        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 0];
-    const double *point_data_q2 =
-        point_data_q +
-        used_point_dim_q * cell_to_node[0][MAPPING_DIM * ind + 1];
-    const double *point_data_adt1 =
-        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 0];
-    const double *point_data_adt2 =
-        point_data_adt + cell_to_node[0][MAPPING_DIM * ind + 1];
+    const double *cur_cnmass = cell_data_cnmass + ind; 
+    const double *cur_rho = cell_data_rho + ind; 
+    const double *cur_cnwt = cell_data_cnwt + ind; 
+    const double *cur_cnfx = cell_data_cnfx + ind; 
+    const double *cur_cnfy = cell_data_cnfy + ind; 
 
-    double *point_data_out_cur_res1 =
-        point_data_out_res +
-        used_point_dim_RES * cell_to_node[0][MAPPING_DIM * ind + 0];
-    double *point_data_out_cur_res2 =
-        point_data_out_res +
-        used_point_dim_RES * cell_to_node[0][MAPPING_DIM * ind + 1];
+    int map0idx = cell_to_node[0][MAPPING_DIM * ind + 0];
+    int map1idx = cell_to_node[0][MAPPING_DIM * ind + 1];
+    int map2idx = cell_to_node[0][MAPPING_DIM * ind + 2];
+    int map3idx = cell_to_node[0][MAPPING_DIM * ind + 3];
 
-    double inc[MAPPING_DIM * RES_DIM];
 
-    // x
-    MY_SIZE _point_stride0 = SOA ? point_stride[1] : 1;
-    // q
-    MY_SIZE _point_stride1 = SOA ? point_stride[2] : 1;
-    // res
-    MY_SIZE _point_stride3 = SOA ? point_stride[0] : 1;
+    double inc[MAPPING_DIM * INC_DIM * 4/*4 incremented array*/];
+    for(int i = 0; i < MAPPING_DIM*INC_DIM*4; ++i)
+      inc[i] = 0;
+
     // Calling user function
-    user_func_gpu(point_data_x1, point_data_x2, point_data_q1, point_data_q2,
-                  point_data_adt1, point_data_adt2, inc, &inc[RES_DIM],
-                  _point_stride0, _point_stride1);
+    user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
+                   inc + 0, inc + 1,inc + 2,inc + 3,inc + 4,inc + 5,inc + 6,
+                   inc + 7,inc + 8,inc + 9,inc + 10,inc + 11,inc + 12,
+                   inc + 13,inc + 14,inc + 15,cell_stride);
 
-// Adding back the increment
-#pragma unroll
-    for (unsigned i = 0; i < RES_DIM; ++i) {
-      point_data_out_cur_res1[i * _point_stride3] += inc[i];
-      point_data_out_cur_res2[i * _point_stride3] += inc[i + RES_DIM];
-    }
+    // Adding increment back
+    point_data_out_ndmass[map0idx] += inc[0];
+    point_data_out_ndmass[map1idx] += inc[1];
+    point_data_out_ndmass[map2idx] += inc[2];
+    point_data_out_ndmass[map3idx] += inc[3];
+    point_data_ndarea[map0idx] += inc[MAPPING_DIM + 0];
+    point_data_ndarea[map1idx] += inc[MAPPING_DIM + 1];
+    point_data_ndarea[map2idx] += inc[MAPPING_DIM + 2];
+    point_data_ndarea[map3idx] += inc[MAPPING_DIM + 3];
+    point_data_ndub[map0idx] += inc[2*MAPPING_DIM + 0];
+    point_data_ndub[map1idx] += inc[2*MAPPING_DIM + 1];
+    point_data_ndub[map2idx] += inc[2*MAPPING_DIM + 2];
+    point_data_ndub[map3idx] += inc[2*MAPPING_DIM + 3];
+    point_data_ndvb[map0idx] += inc[3*MAPPING_DIM + 0];
+    point_data_ndvb[map1idx] += inc[3*MAPPING_DIM + 1];
+    point_data_ndvb[map2idx] += inc[3*MAPPING_DIM + 2];
+    point_data_ndvb[map3idx] += inc[3*MAPPING_DIM + 3];
   }
 }
 
@@ -230,25 +215,38 @@ __global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const void **__restrict__, const MY_SIZE **__restrict__ cell_to_node,
+    const void **__restrict__ _cell_data,
+    const MY_SIZE **__restrict__ cell_to_node,
     const std::uint8_t *__restrict__ num_cell_colours,
     const std::uint8_t *__restrict__ cell_colours,
     const MY_SIZE *__restrict__ block_offsets, MY_SIZE num_cells,
-    const MY_SIZE *__restrict__ point_stride, MY_SIZE) {
+    const MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
+
   using DataType =
       double; // there are different algorithms based on the type of
               // the cached points
-  const DataType *__restrict__ point_data_x =
-      reinterpret_cast<const DataType *>(_point_data[1]);
-  const DataType *__restrict__ point_data_q =
-      reinterpret_cast<const DataType *>(_point_data[2]);
-  const DataType *__restrict__ point_data_adt =
-      reinterpret_cast<const DataType *>(_point_data[3]);
-  DataType *__restrict__ point_data_out_res =
-      reinterpret_cast<DataType *>(_point_data_out);
+  const DataType *__restrict__ cnmass =
+      reinterpret_cast<const DataType *>(_cell_data[0]);
+  const DataType *__restrict__ rho =
+      reinterpret_cast<const DataType *>(_cell_data[1]);
+  const DataType *__restrict__ cnwt =
+      reinterpret_cast<const DataType *>(_cell_data[2]);
+  const DataType *__restrict__ cnfx =
+      reinterpret_cast<const DataType *>(_cell_data[3]);
+  const DataType *__restrict__ cnfy =
+      reinterpret_cast<const DataType *>(_cell_data[4]);
 
+  DataType *__restrict__ point_data_ndarea =
+      reinterpret_cast<const DataType *>(_point_data[1]);
+  DataType *__restrict__ point_data_ndub =
+      reinterpret_cast<const DataType *>(_point_data[2]);
+  DataType *__restrict__ point_data_dvb =
+      reinterpret_cast<const DataType *>(_point_data[3]);
+  DataType *__restrict__ point_data_out_ndmass =
+      reinterpret_cast<DataType *>(_point_data_out);
+//-------------------------------------------------------
   double2 *__restrict__ point_data_out_double2 =
-      reinterpret_cast<double2 *>(point_data_out_res);
+      reinterpret_cast<double2 *>(point_data_out_ndmass);
 
   const MY_SIZE bid = blockIdx.x;
   const MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;
@@ -291,37 +289,18 @@ __global__ void stepGPUHierarchical(
   DataType increment[RES_DIM * MAPPING_DIM];
   DataType *point_data0_res1, *point_data0_res2;
   if (tid < block_size) {
-    point_data0_res1 =
-        point_cache + cell_to_node[0][thread_ind + 0 * num_cells];
-    point_data0_res2 =
-        point_cache + cell_to_node[0][thread_ind + 1 * num_cells];
-    unsigned used_point_dim_x = !SOA ? X_DIM : 1;
-    unsigned used_point_dim_q = !SOA ? Q_DIM : 1;
-    const double *point_data_x1 =
-        point_data_x +
-        used_point_dim_x * cell_to_node[1][thread_ind + 0 * num_cells];
-    const double *point_data_x2 =
-        point_data_x +
-        used_point_dim_x * cell_to_node[1][thread_ind + 1 * num_cells];
-    const double *point_data_q1 =
-        point_data_q +
-        used_point_dim_q * cell_to_node[2][thread_ind + 0 * num_cells];
-    const double *point_data_q2 =
-        point_data_q +
-        used_point_dim_q * cell_to_node[2][thread_ind + 1 * num_cells];
-    const double *point_data_adt1 =
-        point_data_adt + cell_to_node[2][thread_ind + 0 * num_cells];
-    const double *point_data_adt2 =
-        point_data_adt + cell_to_node[2][thread_ind + 1 * num_cells];
 
-    // x
-    MY_SIZE _point_stride0 = SOA ? point_stride[1] : 1;
-    // q
-    MY_SIZE _point_stride1 = SOA ? point_stride[2] : 1;
+    const double *cur_cnmass = cnmass + ind; 
+    const double *cur_rho = rho + ind; 
+    const double *cur_cnwt = cnwt + ind; 
+    const double *cur_cnfx = cnfx + ind; 
+    const double *cur_cnfy = cnfy + ind; 
 
-    user_func_gpu(point_data_x1, point_data_x2, point_data_q1, point_data_q2,
-                  point_data_adt1, point_data_adt2, increment,
-                  increment + RES_DIM, _point_stride0, _point_stride1);
+
+    user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
+                   inc + 0, inc + 1,inc + 2,inc + 3,inc + 4,inc + 5,inc + 6,
+                   inc + 7,inc + 8,inc + 9,inc + 10,inc + 11,inc + 12,
+                   inc + 13,inc + 14,inc + 15,cell_stride);
   }
 
   __syncthreads();

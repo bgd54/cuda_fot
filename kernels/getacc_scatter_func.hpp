@@ -21,78 +21,78 @@ USER_FUNCTION_SIGNATURE(const double *RESTRICT cnmass, const double *RESTRICT rh
                     double *RESTRICT ndarea1, double *RESTRICT ndarea2, double *RESTRICT ndarea3,
                     double *RESTRICT ndarea4, double *RESTRICT ndub1, double *RESTRICT ndub2,
                     double *RESTRICT ndub3, double *RESTRICT ndub4, double *RESTRICT ndvb1, double *RESTRICT ndvb2,
-                    double *RESTRICT ndvb3, double *RESTRICT ndvb4) {
+                    double *RESTRICT ndvb3, double *RESTRICT ndvb4, unsigned cell_stride) {
   constexpr double zerocut = 1.0e-40;
   // code
   unsigned ii, jj;
 
-  jj = 1;
-  if (cnmass[jj] > zerocut) {
-    *ndmass1 += cnmass[jj];
+  jj = 0;
+  if (cnmass[jj*cell_stride] > zerocut) {
+    *ndmass1 += cnmass[jj*cell_stride];
   } else {
     ii = jj - 1;
-    if (ii == 0)
-      ii = 4;
-    if (cnmass[ii] > zerocut) {
-      *ndmass1 += cnmass[ii];
+    if (ii == -1)
+      ii = 3;
+    if (cnmass[ii*cell_stride] > zerocut) {
+      *ndmass1 += cnmass[ii*cell_stride];
     } else {
-      *ndmass1 += rho * cnwt[jj];
+      *ndmass1 += *rho * cnwt[jj*cell_stride];
     }
   }
-  *ndarea1 += cnwt[jj];
-  *ndub1 += cnfx[jj];
-  *ndvb1 += cnfy[jj];
+  *ndarea1 += cnwt[jj*cell_stride];
+  *ndub1 += cnfx[jj*cell_stride];
+  *ndvb1 += cnfy[jj*cell_stride];
+
+  jj = 1;
+  if (cnmass[jj*cell_stride] > zerocut) {
+    *ndmass2 += cnmass[jj*cell_stride];
+  } else {
+    ii = jj - 1;
+    if (ii == -1)
+      ii = 3;
+    if (cnmass[ii*cell_stride] > zerocut) {
+      *ndmass2 += cnmass[ii*cell_stride];
+    } else {
+      *ndmass2 += *rho * cnwt[jj*cell_stride];
+    }
+  }
+  *ndarea2 += cnwt[jj*cell_stride];
+  *ndub2 += cnfx[jj*cell_stride];
+  *ndvb2 += cnfy[jj*cell_stride];
 
   jj = 2;
-  if (cnmass[jj] > zerocut) {
-    *ndmass2 += cnmass[jj];
+  if (cnmass[jj*cell_stride] > zerocut) {
+    *ndmass3 += cnmass[jj*cell_stride];
   } else {
     ii = jj - 1;
-    if (ii == 0)
-      ii = 4;
-    if (cnmass[ii] > zerocut) {
-      *ndmass2 += cnmass[ii];
+    if (ii == -1)
+      ii = 3;
+    if (cnmass[ii*cell_stride] > zerocut) {
+      *ndmass3 += cnmass[ii*cell_stride];
     } else {
-      *ndmass2 += rho * cnwt[jj];
+      *ndmass3 += *rho * cnwt[jj*cell_stride];
     }
   }
-  *ndarea2 += cnwt[jj];
-  *ndub2 += cnfx[jj];
-  *ndvb2 += cnfy[jj];
+  *ndarea3 += cnwt[jj*cell_stride];
+  *ndub3 += cnfx[jj*cell_stride];
+  *ndvb3 += cnfy[jj*cell_stride];
 
   jj = 3;
-  if (cnmass[jj] > zerocut) {
-    *ndmass3 += cnmass[jj];
+  if (cnmass[jj*cell_stride] > zerocut) {
+    *ndmass4 += cnmass[jj*cell_stride];
   } else {
     ii = jj - 1;
-    if (ii == 0)
-      ii = 4;
-    if (cnmass[ii] > zerocut) {
-      *ndmass3 += cnmass[ii];
+    if (ii == -1)
+      ii = 3;
+    if (cnmass[ii*cell_stride] > zerocut) {
+      *ndmass4 += cnmass[ii*cell_stride];
     } else {
-      *ndmass3 += rho * cnwt[jj];
+      *ndmass4 += *rho * cnwt[jj*cell_stride];
     }
   }
-  *ndarea3 += cnwt[jj];
-  *ndub3 += cnfx[jj];
-  *ndvb3 += cnfy[jj];
-
-  jj = 4;
-  if (cnmass[jj] > zerocut) {
-    *ndmass4 += cnmass[jj];
-  } else {
-    ii = jj - 1;
-    if (ii == 0)
-      ii = 4;
-    if (cnmass[ii] > zerocut) {
-      *ndmass4 += cnmass[ii];
-    } else {
-      *ndmass4 += rho * cnwt[jj];
-    }
-  }
-  *ndarea4 += cnwt[jj];
-  *ndub4 += cnfx[jj];
-  *ndvb4 += cnfy[jj];
+  *ndarea4 += cnwt[jj*cell_stride];
+  *ndub4 += cnfx[jj*cell_stride];
+  *ndvb4 += cnfy[jj*cell_stride];
 }
 
 #undef USER_FUNCTION_SIGNATURE
