@@ -21,7 +21,8 @@ namespace getacc {
  */
 
 constexpr unsigned MAPPING_DIM = 4;
-constexpr unsigned READ_DIM = 4, INC_DIM = 1, RHO_DIM = 1;
+constexpr unsigned READ_DIM = 4, INC_DIM = 4, RHO_DIM = 1;
+//ndmass ndarea ndub ndvb
 
 // Sequential kernel
 struct StepSeq {
@@ -30,13 +31,7 @@ struct StepSeq {
   static void call(const void **_point_data, void *_point_data_out,
                    const void ** _cell_data, const MY_SIZE **cell_to_node, MY_SIZE ind,
                    const unsigned *point_stride, unsigned cell_stride) {
-    double *point_data_ndarea =
-        reinterpret_cast<const double *>(_point_data[1]);
-    double *point_data_ndub =
-        reinterpret_cast<const double *>(_point_data[2]);
-    double *point_data_ndvb =
-        reinterpret_cast<const double *>(_point_data[3]);
-    double *point_data_out_ndmass = reinterpret_cast<double *>(_point_data_out);
+    double *point_data_out = reinterpret_cast<double *>(_point_data_out);
     const double *cell_data_cnmass = reinterpret_cast<const double *>(_cell_data[0]);
     const double *cell_data_rho = reinterpret_cast<const double *>(_cell_data[1]);
     const double *cell_data_cnwt = reinterpret_cast<const double *>(_cell_data[2]);
@@ -49,39 +44,34 @@ struct StepSeq {
     const double *cur_cnfx = cell_data_cnfx + ind; 
     const double *cur_cnfy = cell_data_cnfy + ind; 
    
-    int map0idx = cell_to_node[0][MAPPING_DIM * ind + 0];
-    int map1idx = cell_to_node[0][MAPPING_DIM * ind + 1];
-    int map2idx = cell_to_node[0][MAPPING_DIM * ind + 2];
-    int map3idx = cell_to_node[0][MAPPING_DIM * ind + 3];
+    unsigned used_point_dim_out = !SOA ? INC_DIM : 1;
 
+    int map0idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 0];
+    int map1idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 1];
+    int map2idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 2];
+    int map3idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 3];
 
-    double inc[MAPPING_DIM * INC_DIM * 4/*4 incremented array*/];
-    for(int i = 0; i < MAPPING_DIM*INC_DIM*4; ++i)
+    double inc[MAPPING_DIM * INC_DIM];
+    for(int i = 0; i < MAPPING_DIM*INC_DIM; ++i)
       inc[i] = 0;
+
+    // inc
+    MY_SIZE _point_stride = SOA ? point_stride[0] : 1;
 
     // Calling user function
     user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
-                   inc + 0, inc + 1,inc + 2,inc + 3,inc + 4,inc + 5,inc + 6,
-                   inc + 7,inc + 8,inc + 9,inc + 10,inc + 11,inc + 12,
-                   inc + 13,inc + 14,inc + 15,cell_stride);
+                   inc + 0, inc + 4, inc + 8, inc + 12,
+		   inc + 1, inc + 5, inc + 9, inc + 13,
+                   inc + 2, inc + 6, inc + 10, inc + 14,
+                   inc + 3, inc + 7, inc + 11, inc + 15,cell_stride);
 
     // Adding increment back
-    point_data_out_ndmass[map0idx] += inc[0];
-    point_data_out_ndmass[map1idx] += inc[1];
-    point_data_out_ndmass[map2idx] += inc[2];
-    point_data_out_ndmass[map3idx] += inc[3];
-    point_data_ndarea[map0idx] += inc[MAPPING_DIM + 0];
-    point_data_ndarea[map1idx] += inc[MAPPING_DIM + 1];
-    point_data_ndarea[map2idx] += inc[MAPPING_DIM + 2];
-    point_data_ndarea[map3idx] += inc[MAPPING_DIM + 3];
-    point_data_ndub[map0idx] += inc[2*MAPPING_DIM + 0];
-    point_data_ndub[map1idx] += inc[2*MAPPING_DIM + 1];
-    point_data_ndub[map2idx] += inc[2*MAPPING_DIM + 2];
-    point_data_ndub[map3idx] += inc[2*MAPPING_DIM + 3];
-    point_data_ndvb[map0idx] += inc[3*MAPPING_DIM + 0];
-    point_data_ndvb[map1idx] += inc[3*MAPPING_DIM + 1];
-    point_data_ndvb[map2idx] += inc[3*MAPPING_DIM + 2];
-    point_data_ndvb[map3idx] += inc[3*MAPPING_DIM + 3];
+    for(unsigned i = 0; i < INC_DIM; ++i) {
+       point_data_out[map0idx+point_stride * i] += inc[i];
+       point_data_out[map1idx+point_stride * i] += inc[INC_DIM + i];
+       point_data_out[map2idx+point_stride * i] += inc[2 * INC_DIM + i];
+       point_data_out[map3idx+point_stride * i] += inc[3 * INC_DIM + i];
+    }
   }
 };
 
@@ -121,13 +111,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
               MY_SIZE *__restrict__ point_stride, MY_SIZE) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
   if (ind < num_cells) {
-    double *point_data_ndarea =
-        reinterpret_cast<const double *>(_point_data[1]);
-    double *point_data_ndub =
-        reinterpret_cast<const double *>(_point_data[2]);
-    double *point_data_ndvb =
-        reinterpret_cast<const double *>(_point_data[3]);
-    double *point_data_out_ndmass = reinterpret_cast<double *>(_point_data_out);
+    double *point_data_out = reinterpret_cast<double *>(_point_data_out);
     const double *cell_data_cnmass = reinterpret_cast<const double *>(_cell_data[0]);
     const double *cell_data_rho = reinterpret_cast<const double *>(_cell_data[1]);
     const double *cell_data_cnwt = reinterpret_cast<const double *>(_cell_data[2]);
@@ -139,40 +123,35 @@ stepGPUGlobal(const void **__restrict__ _point_data,
     const double *cur_cnwt = cell_data_cnwt + ind; 
     const double *cur_cnfx = cell_data_cnfx + ind; 
     const double *cur_cnfy = cell_data_cnfy + ind; 
+ 
+    unsigned used_point_dim_out = !SOA ? INC_DIM : 1;
 
-    int map0idx = cell_to_node[0][MAPPING_DIM * ind + 0];
-    int map1idx = cell_to_node[0][MAPPING_DIM * ind + 1];
-    int map2idx = cell_to_node[0][MAPPING_DIM * ind + 2];
-    int map3idx = cell_to_node[0][MAPPING_DIM * ind + 3];
+    int map0idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 0];
+    int map1idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 1];
+    int map2idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 2];
+    int map3idx = used_point_dim_out * cell_to_node[0][MAPPING_DIM * ind + 3];
 
-
-    double inc[MAPPING_DIM * INC_DIM * 4/*4 incremented array*/];
-    for(int i = 0; i < MAPPING_DIM*INC_DIM*4; ++i)
+    double inc[MAPPING_DIM * INC_DIM];
+    for(int i = 0; i < MAPPING_DIM*INC_DIM; ++i)
       inc[i] = 0;
 
+    // inc
+    MY_SIZE _point_stride = SOA ? point_stride[0] : 1;
+
     // Calling user function
-    user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
-                   inc + 0, inc + 1,inc + 2,inc + 3,inc + 4,inc + 5,inc + 6,
-                   inc + 7,inc + 8,inc + 9,inc + 10,inc + 11,inc + 12,
-                   inc + 13,inc + 14,inc + 15,cell_stride);
+    user_func_gpu(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
+                   inc + 0, inc + 4, inc + 8, inc + 12,
+		   inc + 1, inc + 5, inc + 9, inc + 13,
+                   inc + 2, inc + 6, inc + 10, inc + 14,
+                   inc + 3, inc + 7, inc + 11, inc + 15,cell_stride);
 
     // Adding increment back
-    point_data_out_ndmass[map0idx] += inc[0];
-    point_data_out_ndmass[map1idx] += inc[1];
-    point_data_out_ndmass[map2idx] += inc[2];
-    point_data_out_ndmass[map3idx] += inc[3];
-    point_data_ndarea[map0idx] += inc[MAPPING_DIM + 0];
-    point_data_ndarea[map1idx] += inc[MAPPING_DIM + 1];
-    point_data_ndarea[map2idx] += inc[MAPPING_DIM + 2];
-    point_data_ndarea[map3idx] += inc[MAPPING_DIM + 3];
-    point_data_ndub[map0idx] += inc[2*MAPPING_DIM + 0];
-    point_data_ndub[map1idx] += inc[2*MAPPING_DIM + 1];
-    point_data_ndub[map2idx] += inc[2*MAPPING_DIM + 2];
-    point_data_ndub[map3idx] += inc[2*MAPPING_DIM + 3];
-    point_data_ndvb[map0idx] += inc[3*MAPPING_DIM + 0];
-    point_data_ndvb[map1idx] += inc[3*MAPPING_DIM + 1];
-    point_data_ndvb[map2idx] += inc[3*MAPPING_DIM + 2];
-    point_data_ndvb[map3idx] += inc[3*MAPPING_DIM + 3];
+    for(unsigned i = 0; i < INC_DIM; ++i) {
+       point_data_out[map0idx+point_stride * i] += inc[i];
+       point_data_out[map1idx+point_stride * i] += inc[INC_DIM + i];
+       point_data_out[map2idx+point_stride * i] += inc[2 * INC_DIM + i];
+       point_data_out[map3idx+point_stride * i] += inc[3 * INC_DIM + i];
+    }
   }
 }
 
@@ -236,14 +215,10 @@ __global__ void stepGPUHierarchical(
   const DataType *__restrict__ cnfy =
       reinterpret_cast<const DataType *>(_cell_data[4]);
 
-  DataType *__restrict__ point_data_ndarea =
-      reinterpret_cast<DataType *>(_point_data[1]);
-  DataType *__restrict__ point_data_ndub =
-      reinterpret_cast<DataType *>(_point_data[2]);
-  DataType *__restrict__ point_data_dvb =
-      reinterpret_cast<DataType *>(_point_data[3]);
-  DataType *__restrict__ point_data_ndmass =
+  DataType *__restrict__ point_data_out =
       reinterpret_cast<DataType *>(_point_data_out);
+  double2 *__restrict__ point_data_out_double2 =
+      reinterpret_cast<DataType *>(point_data_out);
 
   const MY_SIZE bid = blockIdx.x;
   const MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;
@@ -252,12 +227,24 @@ __global__ void stepGPUHierarchical(
   const MY_SIZE num_cached_points =
       points_to_be_cached_offsets[bid + 1] - cache_points_offset;
   MY_SIZE shared_num_cached_points = num_cached_points;
+  if (32 % RES_DIM == 0) {
+    // Currently, shared memory bank conflict avoidance works only if 32 is
+    // divisible by RES_DIM
+    MY_SIZE needed_offset = 32 / INC_DIM;
+    if (num_cached_points % 32 <= needed_offset) {
+      shared_num_cached_points =
+          num_cached_points - (num_cached_points % 32) + needed_offset;
+    } else {
+      shared_num_cached_points =
+          num_cached_points - (num_cached_points % 32) + 32 + needed_offset;
+    }
+    assert(shared_num_cached_points >= num_cached_points);
+  } else {
+    shared_num_cached_points = num_cached_points;
+  }
+
 
   extern __shared__ DataType point_cache[];
-  DataType * cache_data_ndmass = point_cache;
-  DataType * cache_data_ndarea = point_cache + shared_num_cache_datad_points;
-  DataType * cache_data_ndub = point_cache + 2* shared_num_cache_datad_points;
-  DataType * cache_data_ndvb = point_cache + 3* shared_num_cache_datad_points;
 
   MY_SIZE block_size = block_offsets[bid + 1] - block_offsets[bid];
 
@@ -271,11 +258,10 @@ __global__ void stepGPUHierarchical(
   // Cache in
   // ELM NEM KELL
   // Computation
-  DataType inc[MAPPING_DIM*4];
+  DataType inc[MAPPING_DIM*INC_DIM];
   #pragma unroll
-  for(int i =0; i< MAPPING_DIM*4; ++i)
+  for(int i =0; i< MAPPING_DIM*INC_DIM; ++i)
     inc[i]=0;
-  DataType *point_data0_res1, *point_data0_res2;
   int map0idx, map1idx, map2idx, map3idx;
   if (tid < block_size) {
 
@@ -291,20 +277,18 @@ __global__ void stepGPUHierarchical(
 
 
     user_func_host(cur_cnmass, cur_rho, cur_cnwt, cur_cnfxm cur_cnfy,
-                   inc + 0, inc + 1,inc + 2,inc + 3,inc + 4,inc + 5,inc + 6,
-                   inc + 7,inc + 8,inc + 9,inc + 10,inc + 11,inc + 12,
-                   inc + 13,inc + 14,inc + 15,cell_stride);
+                   inc + 0, inc + 4, inc + 8, inc + 12,
+		   inc + 1, inc + 5, inc + 9, inc + 13,
+                   inc + 2, inc + 6, inc + 10, inc + 14,
+                   inc + 3, inc + 7, inc + 11, inc + 15,cell_stride);
   }
 
   __syncthreads();
 
   // Clear cache
-  for (MY_SIZE i = tid; i < shared_num_cached_points;
+  for (MY_SIZE i = tid; i < shared_num_cached_points * INC_DIM;
        i += blockDim.x) {
-    cache_data_ndmass[i] = 0;
-    cache_data_ndarea[i] = 0;
-    cache_data_ndub[i] = 0;
-    cache_data_ndvb[i] = 0;
+    point_cache[i] = 0;
   }
 
   __syncthreads();
@@ -313,44 +297,60 @@ __global__ void stepGPUHierarchical(
   for (std::uint8_t cur_colour = 0; cur_colour < num_cell_colours[bid];
        ++cur_colour) {
     if (our_colour == cur_colour) {
-      cache_data_ndmass[map0idx] += inc[0];
-      cache_data_ndmass[map1idx] += inc[1];
-      cache_data_ndmass[map2idx] += inc[2];
-      cache_data_ndmass[map3idx] += inc[3];
-      cache_data_ndarea[map0idx] += inc[MAPPING_DIM + 0];
-      cache_data_ndarea[map1idx] += inc[MAPPING_DIM + 1];
-      cache_data_ndarea[map2idx] += inc[MAPPING_DIM + 2];
-      cache_data_ndarea[map3idx] += inc[MAPPING_DIM + 3];
-      cache_data_ndub[map0idx] += inc[2*MAPPING_DIM + 0];
-      cache_data_ndub[map1idx] += inc[2*MAPPING_DIM + 1];
-      cache_data_ndub[map2idx] += inc[2*MAPPING_DIM + 2];
-      cache_data_ndub[map3idx] += inc[2*MAPPING_DIM + 3];
-      cache_data_ndvb[map0idx] += inc[3*MAPPING_DIM + 0];
-      cache_data_ndvb[map1idx] += inc[3*MAPPING_DIM + 1];
-      cache_data_ndvb[map2idx] += inc[3*MAPPING_DIM + 2];
-      cache_data_ndvb[map3idx] += inc[3*MAPPING_DIM + 3];
 
+#pragma unroll
+      for (unsigned i = 0; i < RES_DIM; ++i) {
+       point_cache[map0idx+shared_num_cached_points * i] += inc[i];
+       point_cache[map1idx+shared_num_cached_points * i] += inc[INC_DIM + i];
+       point_cache[map2idx+shared_num_cached_points * i] += inc[2 * INC_DIM + i];
+       point_cache[map3idx+shared_num_cached_points * i] += inc[3 * INC_DIM + i];
+         
+      }
     }
     __syncthreads();
   }
 
   // Cache out
-  for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
-    MY_SIZE point_ind = i;
-    MY_SIZE d = 0;
-    MY_SIZE g_ind = index<SOA>(
-        point_stride[0],
-        points_to_be_cached[cache_points_offset + point_ind], INC_DIM, d);
-    MY_SIZE c_ind =
-        index<true>(shared_num_cached_points, point_ind, INC_DIM, d);
-    DataType result = point_data_ndmass[g_ind] + cache_data_ndmass[c_ind];
-    point_data_ndmass[g_ind] = result;
-    result = point_data_ndarea[g_ind] + cache_data_ndarea[c_ind];
-    point_data_ndarea[g_ind] = result;
-    result = point_data_ndub[g_ind] + cache_data_ndub[c_ind];
-    point_data_ndub[g_ind] = result;
-    result = point_data_ndvb[g_ind] + cache_data_ndvb[c_ind];
-    point_data_ndvb[g_ind] = result;
+  if (!SOA) {
+    if (!SOA && INC_DIM % 2 == 0 && std::is_same<DataType, double>::value) {
+      for (MY_SIZE i = tid; i < INC_DIM * num_cached_points / 2;
+           i += blockDim.x) {
+        MY_SIZE point_ind = i * 2 / INC_DIM;
+        MY_SIZE d = (i * 2) % INC_DIM;
+        MY_SIZE g_ind = index<SOA>(
+            point_stride[0],
+            points_to_be_cached[cache_points_offset + point_ind], INC_DIM, d);
+        MY_SIZE c_ind0 =
+            index<true>(shared_num_cached_points, point_ind, INC_DIM, d + 0);
+        MY_SIZE c_ind1 =
+            index<true>(shared_num_cached_points, point_ind, INC_DIM, d + 1);
+        double2 result = point_data_out_double2[g_ind / 2];
+        result.x += point_cache[c_ind0];
+        result.y += point_cache[c_ind1];
+        point_data_out_double2[g_ind / 2] = result;
+      }
+    }
+  } else {
+    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
+      MY_SIZE g_point_to_be_cached =
+          points_to_be_cached[cache_points_offset + i];
+      DataType result[INC_DIM];
+#pragma unroll
+      for (MY_SIZE d = 0; d < INC_DIM; ++d) {
+        MY_SIZE write_g_ind =
+            index<SOA>(point_stride[0], g_point_to_be_cached, INC_DIM, d);
+        MY_SIZE write_c_ind =
+            index<true>(shared_num_cached_points, i, INC_DIM, d);
+
+        result[d] = point_data_out[write_g_ind] + point_cache[write_c_ind];
+      }
+#pragma unroll
+      for (MY_SIZE d = 0; d < INC_DIM; ++d) {
+        MY_SIZE write_g_ind =
+            index<SOA>(point_stride[0], g_point_to_be_cached, INC_DIM, d);
+        point_data_out[write_g_ind] = result[d];
+      }
+    }
   }
 
 }
