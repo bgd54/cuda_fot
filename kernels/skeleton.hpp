@@ -5,10 +5,12 @@
 namespace skeleton {
 // Sequential user function
 #define USER_FUNCTION_SIGNATURE inline void user_func_host
+#define RESTRICT
 #include "skeleton_func.hpp"
 
 // GPU user function
 #define USER_FUNCTION_SIGNATURE __device__ void user_func_gpu
+#define RESTRICT __restrict__
 #include "skeleton_func.hpp"
 
 static constexpr unsigned MESH_DIM = 1;
