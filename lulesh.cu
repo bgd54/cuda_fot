@@ -96,9 +96,9 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
   problem.template loopGPUCellCentred<lulesh::StepGPUGlobal>(num);
   writeData(fname_base + "glob", problem);
 
-  /* readData(input_dir, problem); */
-  /* problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num); */
-  /* writeData(fname_base + "hier", problem); */
+  readData(input_dir, problem);
+  problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
+  writeData(fname_base + "hier", problem);
 }
 
 template <bool SOA>
@@ -124,6 +124,11 @@ void testKernel(const std::string &input_dir, MY_SIZE num) {
   testKernel(
       input_dir, num, problem,
       &Problem<SOA>::template loopGPUCellCentred<lulesh::StepGPUGlobal>);
+
+  std::cout << "GPU hierarchical:\n";
+  testKernel(
+      input_dir, num, problem,
+      &Problem<SOA>::template loopGPUHierarchical<lulesh::StepGPUHierarchical>);
 }
 
 void testKernel(const std::string &input_dir, MY_SIZE num) {
