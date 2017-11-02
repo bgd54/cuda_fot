@@ -268,7 +268,7 @@ public:
             static_cast<MY_SIZE *>(d_memory[colour_ind].points_to_be_cached),
             static_cast<MY_SIZE *>(
                 d_memory[colour_ind].points_to_be_cached_offsets),
-            static_cast<const void **>(d_memory[colour_ind].cell_weights.ptrs),
+            static_cast<void **>(d_memory[colour_ind].cell_weights.ptrs),
             static_cast<const MY_SIZE **>(d_memory[colour_ind].cell_list.ptrs),
             static_cast<std::uint8_t *>(d_memory[colour_ind].num_cell_colours),
             static_cast<std::uint8_t *>(d_memory[colour_ind].cell_colours),
