@@ -7,7 +7,9 @@
 #include "helper_cuda.h"
 #include "kernels/res_calc.hpp"
 
-template <bool SOA> Problem<SOA> initProblem(const std::string &input_dir) {
+template <bool SOA>
+Problem<SOA> initProblem(const std::string &input_dir,
+                         MY_SIZE block_size = DEFAULT_BLOCK_SIZE) {
   std::ifstream mesh_res(input_dir + "mesh_res");
   std::ifstream mesh_x(input_dir + "mesh_x");
   std::ifstream mesh_q(input_dir + "mesh_q");
@@ -21,7 +23,7 @@ template <bool SOA> Problem<SOA> initProblem(const std::string &input_dir) {
           {res_calc::X_DIM, sizeof(double)},
           {res_calc::Q_DIM, sizeof(double)},
           {res_calc::ADT_DIM, sizeof(double)}},
-      std::vector<std::pair<MY_SIZE, unsigned>>{});
+      std::vector<std::pair<MY_SIZE, unsigned>>{}, block_size);
   return problem;
 }
 
@@ -127,11 +129,12 @@ void testReordering(const std::string &input_dir, MY_SIZE num) {
 }
 
 template <bool SOA>
-void measurement(const std::string &input_dir, MY_SIZE num) {
+void measurement(const std::string &input_dir, MY_SIZE num,
+                 MY_SIZE block_size) {
 
   {
     std::cout << "Running non reordered" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
     readData(input_dir + "/", problem);
     std::cout << "Data read." << std::endl;
     problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
@@ -139,7 +142,7 @@ void measurement(const std::string &input_dir, MY_SIZE num) {
 
   {
     std::cout << "Running GPS reordered" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
     readData(input_dir + "/", problem);
     TIMER_START(timer_gps);
     problem.reorder();
@@ -149,7 +152,7 @@ void measurement(const std::string &input_dir, MY_SIZE num) {
 
   {
     std::cout << "Running partitioned" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
+    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
     readData(input_dir + "/", problem);
     TIMER_START(timer_metis);
     problem.reorder();
@@ -161,11 +164,12 @@ void measurement(const std::string &input_dir, MY_SIZE num) {
   }
 }
 
-void measurement(const std::string &input_dir, MY_SIZE num) {
+void measurement(const std::string &input_dir, MY_SIZE num,
+                 MY_SIZE block_size) {
   std::cout << "AOS" << std::endl;
-  measurement<false>(input_dir, num);
+  measurement<false>(input_dir, num, block_size);
   std::cout << "SOA" << std::endl;
-  measurement<true>(input_dir, num);
+  measurement<true>(input_dir, num, block_size);
 }
 
 void printUsageTest(const char *program_name) {
@@ -174,16 +178,16 @@ void printUsageTest(const char *program_name) {
 }
 
 void printUsageMeasure(const char *program_name) {
-  std::cerr << "Usage: " << program_name << " <input_dir> <iteration_number>"
-            << std::endl;
+  std::cerr << "Usage: " << program_name
+            << " <input_dir> <iteration_number> <block_size>" << std::endl;
 }
 
 int mainMeasure(int argc, char *argv[]) {
-  if (argc < 3) {
+  if (argc < 4) {
     printUsageMeasure(argv[0]);
     return 1;
   }
-  measurement(argv[1], std::atol(argv[2]));
+  measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
   return 0;
 }
 
@@ -197,4 +201,4 @@ int mainTest(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainTest(argc, argv); }
+int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
