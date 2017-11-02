@@ -22,7 +22,7 @@ static constexpr unsigned CELL_DIM = 1;
  *   - if it's SOA, `point_stride` is the stride, otherwise that doesn't matter
  * - the layout of `cell_data` is always SOA with stride `point_stride`
  * - the layout of `cell_to_node` is AOS except for the hierarchical case, where
- *   it is AOS
+ *   it is SOA
  */
 
 // Sequential kernel
@@ -50,8 +50,8 @@ struct StepSeq {
                    cell_stride);
 
     // Adding increment back
-    for (unsigned i = 0; i < PointDim; ++i) {
-      point_data_out_cur[i * _point_stride] += inc[i];
+    for (unsigned i = 0; i < POINT_DIM; ++i) {
+      point_data_out_cur[i * _point_stride0] += inc[i];
     }
   }
 };
@@ -117,7 +117,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
 // Adding back the increment
 #pragma unroll
     for (unsigned i = 0; i < POINT_DIM; ++i) {
-      point_data_out_cur[i * _point_stride] += inc[i];
+      point_data_out_cur[i * _point_stride0] += inc[i];
     }
   }
 }
