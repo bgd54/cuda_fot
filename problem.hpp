@@ -316,12 +316,12 @@ public:
   }
   /* 1}}} */
 
-  template <class UserFunc> void stepCPUCellCentred(char *temp) const { /*{{{*/
+  template <class UserFunc> void stepCPUCellCentred(char *temp) { /*{{{*/
     std::vector<const void *> point_data(point_weights.size());
-    auto get_pointer = [](const data_t &a) { return a.cbegin(); };
+    auto get_pointer = [](data_t &a) { return a.begin(); };
     std::transform(point_weights.begin(), point_weights.end(),
                    point_data.begin(), get_pointer);
-    std::vector<const void *> cell_data(cell_weights.size());
+    std::vector<void *> cell_data(cell_weights.size());
     std::transform(cell_weights.begin(), cell_weights.end(), cell_data.begin(),
                    get_pointer);
     std::vector<const MY_SIZE *> cell_to_node(mesh.numMappings());
@@ -358,12 +358,12 @@ public:
 
   template <class UserFunc>
   void stepCPUCellCentredOMP(const std::vector<MY_SIZE> &inds,
-                             data_t &out) const { /*{{{*/
+                             data_t &out) { /*{{{*/
     std::vector<const void *> point_data(point_weights.size());
-    auto get_pointer = [](const data_t &a) { return a.cbegin(); };
+    auto get_pointer = [](data_t &a) { return a.begin(); };
     std::transform(point_weights.begin(), point_weights.end(),
                    point_data.begin(), get_pointer);
-    std::vector<const void *> cell_data(cell_weights.size());
+    std::vector<void *> cell_data(cell_weights.size());
     std::transform(cell_weights.begin(), cell_weights.end(), cell_data.begin(),
                    get_pointer);
     std::vector<const MY_SIZE *> cell_to_node(mesh.numMappings());
