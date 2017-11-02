@@ -400,8 +400,8 @@ public:
         stepCPUCellCentredOMP<UserFunc>(partition[c], temp);
       }
       TIMER_TOGGLE(t);
-    // Copy back from temp
-    #pragma omp parallel for
+      // Copy back from temp
+      #pragma omp parallel for
       for (MY_SIZE e = 0;
            e < point_weights[0].getTypeSize() * point_weights[0].getSize() *
                    point_weights[0].getDim();
@@ -601,23 +601,12 @@ size_t countCacheLinesForBlock(ForwardIterator block_begin,
 
   for (; block_begin != block_end; ++block_begin) {
     MY_SIZE point_id = *block_begin;
-    MY_SIZE cache_line_id = SOA ? point_id / data_per_cacheline
-                                : point_id * dim / data_per_cacheline;
     if (!SOA) {
-      if (data_per_cacheline / dim > 0) {
-        assert(data_per_cacheline % dim == 0);
-        cache_lines.insert(cache_line_id);
-      } else {
-        assert(dim % data_per_cacheline == 0);
-        MY_SIZE cache_line_per_data =
-            dim / data_per_cacheline; // Assume that Dim is multiple of
-                                      // data_per_cacheline
-        for (MY_SIZE i = 0; i < cache_line_per_data; ++i) {
-          cache_lines.insert(cache_line_id++);
-        }
+      for (MY_SIZE d = 0; d < dim; ++d) {
+        cache_lines.insert((point_id * dim + d) / data_per_cacheline);
       }
     } else {
-      cache_lines.insert(cache_line_id);
+      cache_lines.insert(point_id / data_per_cacheline);
     }
   }
   return (SOA ? dim : 1) * cache_lines.size();
