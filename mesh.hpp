@@ -88,7 +88,7 @@ public:
         }
         if (!is) {
           throw InvalidInputFile{"graph input",
-                                 static_cast<MY_SIZE>(mapping_ind), i};
+                                 static_cast<MY_SIZE>(mapping_ind), i + 1};
         }
       }
     }
