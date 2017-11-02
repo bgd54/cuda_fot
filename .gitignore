@@ -39,6 +39,7 @@ test
 generate_grid
 apply_reorder
 res_calc
+lulesh
 visualization/*.vtk
 visualization/testVTK
 test_files/*
