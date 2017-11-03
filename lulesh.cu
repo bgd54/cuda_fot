@@ -204,8 +204,9 @@ int mainTest(int argc, char *argv[]) {
 }
 
 template <bool SOA>
-void measurement(const std::string &input_dir, MY_SIZE num,
-                 MY_SIZE block_size) {
+void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
+                 const std::string &input_dir_gps = "",
+                 const std::string &input_dir_metis = "") {
   {
     std::cout << "Running non reordered" << std::endl;
     Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
@@ -215,48 +216,148 @@ void measurement(const std::string &input_dir, MY_SIZE num,
   }
 
   {
+    const std::string &used_input_dir =
+        input_dir_gps == "" ? input_dir : input_dir_gps;
     std::cout << "Running GPS reordered" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
-    readData(input_dir + "/", problem);
+    Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size);
+    readData(used_input_dir + "/", problem);
     TIMER_START(timer_gps);
-    problem.reorder();
+    if (input_dir_gps == "") {
+      problem.reorder();
+    }
     TIMER_PRINT(timer_gps, "reordering");
     problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
   }
 
   {
+    const std::string &used_input_dir =
+        input_dir_metis == "" ? input_dir : input_dir_metis;
     std::cout << "Running partitioned" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
-    readData(input_dir + "/", problem);
+    Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size);
+    readData(used_input_dir + "/", problem);
     TIMER_START(timer_metis);
-    problem.reorder();
-    problem.partition(1.001);
-    problem.reorderToPartition();
-    problem.renumberPoints();
+    if (input_dir_metis != "") {
+      std::ifstream f_part(input_dir_metis + "/mesh_part");
+      problem.readPartition(f_part);
+    } else {
+      problem.reorder();
+      problem.partition(1.001);
+      problem.reorderToPartition();
+      problem.renumberPoints();
+    }
     TIMER_PRINT(timer_metis, "partitioning");
     problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
   }
 }
 
-void measurement(const std::string &input_dir, MY_SIZE num,
-                 MY_SIZE block_size) {
+void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
+                 const std::string &input_dir_gps = "",
+                 const std::string &input_dir_metis = "") {
   std::cout << "AOS" << std::endl;
-  measurement<false>(input_dir, num, block_size);
-  std::cout << "SOA" << std::endl;
-  measurement<true>(input_dir, num, block_size);
+  measurement<false>(input_dir, num, block_size, input_dir_gps,
+                     input_dir_metis);
+  /* std::cout << "SOA" << std::endl; */
+  /* measurement<true>(input_dir, num, block_size, input_dir_gps,
+   * input_dir_metis); */
+}
+
+template <bool SOA>
+void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
+                  bool partition) {
+  const std::string fnames_id[] = {"data_f", "data_xyz"};
+  const std::string fnames_d[] = {"data_sig", "data_determ"};
+  const MY_SIZE num_cells = problem.mesh.numCells();
+  for (unsigned k = 0; k < problem.mesh.numMappings(); ++k) {
+    const MY_SIZE num_points = problem.mesh.numPoints(k);
+    const MY_SIZE dim = problem.point_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_id[k]);
+    for (MY_SIZE i = 0; i < num_points; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<SOA>(num_points, i, dim, j);
+        os << (j ? " " : "")
+           << problem.point_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  const MY_SIZE dim = problem.mesh.cell_to_node[0].getDim();
+  std::ofstream os(output_dir + "/mesh");
+  for (MY_SIZE i = 0; i < num_cells; ++i) {
+    for (MY_SIZE j = 0; j < dim; ++j) {
+      const MY_SIZE ind = index<false>(num_cells, i, dim, j);
+      os << (j ? " " : "")
+         << problem.mesh.cell_to_node[0].template operator[]<MY_SIZE>(ind);
+    }
+    os << std::endl;
+  }
+  for (unsigned k = 0; k < problem.cell_weights.size(); ++k) {
+    const MY_SIZE dim = problem.cell_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_d[k]);
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<true>(num_cells, i, dim, j);
+        os << (j ? " " : "")
+           << problem.cell_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  if (partition) {
+    std::ofstream os(output_dir + "/mesh_part");
+    problem.writePartition(os);
+  }
 }
 
 void printUsageMeasure(const char *program_name) {
   std::cerr << "Usage: " << program_name
             << " <input_dir> <iteration_number> <block_size>" << std::endl;
+  std::cerr << "   or: " << program_name
+            << " <input_dir> <gps_input_dir> <metis_input_dir>"
+            << " <iteration_number> <block_size>" << std::endl;
 }
 
 int mainMeasure(int argc, char *argv[]) {
-  if (argc < 4) {
+  if (argc != 4 && argc != 6) {
     printUsageMeasure(argv[0]);
     return 1;
   }
-  measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
+  if (argc == 4) {
+    measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
+  } else {
+    measurement(argv[1], std::atol(argv[4]), std::atol(argv[5]), argv[2],
+                argv[3]);
+  }
+  return 0;
+}
+
+void reorder(const std::string &input_dir, const std::string output_dir,
+             bool partition, MY_SIZE block_size) {
+  Problem<false> problem = initProblem<false>(input_dir, block_size);
+  readData(input_dir, problem);
+
+  problem.reorder();
+  if (partition) {
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+  }
+
+  writeAllData(problem, output_dir, partition);
+}
+
+void printUsageReorder(const char *program_name) {
+  std::cerr << "Usage: " << program_name
+            << " <input_dir> <output_dir_GPS> <output_dir_part>"
+            << " <block_size>" << std::endl;
+}
+
+int mainReorder(int argc, char *argv[]) {
+  if (argc < 5) {
+    printUsageMeasure(argv[0]);
+    return 1;
+  }
+  reorder(argv[1], argv[2], false, std::atol(argv[4]));
+  reorder(argv[1], argv[3], true, std::atol(argv[4]));
   return 0;
 }
 
