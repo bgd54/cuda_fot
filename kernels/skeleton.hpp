@@ -20,7 +20,7 @@ static constexpr unsigned CELL_DIM = 1;
  * SOA-AOS layouts:
  * - the layout of `point_data` is controlled by the SOA template parameter
  *   - if it's SOA, `point_stride` is the stride, otherwise that doesn't matter
- * - the layout of `cell_data` is always SOA with stride `point_stride`
+ * - the layout of `cell_data` is always SOA with stride `cell_stride`
  * - the layout of `cell_to_node` is AOS except for the hierarchical case, where
  *   it is SOA
  */
