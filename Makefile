@@ -14,11 +14,11 @@ OPTIMIZATION_FLAGS := -g -lineinfo -G
 #OPTIMIZATION_FLAGS := -g -pg -Xcompiler=-fno-inline -lineinfo
 #OPTIMIZATION_FLAGS := -O3 -DNDEBUG
 
-SCOTCH_FLAGS := -lscotch -lscotcherr -lm -I/home/software/scotch_5.1.12/include/
-SCOTCH_FLAGS += -L/home/software/scotch_5.1.12/lib/
+SCOTCH_FLAGS := -lscotch -lscotcherr -lm -I/home/mgiles/ireguly/software/scotch_5.1.12-gnu/include/
+SCOTCH_FLAGS += -L/home/mgiles/ireguly/software/scotch_5.1.12-gnu/lib/
 
-METIS_FLAGS := -I/home/software/parmetis-gnu/include
-METIS_FLAGS += -lmetis -L/home/software/parmetis-gnu/lib/
+METIS_FLAGS := -I/home/mgiles/ireguly/software/parmetis-4.0.3-gnu/include
+METIS_FLAGS += -lmetis -L/home/mgiles/ireguly/software/parmetis-4.0.3-gnu/lib/
 
 MESH_DIM ?= 2
 VERBOSE ?= no
