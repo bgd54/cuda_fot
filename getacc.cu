@@ -265,6 +265,22 @@ void measurement(const std::string &input_dir, MY_SIZE num,
 void printUsageMeasure(const char *program_name) {
   std::cerr << "Usage: " << program_name
             << " <input_dir> <iteration_number> <block_size>" << std::endl;
+  std::cerr << "   or: " << program_name
+            << " <input_dir> <gps_input_dir> <metis_input_dir>"
+            << " <iteration_number> <block_size>" << std::endl;
 }
 
-int main(int argc, char *argv[]) { return mainTest(argc, argv); }
+
+
+int mainMeasure(int argc, char *argv[]) {
+  if (argc != 4) {
+    printUsageMeasure(argv[0]);
+    return 1;
+  }
+  if (argc == 4) {
+    measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
+  }
+  return 0;
+}
+
+int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }

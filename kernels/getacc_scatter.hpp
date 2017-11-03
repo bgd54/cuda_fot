@@ -252,6 +252,7 @@ __global__ void stepGPUHierarchical(
     our_colour = cell_colours[thread_ind];
   }
 
+    
   // Cache in
   // ELM NEM KELL
   // Computation
