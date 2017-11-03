@@ -282,6 +282,8 @@ void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
   }
   const MY_SIZE dim = problem.mesh.cell_to_node[0].getDim();
   std::ofstream os(output_dir + "/mesh");
+  os << problem.mesh.numPoints(0) << " " << problem.mesh.numCells()
+     << std::endl;
   for (MY_SIZE i = 0; i < num_cells; ++i) {
     for (MY_SIZE j = 0; j < dim; ++j) {
       const MY_SIZE ind = index<false>(num_cells, i, dim, j);
@@ -353,7 +355,7 @@ void printUsageReorder(const char *program_name) {
 
 int mainReorder(int argc, char *argv[]) {
   if (argc < 5) {
-    printUsageMeasure(argv[0]);
+    printUsageReorder(argv[0]);
     return 1;
   }
   reorder(argv[1], argv[2], false, std::atol(argv[4]));
