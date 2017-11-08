@@ -30,7 +30,7 @@ static constexpr unsigned CELL_DIM = 2;
 struct StepSeq {
   template <bool SOA>
   static void call(const void **_point_data, void *_point_data_out,
-                   const void **_cell_data, const MY_SIZE **cell_to_node,
+                   void **_cell_data, const MY_SIZE **cell_to_node,
                    MY_SIZE ind, const unsigned *point_stride,
                    unsigned cell_stride) {
     const float *point_cellVolumes = reinterpret_cast<const float *>(_point_data[1]);
@@ -47,15 +47,17 @@ struct StepSeq {
     const unsigned used_point_dim = !SOA ? INC_DIM : 1;
     float *point_data_out_left =
         point_data_out + used_point_dim * cell_to_node[0][MESH_DIM * ind + 0];
-    float *point_data_out_left =
+    float *point_data_out_right =
         point_data_out + used_point_dim * cell_to_node[0][MESH_DIM * ind + 1];
     const float *cell_data_fluxes = cell_fluxes + ind;
     const float *cell_data_bathySource = cell_bathySource + ind;
     const float *cell_data_edgeNormals = cell_edgeNormals + ind;
     const int *cell_data_isBoundary = cell_isBoundary + ind;
     float inc[MESH_DIM * INC_DIM];
-#pragma unroll
-  for(unsigned i = 0; i < MESH_DIM * INC_DIM; ++i) inc[i] = 0;
+
+    for(unsigned i = 0; i < MESH_DIM * INC_DIM; ++i) {
+      inc[i] = 0;
+    }
 
     MY_SIZE _point_stride0 = SOA ? point_stride[0] : 1;
     // Calling user function
@@ -81,7 +83,7 @@ template <bool SOA>
 __global__ void
 stepGPUGlobal(const void **__restrict__ _point_data,
               void *__restrict__ _point_data_out,
-              const void **__restrict__ _cell_data,
+              void **__restrict__ _cell_data,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride);
 
@@ -89,7 +91,7 @@ struct StepGPUGlobal {
   template <bool SOA>
   static void call(const void **__restrict__ point_data,
                    void *__restrict__ point_data_out,
-                   const void **__restrict__ cell_data,
+                   void **__restrict__ cell_data,
                    const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
                    MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride,
                    MY_SIZE num_blocks, MY_SIZE block_size) {
@@ -104,7 +106,7 @@ template <bool SOA>
 __global__ void
 stepGPUGlobal(const void **__restrict__ _point_data,
               void *__restrict__ _point_data_out,
-              const void **__restrict__ _cell_data,
+              void **__restrict__ _cell_data,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
@@ -126,7 +128,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
     const unsigned used_point_dim = !SOA ? INC_DIM : 1;
     float *__restrict__ point_data_out_left =
         point_data_out + used_point_dim * cell_to_node[0][MESH_DIM * ind + 0];
-    float *__restrict__ point_data_out_left =
+    float *__restrict__ point_data_out_right =
         point_data_out + used_point_dim * cell_to_node[0][MESH_DIM * ind + 1];
     const float *__restrict__ cell_data_fluxes = cell_fluxes + ind;
     const float *__restrict__ cell_data_bathySource = cell_bathySource + ind;
@@ -135,7 +137,7 @@ stepGPUGlobal(const void **__restrict__ _point_data,
 
     MY_SIZE _point_stride0 = SOA ? point_stride[0] : 1;
     // Calling user function
-    user_func_host(cellVolumes0, cellVolumes1, inc, inc + INC_DIM,
+    user_func_gpu(cellVolumes0, cellVolumes1, inc, inc + INC_DIM,
 		   cell_data_fluxes, cell_data_bathySource,
 		   cell_data_edgeNormals, cell_data_isBoundary,
                    cell_stride);
@@ -155,7 +157,7 @@ __global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const void **__restrict__ _cell_data,
+    void **__restrict__ _cell_data,
     const MY_SIZE **__restrict__ cell_to_node,
     const std::uint8_t *__restrict__ num_cell_colours,
     const std::uint8_t *__restrict__ cell_colours,
@@ -168,7 +170,7 @@ struct StepGPUHierarchical {
   call(const void **__restrict__ point_data, void *__restrict__ point_data_out,
        const MY_SIZE *__restrict__ points_to_be_cached,
        const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-       const void **__restrict__ cell_data,
+       void **__restrict__ cell_data,
        const MY_SIZE **__restrict__ cell_to_node,
        const std::uint8_t *__restrict__ num_cell_colours,
        const std::uint8_t *__restrict__ cell_colours,
@@ -188,7 +190,7 @@ __global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const void **__restrict__ _cell_data,
+    void **__restrict__ _cell_data,
     const MY_SIZE **__restrict__ cell_to_node,
     const std::uint8_t *__restrict__ num_cell_colours,
     const std::uint8_t *__restrict__ cell_colours,
@@ -211,8 +213,6 @@ __global__ void stepGPUHierarchical(
 
   float4 *__restrict__ point_data_out_float4 =
       reinterpret_cast<float4 *>(point_data_out);
-
-  constexpr unsigned MESH_DIM = MESH_DIM;
 
   const MY_SIZE bid = blockIdx.x;
   const MY_SIZE thread_ind = block_offsets[bid] + threadIdx.x;

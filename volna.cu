@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <functional>
 #include <iostream>
+#include <iomanip>
 #include <vector>
 
 #include "colouring.hpp"
@@ -10,8 +11,8 @@
 template <bool SOA>
 Problem<SOA> initProblem(const std::string &input_dir,
                          MY_SIZE block_size = DEFAULT_BLOCK_SIZE) {
-  std::ifstream mesh_EC(input_dir + "edgeToCells");
-  std::ifstream mesh_EC2(input_dir + "edgeToCells");
+  std::ifstream mesh_EC(input_dir + "/edgeToCells");
+  std::ifstream mesh_EC2(input_dir + "/edgeToCells");
   Problem<SOA> problem(
       std::vector<std::istream *>{&mesh_EC,&mesh_EC2},
       std::vector<MY_SIZE>{volna::MESH_DIM, volna::MESH_DIM},
@@ -27,12 +28,12 @@ Problem<SOA> initProblem(const std::string &input_dir,
 }
 template <bool SOA>
 void readData(const std::string &input_dir, Problem<SOA> &problem) {
-  std::ifstream data_out(input_dir + "data_out");
-  std::ifstream data_vol(input_dir + "data_vol");
-  std::ifstream data_flux(input_dir + "data_flux");
-  std::ifstream data_bathy(input_dir + "data_bathy");
-  std::ifstream data_norms(input_dir + "data_norms");
-  std::ifstream data_isBoundary(input_dir + "data_isBoundary");
+  std::ifstream data_out(input_dir + "/data_out");
+  std::ifstream data_vol(input_dir + "/data_vol");
+  std::ifstream data_flux(input_dir + "/data_flux");
+  std::ifstream data_bathy(input_dir + "/data_bathy");
+  std::ifstream data_norms(input_dir + "/data_norms");
+  std::ifstream data_isBoundary(input_dir + "/data_isBoundary");
   problem.template readPointData<float>(data_out, 0);
   problem.template readPointData<float>(data_vol, 1);
   problem.template readCellData<float>(data_flux, 0);
@@ -67,7 +68,7 @@ void testKernel(const std::string &input_dir, MY_SIZE num,
 
   (problem.*algorithm)(num);
 
-  std::ifstream data_ref(input_dir + "volna_ref");
+  std::ifstream data_ref(input_dir + "/volna_ref");
   double max_diff = 0;
   const MY_SIZE num_points = problem.mesh.numPoints(0);
   for (MY_SIZE i = 0; i < num_points; ++i) {
@@ -104,22 +105,22 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
   problem.template loopCPUCellCentred<volna::StepSeq>(num);
   writeData(fname_base + "seq", problem);
 
-  readData(input_dir + "/", problem);
-  problem.template loopCPUCellCentredOMP<volna::StepOMP>(num);
-  writeData(fname_base + "omp", problem);
+  /* readData(input_dir + "/", problem); */
+  /* problem.template loopCPUCellCentredOMP<volna::StepOMP>(num); */
+  /* writeData(fname_base + "omp", problem); */
 
-  readData(input_dir + "/", problem);
-  problem.template loopGPUCellCentred<volna::StepGPUGlobal>(num);
-  writeData(fname_base + "glob", problem);
+  /* readData(input_dir + "/", problem); */
+  /* problem.template loopGPUCellCentred<volna::StepGPUGlobal>(num); */
+  /* writeData(fname_base + "glob", problem); */
 
-  readData(input_dir + "/", problem);
-  problem.template loopGPUHierarchical<volna::StepGPUHierarchical>(num);
-  writeData(fname_base + "hier", problem);
+  /* readData(input_dir + "/", problem); */
+  /* problem.template loopGPUHierarchical<volna::StepGPUHierarchical>(num); */
+  /* writeData(fname_base + "hier", problem); */
 }
 
 template <bool SOA> void testKernel(const std::string &input_dir, MY_SIZE num) {
   std::cout << "========================================" << std::endl;
-  std::cout << "BookLeaf implementation test ";
+  std::cout << "Volna implementation test ";
   std::cout << (SOA ? "SOA" : "AOS");
   std::cout << std::endl << "Iteration: " << num;
   std::cout << std::endl;
@@ -147,13 +148,13 @@ template <bool SOA> void testKernel(const std::string &input_dir, MY_SIZE num) {
 
 void testKernel(const std::string &input_dir, MY_SIZE num) {
   testKernel<false>(input_dir, num);
-  testKernel<true>(input_dir, num);
+  /* testKernel<true>(input_dir, num); */
 }
 
 template <bool SOA>
 void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
   std::cout << "========================================" << std::endl;
-  std::cout << "BookLeaf getacc_scatter reordering test ";
+  std::cout << "Volna SpaceDiscretisation reordering test ";
   std::cout << (SOA ? "SOA" : "AOS");
   std::cout << std::endl << "Iteration: " << num;
   std::cout << " Partition: " << std::boolalpha << partition;
@@ -278,4 +279,4 @@ int mainMeasure(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
+int main(int argc, char *argv[]) { return mainTest(argc, argv); }
