@@ -94,7 +94,6 @@ struct StepSeq {
     double inc[POINT_DIM0];
 
     // Calling user function
-    // DEBUG: ind == 4142, face_normal, things after inviscid_comp seem to be different
     user_func_host(
         inc, cell_values_left, cell_values_right, cell_coordinates_left,
         cell_coordinates_right, cell_gradients_left, cell_gradients_right,
