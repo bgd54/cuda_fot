@@ -190,7 +190,8 @@ public:
   /* 1}}} */
 
   /* loopGPUHierarchical {{{1 */
-  template <class UserFunc> void loopGPUHierarchical(MY_SIZE num) {
+  template <class UserFunc, unsigned SharedMemoryMultiplier = 0>
+  void loopGPUHierarchical(MY_SIZE num) {
     TIMER_START(t_colouring);
     HierarchicalColourMemory<SOA> memory(*this, partition_vector);
     TIMER_PRINT(t_colouring, "Hierarchical colouring: colouring");
@@ -258,9 +259,12 @@ public:
         assert(num_blocks ==
                memory.colours[colour_ind].block_offsets.size() - 1);
         // + 32 in case it needs to avoid shared mem bank collisions
-        MY_SIZE cache_size = point_weights[0].getTypeSize() *
-                             (d_memory[colour_ind].shared_size + 32) *
-                             point_weights[0].getDim();
+        const MY_SIZE shared_memory_multiplier =
+            SharedMemoryMultiplier != 0
+                ? SharedMemoryMultiplier
+                : (point_weights[0].getTypeSize() * point_weights[0].getDim());
+        MY_SIZE cache_size =
+            (d_memory[colour_ind].shared_size + 32) * shared_memory_multiplier;
         TIMER_TOGGLE(timer_calc);
         UserFunc::template call<SOA>(
             static_cast<const void **>(d_point_data),
@@ -275,8 +279,8 @@ public:
             static_cast<MY_SIZE *>(d_memory[colour_ind].block_offsets),
             num_threads, d_point_stride, num_threads, num_blocks, block_size,
             cache_size);
-        TIMER_TOGGLE(timer_calc);
         checkCudaErrors(cudaDeviceSynchronize());
+        TIMER_TOGGLE(timer_calc);
       }
       assert(point_weights[0].getTypeSize() % sizeof(float) == 0);
       MY_SIZE copy_size = mesh.numPoints(0) * point_weights[0].getDim() *
@@ -413,7 +417,7 @@ public:
     PRINT_BANDWIDTH(t, "loopCPUCellCentredOMP", calcDataSize() * num);
   } /*}}}*/
 
-  void reorder() {
+  template <bool SameMapping = false> void reorder() {
     assert(mesh.numMappings() >= 1);
     ScotchReorder reorder(mesh.numPoints(0), mesh.numCells(),
                           mesh.cell_to_node[0]);
@@ -422,10 +426,15 @@ public:
     reorderData<SOA>(point_weights[0], point_permutation);
     for (unsigned mapping_ind = 1; mapping_ind < mesh.numMappings();
          ++mapping_ind) {
-      reorderData<SOA>(
-          point_weights[mapping_ind],
-          mesh.renumberPoints(mesh.getPointRenumberingPermutation(mapping_ind),
-                              mapping_ind));
+      if (SameMapping) {
+        reorderData<SOA>(point_weights[mapping_ind],
+                         mesh.renumberPoints(point_permutation, mapping_ind));
+      } else {
+        reorderData<SOA>(
+            point_weights[mapping_ind],
+            mesh.renumberPoints(
+                mesh.getPointRenumberingPermutation(mapping_ind), mapping_ind));
+      }
     }
     for (data_t &cw : cell_weights) {
       reorderDataInverse<true>(cw, inverse_permutation);
@@ -471,7 +480,7 @@ public:
   void renumberPoints() {
     for (unsigned mapping_ind = 0; mapping_ind < mesh.numMappings();
          ++mapping_ind) {
-      std::vector<MY_SIZE> permutation = mesh.getPointRenumberingPermutation2(
+      std::vector<MY_SIZE> permutation = Mesh::getPointRenumberingPermutation2(
           mesh.getPointToPartition(partition_vector, mapping_ind));
       mesh.renumberPoints(permutation, mapping_ind);
       reorderData<SOA>(point_weights[mapping_ind], permutation);
@@ -480,9 +489,6 @@ public:
           applied_permutation = std::move(permutation);
         } else {
           assert(applied_permutation.size() == permutation.size());
-          /* reorderDataInverseVectorSOA<MY_SIZE, MY_SIZE>( */
-          /*     {applied_permutation.begin()}, applied_permutation.end(), */
-          /*     permutation); */
           reorderDataInverseVectorSOA<MY_SIZE, MY_SIZE>(
               {permutation.begin()}, permutation.end(), applied_permutation);
           std::swap(applied_permutation, permutation);
