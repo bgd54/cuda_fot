@@ -207,6 +207,35 @@ __global__ void stepGPUHierarchical(
     our_colour = cell_colours[thread_ind];
   }
 
+  if (!SOA) {
+    for (MY_SIZE i = tid; i < num_cached_points * POINT_DIM; i += blockDim.x) {
+      MY_SIZE point_ind = i / POINT_DIM;
+      MY_SIZE d = i % POINT_DIM;
+      MY_SIZE g_ind = index<SOA>(
+          point_stride[1], points_to_be_cached[cache_points_offset + point_ind],
+          POINT_DIM, d);
+      MY_SIZE c_ind =
+          index<true>(shared_num_cached_points, point_ind, POINT_DIM, d);
+      point_cache[c_ind] = xyz_data[g_ind];
+    }
+  } else {
+    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
+      MY_SIZE g_point_to_be_cached =
+          points_to_be_cached[cache_points_offset + i];
+#pragma unroll
+      for (MY_SIZE d = 0; d < POINT_DIM; ++d) {
+        MY_SIZE g_ind =
+            index<SOA>(point_stride[0], g_point_to_be_cached, POINT_DIM, d);
+        MY_SIZE c_ind =
+            index<true>(shared_num_cached_points, i, POINT_DIM, d);
+
+        point_cache[c_ind] = xyz_data[g_ind];
+      }
+    }
+  }
+
+  __syncthreads();
+
   // Computation
   double increment[POINT_DIM * MESH_DIM];
   double *f_data_out_cur[MESH_DIM];
@@ -218,14 +247,14 @@ __global__ void stepGPUHierarchical(
       f_data_out_cur[i] =
           point_cache + cell_to_node[0][thread_ind + i * num_cells];
       xyz_data_cur[i] =
-          xyz_data +
-          used_point_dim * cell_to_node[1][thread_ind + i * num_cells];
+          point_cache +
+          cell_to_node[0][thread_ind + i * num_cells];
     }
     const double *sig_cur = sig_data + thread_ind;
     double &determ = determ_data[thread_ind];
     MY_SIZE xyz_stride = SOA ? point_stride[1] : 1;
-    user_func_gpu(increment, xyz_data_cur, sig_cur, determ, xyz_stride,
-                  cell_stride);
+    user_func_gpu(increment, xyz_data_cur, sig_cur, determ,
+        shared_num_cached_points, cell_stride);
   }
 
   // Clear cache
