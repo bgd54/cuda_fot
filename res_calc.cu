@@ -138,6 +138,9 @@ void measurement(const std::string &input_dir, MY_SIZE num,
     readData(input_dir + "/", problem);
     std::cout << "Data read." << std::endl;
     problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+    readData(input_dir + "/", problem);
+    std::cout << "Data read." << std::endl;
+    problem.template loopGPUCellCentred<res_calc::StepGPUGlobal>(num);
   }
 
   {
@@ -148,6 +151,9 @@ void measurement(const std::string &input_dir, MY_SIZE num,
     problem.reorder();
     TIMER_PRINT(timer_gps, "reordering");
     problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+    readData(input_dir + "/", problem);
+    problem.reorder();
+    problem.template loopGPUCellCentred<res_calc::StepGPUGlobal>(num);
   }
 
   {
@@ -161,6 +167,12 @@ void measurement(const std::string &input_dir, MY_SIZE num,
     problem.renumberPoints();
     TIMER_PRINT(timer_metis, "partitioning");
     problem.template loopGPUHierarchical<res_calc::StepGPUHierarchical>(num);
+    readData(input_dir + "/", problem);
+    problem.reorder();
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+    problem.template loopGPUCellCentred<res_calc::StepGPUGlobal>(num);
   }
 }
 
