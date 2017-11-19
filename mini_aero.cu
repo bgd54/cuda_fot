@@ -82,19 +82,26 @@ void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
   }
 }
 
-/* template<bool SOA> */
-/* void reorderApplyPermutation (const std::string &input_dir, Problem<SOA> &problem) { */
-/*   std::ifstream f_permutation (input_dir + "/permutation"); */
-/*   std::vector<MY_SIZE> permutation (problem.mesh.numCells()); */
-/*   for (unsigned i = 0; i < permutation.size(); ++i) { */
-/*     MY_SIZE &a = permutation[i]; */
-/*     if (!f_permutation) { */
-/*       throw InvalidInput{"mini aero permutation",0,i}; */
-/*     } */
-/*     f_permutation >> a; */
-/*   } */
-/*   reorderData<false>();  TODO */
-/* } */
+template <bool SOA>
+void reorderApplyPermutation(const std::string &input_dir,
+                             Problem<SOA> &problem) {
+  std::ifstream f_permutation(input_dir + "/permutation");
+  std::vector<MY_SIZE> permutation(problem.mesh.numCells());
+  for (unsigned i = 0; i < permutation.size(); ++i) {
+    MY_SIZE &a = permutation[i];
+    if (!f_permutation) {
+      throw InvalidInputFile{"mini aero permutation", 0, i};
+    }
+    f_permutation >> a;
+  }
+  for (unsigned mapping_ind = 0; mapping_ind < problem.mesh.numMappings();
+       ++mapping_ind) {
+    reorderData<false>(problem.mesh.cell_to_node[mapping_ind], permutation);
+  }
+  for (unsigned i = 0; i < problem.cell_weights.size(); ++i) {
+    reorderData<true>(problem.cell_weights[i], permutation);
+  }
+}
 
 template <bool SOA = false>
 using implementation_algorithm_t = void (Problem<SOA>::*)(MY_SIZE);
@@ -102,8 +109,12 @@ using implementation_algorithm_t = void (Problem<SOA>::*)(MY_SIZE);
 template <bool SOA>
 void testKernel(const std::string &input_dir, MY_SIZE num,
                 Problem<SOA> &problem,
-                implementation_algorithm_t<SOA> algorithm) {
+                implementation_algorithm_t<SOA> algorithm,
+                bool apply_permutation) {
   readData(input_dir, problem);
+  if (apply_permutation) {
+    reorderApplyPermutation(input_dir, problem);
+  }
 
   (problem.*algorithm)(num);
 
@@ -147,24 +158,29 @@ template <bool SOA> void testKernel(const std::string &input_dir, MY_SIZE num) {
   std::cout << std::endl;
   std::cout << "========================================" << std::endl;
 
-  Problem<SOA> problem = initProblem<SOA>(input_dir);
+  Problem<SOA> problem = initProblem<SOA>(input_dir, 64);
 
   std::cout << "Sequential:\n";
   testKernel(input_dir, num, problem,
-             &Problem<SOA>::template loopCPUCellCentred<mini_aero::StepSeq>);
+             &Problem<SOA>::template loopCPUCellCentred<mini_aero::StepSeq>,
+             false);
 
   std::cout << "OpenMP:\n";
   testKernel(input_dir, num, problem,
-             &Problem<SOA>::template loopCPUCellCentredOMP<mini_aero::StepOMP>);
+             &Problem<SOA>::template loopCPUCellCentredOMP<mini_aero::StepOMP>,
+             false);
 
   std::cout << "GPU global:\n";
-  testKernel(input_dir, num, problem,
-             &Problem<SOA>::template loopGPUCellCentred<mini_aero::StepGPUGlobal>);
-
-  std::cout << "GPU hierarchical:\n";
   testKernel(
       input_dir, num, problem,
-      &Problem<SOA>::template loopGPUHierarchical<mini_aero::StepGPUHierarchical>);
+      &Problem<SOA>::template loopGPUCellCentred<mini_aero::StepGPUGlobal>,
+      false);
+
+  std::cout << "GPU hierarchical:\n";
+  testKernel(input_dir, num, problem,
+             &Problem<SOA>::template loopGPUHierarchical<
+                 mini_aero::StepGPUHierarchical, sizeof(double) * 28>,
+             true);
 }
 
 void testKernel(const std::string &input_dir, MY_SIZE num) {
@@ -186,22 +202,24 @@ void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
   Problem<SOA> problem2 = initProblem<SOA>(input_dir);
   readData(input_dir, problem2);
 
-  problem1.reorder();
+  problem1.template reorder<true>();
   if (partition) {
     problem1.partition(1.001);
     problem1.reorderToPartition();
     problem1.renumberPoints();
   }
 
-  problem1.template loopGPUHierarchical<mini_aero::StepGPUHierarchical>(num);
-  problem2.template loopGPUHierarchical<mini_aero::StepGPUHierarchical>(num);
+  problem1.template loopGPUHierarchical<mini_aero::StepGPUHierarchical,
+                                        sizeof(double) * 28>(num);
+  problem2.template loopCPUCellCentredOMP<mini_aero::StepOMP>(num);
 
   double max_diff = 0;
   const MY_SIZE num_points = problem1.mesh.numPoints(0);
   for (MY_SIZE i = 0; i < num_points; ++i) {
     for (unsigned d = 0; d < mini_aero::POINT_DIM0; ++d) {
-      const MY_SIZE ind1 = index<SOA>(
-          num_points, problem1.applied_permutation[i], mini_aero::POINT_DIM0, d);
+      const MY_SIZE ind1 =
+          index<SOA>(num_points, problem1.applied_permutation[i],
+                     mini_aero::POINT_DIM0, d);
       const MY_SIZE ind2 = index<SOA>(num_points, i, mini_aero::POINT_DIM0, d);
       const double data1 =
           problem1.point_weights[0].template operator[]<double>(ind1);
@@ -249,27 +267,30 @@ template <bool SOA>
 void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
                  const std::string &input_dir_gps = "",
                  const std::string &input_dir_metis = "") {
-  {
-    std::cout << "Running non reordered" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
-    readData(input_dir + "/", problem);
-    std::cout << "Data read." << std::endl;
-    problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical>(num);
-  }
+  /* { */
+  /*   std::cout << "Running non reordered" << std::endl; */
+  /*   Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size); */
+  /*   readData(input_dir + "/", problem); */
+  /*   reorderApplyPermutation(input_dir, problem); */
+  /*   std::cout << "Data read." << std::endl; */
+  /*   problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical, */
+  /*                                        sizeof(double) * 28>(num); */
+  /* } */
 
-  {
-    const std::string &used_input_dir =
-        input_dir_gps == "" ? input_dir : input_dir_gps;
-    std::cout << "Running GPS reordered" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size);
-    readData(used_input_dir + "/", problem);
-    TIMER_START(timer_gps);
-    if (input_dir_gps == "") {
-      problem.reorder();
-    }
-    TIMER_PRINT(timer_gps, "reordering");
-    problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical>(num);
-  }
+  /* { */
+  /*   const std::string &used_input_dir = */
+  /*       input_dir_gps == "" ? input_dir : input_dir_gps; */
+  /*   std::cout << "Running GPS reordered" << std::endl; */
+  /*   Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size); */
+  /*   readData(used_input_dir + "/", problem); */
+  /*   TIMER_START(timer_gps); */
+  /*   if (input_dir_gps == "") { */
+  /*     problem.template reorder<true>(); */
+  /*   } */
+  /*   TIMER_PRINT(timer_gps, "reordering"); */
+  /*   problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical, */
+  /*                                        sizeof(double) * 28>(num); */
+  /* } */
 
   {
     const std::string &used_input_dir =
@@ -282,13 +303,14 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
       std::ifstream f_part(input_dir_metis + "/mesh_part");
       problem.readPartition(f_part);
     } else {
-      problem.reorder();
+      problem.template reorder<true>();
       problem.partition(1.001);
       problem.reorderToPartition();
       problem.renumberPoints();
     }
     TIMER_PRINT(timer_metis, "partitioning");
-    problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical>(num);
+    problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical,
+                                         sizeof(double) * 28>(num);
   }
 }
 
@@ -329,7 +351,7 @@ void reorder(const std::string &input_dir, const std::string output_dir,
   Problem<false> problem = initProblem<false>(input_dir, block_size);
   readData(input_dir, problem);
 
-  problem.reorder();
+  problem.reorder<true>();
   if (partition) {
     problem.partition(1.001);
     problem.reorderToPartition();
@@ -355,7 +377,4 @@ int mainReorder(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[])
-{
-  return mainMeasure(argc, argv);
-}
+int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
