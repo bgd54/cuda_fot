@@ -119,7 +119,7 @@ struct StepGPUGlobal {
 template <bool SOA>
 __global__ void
 stepGPUGlobal(const void **__restrict__ _point_data,
-              void *__restrict__ _point_data_out, const void **__restrict__,
+              void *__restrict__ _point_data_out, void **__restrict__,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
@@ -220,7 +220,7 @@ __global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const void **__restrict__, const MY_SIZE **__restrict__ cell_to_node,
+    void **__restrict__, const MY_SIZE **__restrict__ cell_to_node,
     const std::uint8_t *__restrict__ num_cell_colours,
     const std::uint8_t *__restrict__ cell_colours,
     const MY_SIZE *__restrict__ block_offsets, MY_SIZE num_cells,
