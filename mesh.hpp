@@ -298,6 +298,9 @@ public:
       }
     }
     assert(colour < set_sizes.size());
+    if (colour >= set_sizes.size()) {
+      std::cerr << "Warning: not enough colour." << std::endl;
+    }
     return colour;
   }
 
