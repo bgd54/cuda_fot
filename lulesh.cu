@@ -174,6 +174,10 @@ void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
       if (max_diff < diff) {
         max_diff = diff;
       }
+      if (std::isnan(data1)) {
+        std::cout << "Error: NaN found: i: " << i << " d: " << d << std::endl;
+        break;
+      }
     }
   }
 
