@@ -74,11 +74,17 @@ template <bool SOA = false> struct HierarchicalColourMemory {
       for (MY_SIZE i = 1; i < partition_vector.size(); ++i) {
         cell_weight_inv_permutation[i] = partition_to_cell[i].second;
         if (++tid == block_size) {
+          std::cout
+              << "Warning: new block started because of maximum block size"
+              << std::endl;
           tid = 0;
           blocks.push_back(i);
           continue;
         }
         if (partition_to_cell[i - 1].first != partition_to_cell[i].first) {
+          if (tid < block_size / 2) {
+            std::cout << "Warning: size of this block is " << tid << std::endl;
+          }
           tid = 0;
           blocks.push_back(i);
         }
