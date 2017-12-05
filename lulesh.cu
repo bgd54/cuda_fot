@@ -217,6 +217,9 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     readData(input_dir + "/", problem);
     std::cout << "Data read." << std::endl;
     problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
+    readData(input_dir + "/", problem);
+    std::cout << "Data read." << std::endl;
+    problem.template loopGPUCellCentred<lulesh::StepGPUGlobal>(num);
   }
 
   {
@@ -231,6 +234,11 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     }
     TIMER_PRINT(timer_gps, "reordering");
     problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
+    readData(used_input_dir + "/", problem);
+    if (input_dir_gps == "") {
+      problem.reorder();
+    }
+    problem.template loopGPUCellCentred<lulesh::StepGPUGlobal>(num);
   }
 
   {
@@ -251,6 +259,17 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     }
     TIMER_PRINT(timer_metis, "partitioning");
     problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
+    readData(used_input_dir + "/", problem);
+    if (input_dir_metis != "") {
+      std::ifstream f_part(input_dir_metis + "/mesh_part");
+      problem.readPartition(f_part);
+    } else {
+      problem.reorder();
+      problem.partition(1.001);
+      problem.reorderToPartition();
+      problem.renumberPoints();
+    }
+    problem.template loopGPUCellCentred<lulesh::StepGPUGlobal>(num);
   }
 }
 
@@ -260,9 +279,8 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
   std::cout << "AOS" << std::endl;
   measurement<false>(input_dir, num, block_size, input_dir_gps,
                      input_dir_metis);
-  /* std::cout << "SOA" << std::endl; */
-  /* measurement<true>(input_dir, num, block_size, input_dir_gps,
-   * input_dir_metis); */
+  std::cout << "SOA" << std::endl;
+  measurement<true>(input_dir, num, block_size, input_dir_gps, input_dir_metis);
 }
 
 template <bool SOA>
