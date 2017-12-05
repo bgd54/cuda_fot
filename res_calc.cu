@@ -213,4 +213,74 @@ int mainTest(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
+#include "visualization/graph_write_VTK.hpp"
+
+void visualise (const std::string &input_dir, const std::string &fname, bool partition, MY_SIZE block_size) {
+  Problem<false> problem = initProblem<false>(input_dir + "/", block_size);
+  readData(input_dir + "/", problem);
+  constexpr MY_SIZE MESH_DIM = 2;
+
+  if (partition) {
+    problem.reorder();
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+  }
+
+  const HierarchicalColourMemory<false> memory(problem, problem.partition_vector);
+  data_t cell_list(data_t::create<MY_SIZE>(problem.mesh.numCells(), MESH_DIM));
+  std::vector<std::vector<std::uint16_t>> data(3);
+
+  MY_SIZE blk_col_ind = 0, blk_ind = 0;
+  MY_SIZE cell_ind = 0;
+  data_t point_coordinates (data_t::create<float>(problem.mesh.numPoints(1),3));
+  for (const auto &m : memory.colours) {
+    data[VTK_IND_THR_COL].insert(data[VTK_IND_THR_COL].end(),
+                                 m.cell_colours.begin(),
+                                 m.cell_colours.end());
+    data[VTK_IND_BLK_COL].insert(data[VTK_IND_BLK_COL].end(),
+                                 m.cell_colours.size(), blk_col_ind++);
+    MY_SIZE local_block_id = 0;
+    MY_SIZE num_cells = m.cell_colours.size();
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      assert(local_block_id + 1 < m.block_offsets.size());
+      assert(m.block_offsets[local_block_id] !=
+             m.block_offsets[local_block_id + 1]);
+
+      if (m.block_offsets[local_block_id + 1] <= i) {
+        ++local_block_id;
+        ++blk_ind;
+      }
+      data[VTK_IND_BLK_ID].push_back(blk_ind);
+
+      MY_SIZE offset = m.points_to_be_cached_offsets[local_block_id];
+      for (MY_SIZE j = 0; j < MESH_DIM; ++j) {
+        MY_SIZE m_cell_ind = index<true>(num_cells, i, MESH_DIM, j);
+        MY_SIZE point_ind = m.cell_list[1][m_cell_ind];
+        cell_list.operator[]<MY_SIZE>(MESH_DIM *cell_ind + j) = point_ind;
+      }
+      ++cell_ind;
+    }
+    ++blk_ind;
+  }
+  for (MY_SIZE i = 0; i < problem.mesh.numPoints(1); ++i) {
+    point_coordinates.operator[]<float>(3 * i + 0) = problem.point_weights[1].operator[]<double>(MESH_DIM * i + 0);
+    point_coordinates.operator[]<float>(3 * i + 1) = problem.point_weights[1].operator[]<double>(MESH_DIM * i + 1);
+    point_coordinates.operator[]<float>(3 * i + 2) = 0;
+  }
+  writeMeshToVTKAscii(input_dir + "/" + fname, cell_list, point_coordinates,data);
+}
+
+int mainVisualise (int argc, char *argv[]) {
+  if (argc < 3) {
+    std::cerr << "Usage: " << argv[0]
+              << " <input_dir> <block_size>" << std::endl;
+    return 1;
+  }
+  visualise(argv[1], "res_calc.vtk", false, std::atol(argv[2]));
+  visualise(argv[1], "res_calc_part.vtk", true, std::atol(argv[2]));
+  return 0;
+}
+
+
+int main(int argc, char *argv[]) { return mainVisualise(argc, argv); }
