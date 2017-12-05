@@ -5,7 +5,7 @@
 namespace getacc {
 // Sequential user function
 #define USER_FUNCTION_SIGNATURE inline void user_func_host
-#include "getacc_scatter_func1.hpp"
+#include "getacc_scatter_func.hpp"
 
 // GPU user function
 #define USER_FUNCTION_SIGNATURE __device__ void user_func_gpu
