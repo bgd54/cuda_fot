@@ -36,7 +36,7 @@ public:
   }
 
   Grid(const std::vector<MY_SIZE> &grid_dim, unsigned mesh_dim,
-       std::pair<MY_SIZE, MY_SIZE> block_sizes = {0, 0},
+       std::vector<MY_SIZE> block_sizes = {0, 0},
        bool use_coordinates = false)
       : VisualisableMesh(calcNumPoints(grid_dim),
                          calcNumCells(grid_dim, mesh_dim), mesh_dim,
@@ -47,8 +47,8 @@ public:
     MY_SIZE M = grid_dim[1];
     if (mesh_dim == 2) {
       if (grid_dim.size() == 2) {
-        if (block_sizes.first != 0) {
-          fillEdgeListBlock(N, M, block_sizes.first, block_sizes.second);
+        if (block_sizes[0] != 0) {
+          fillEdgeListBlock(N, M, block_sizes[0], block_sizes[1]);
         } else {
           fillEdgeList(N, M);
         }
@@ -60,7 +60,12 @@ public:
       fillCellList(N, M);
     } else {
       assert(grid_dim.size() == 3);
-      fillCellList3D(N, M, grid_dim[2]);
+      if (block_sizes[0] != 0) {
+        fillCellListBlock3D(N, M, grid_dim[2], block_sizes[0], block_sizes[1],
+            block_sizes[2]);
+      } else {
+        fillCellList3D(N, M, grid_dim[2]);
+      }
     }
   }
 
@@ -454,6 +459,72 @@ protected:
     }
   }
   /* 1}}} */
+
+  /* fillCellListBlock3D {{{ */
+  void fillCellListBlock3D (MY_SIZE N1, MY_SIZE N2, MY_SIZE N3,
+      MY_SIZE block_size1, MY_SIZE block_size2, MY_SIZE block_size3) {
+    assert(N1 > 1);
+    assert(N2 > 1);
+    assert(N3 > 1);
+    assert(block_size1 > 0);
+    assert(block_size2 > 0);
+    assert(block_size3 > 0);
+    assert((N1 - 1) % block_size1 == 0);
+    assert((N2 - 1) % block_size2 == 0);
+    assert((N3 - 1) % block_size3 == 0);
+    MY_SIZE array_ind = 0;
+    // Iterate over the blocks
+    for (MY_SIZE l = 0; l < (N3 - 1) / block_size3; ++l) {
+      for (MY_SIZE r = 0; r < (N1 - 1) / block_size1; ++r) {
+        for (MY_SIZE c = 0; c < (N2 - 1) / block_size2; ++c) {
+          // And go through the block
+          for (MY_SIZE k3 = 0; k3 < block_size3; ++k3) {
+            for (MY_SIZE k1 = 0; k1 < block_size1; ++k1) {
+              for (MY_SIZE k2 = 0; k2 < block_size2; ++k2) {
+                MY_SIZE bottom_layer = (l * block_size3 + k3) * N1 * N2;
+                MY_SIZE top_layer = (l * block_size3 + k3 + 1) * N1 * N2;
+                MY_SIZE inner_left_offset = (r * block_size1 + k1) * N2 +
+                  (c * block_size2 + k2);
+                MY_SIZE outer_left_offset = (r * block_size1 + k1 + 1) * N2 +
+                  (c * block_size2 + k2);
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    bottom_layer + inner_left_offset;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    bottom_layer + inner_left_offset + 1;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    bottom_layer + outer_left_offset + 1;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    bottom_layer + outer_left_offset;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    top_layer + inner_left_offset;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    top_layer + inner_left_offset + 1;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    top_layer + outer_left_offset + 1;
+                cell_to_node[0].operator[]<MY_SIZE>(array_ind++) =
+                    top_layer + outer_left_offset;
+              }
+            }
+          }
+        }
+      }
+    }
+    assert(array_ind == numCells() * cell_to_node[0].getDim());
+    // generate coordinates
+    if (point_coordinates.getSize() > 0) {
+      for (MY_SIZE l = 0; l < N3; ++l) {
+        for (MY_SIZE r = 0; r < N1; ++r) {
+          for (MY_SIZE c = 0; c < N2; ++c) {
+            MY_SIZE point_ind = l * N1 * N2 + r * N2 + c;
+            point_coordinates.operator[]<float>(point_ind * 3 + 0) = r;
+            point_coordinates.operator[]<float>(point_ind * 3 + 1) = c;
+            point_coordinates.operator[]<float>(point_ind * 3 + 2) = l;
+          }
+        }
+      }
+    }
+  }
+  /* }}} fillCellListBlock3D */
 };
 
 // vim:set et sts=2 sw=2 ts=2 fdm=marker:

@@ -28,6 +28,13 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
 
   std::vector<DataType> result1, result2;
   DataType maxdiff = 0;
+  const std::vector<MY_SIZE> grid_size = [N, M]() {
+    if (MeshDim == 8) {
+      return std::vector<MY_SIZE>{N, M, M};
+    } else {
+      return std::vector<MY_SIZE>{N, M};
+    }
+  }();
 #ifdef VERBOSE_TEST
   std::vector<MY_SIZE> not_changed, not_changed2;
   MY_SIZE ind_max = 0, dim_max = 0;
@@ -35,11 +42,12 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
 #endif // VERBOSE_TEST
   {
     srand(1);
-    Problem<SOA> problem(
-        StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(N, M));
+    Problem<SOA> problem{
+        StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(
+            grid_size)};
     result1.resize(problem.mesh.numPoints(0) * PointDim);
-    // save data before test
-    #pragma omp parallel for
+// save data before test
+#pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
@@ -108,10 +116,11 @@ void testTwoImplementations(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   {
     srand(1);
     Problem<SOA> problem{
-        StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(N, M)};
+        StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(
+            grid_size)};
     result2.resize(problem.mesh.numPoints(0) * PointDim);
-    // save data before test
-    #pragma omp parallel for
+// save data before test
+#pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
@@ -220,8 +229,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
         StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(N, M)};
     assert(problem.mesh.numPoints(0) == N * M);
     result1.resize(problem.mesh.numPoints(0) * PointDim);
-    // save data before test
-    #pragma omp parallel for
+// save data before test
+#pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
@@ -293,8 +302,8 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
     Problem<SOA> problem{
         StructuredProblem<MeshDim, PointDim, CellDim, SOA, DataType>(N, M)};
     result2.resize(problem.mesh.numPoints(0) * PointDim);
-    // save data before test
-    #pragma omp parallel for
+// save data before test
+#pragma omp parallel for
     for (MY_SIZE i = 0; i < problem.mesh.numPoints(0); ++i) {
       for (MY_SIZE d = 0; d < PointDim; ++d) {
         MY_SIZE ind = index<SOA>(problem.mesh.numPoints(0), i, PointDim, d);
@@ -563,7 +572,7 @@ void testReordering(MY_SIZE num, MY_SIZE N, MY_SIZE M,
   {                                                                            \
     /* {{{1 */                                                                 \
     constexpr MY_SIZE num = 500;                                               \
-    constexpr MY_SIZE N = 100, M = 200;                                        \
+    constexpr MY_SIZE N = 100, M = MeshDim == 8 ? 20 : 200;                    \
     /* float */                                                                \
     {                                                                          \
       constexpr unsigned TEST_DIM = 1;                                         \
@@ -789,8 +798,12 @@ template <unsigned MeshDim> void testImplementations() {
 }
 
 void testImplementations() {
-  testImplementations<2>();
-  testImplementations<4>();
+  /* testImplementations<2>(); */
+  /* testImplementations<4>(); */
+  testImplementations<8>();
+  std::cout << "========================================" << std::endl;
+  std::cout << "# Finished testing the implementations #" << std::endl;
+  std::cout << "========================================" << std::endl;
 }
 
 /* testMultipleMapping {{{1 */
