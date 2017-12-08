@@ -303,10 +303,9 @@ public:
       TIMER_TOGGLE(timer_copy);
       MY_SIZE num_copy_blocks =
           std::ceil(static_cast<float>(copy_size) / 512.0);
-      copyKernel<<<num_copy_blocks, 512>>>(
-          reinterpret_cast<float *>(point_weights_out.getDeviceData()),
-          reinterpret_cast<float *>(point_weights[0].getDeviceData()),
-          copy_size);
+      copyKernel(reinterpret_cast<float *>(point_weights_out.getDeviceData()),
+                 reinterpret_cast<float *>(point_weights[0].getDeviceData()),
+                 copy_size, num_copy_blocks, 512);
       TIMER_TOGGLE(timer_copy);
     }
     PRINT_BANDWIDTH(timer_calc, "GPU HierarchicalColouring",
