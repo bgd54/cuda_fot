@@ -46,7 +46,7 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
 }
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
-          typename DataType = float>
+          typename DataType = float, bool Partition = false>
 void generateTimesWithBlockDims3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3,
                                   std::vector<MY_SIZE> block_dims) {
   constexpr MY_SIZE num = 500;
@@ -62,13 +62,19 @@ void generateTimesWithBlockDims3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3,
             << " Cell dimension: " << CellDim << " SOA: " << std::boolalpha
             << SOA << "\n     Data type: "
             << (std::is_same<float, DataType>::value ? "float" : "double")
-            << std::endl;
+            << "\n     Partition: " << std::boolalpha << Partition << std::endl;
   std::function<void(implementation_algorithm_t<SOA>)> run =
       [&](implementation_algorithm_t<SOA> algo) {
         Problem<SOA> problem(
             std::move(StructuredProblem<8, PointDim, CellDim, SOA, DataType>(
                 {N1, N2, N3}, block_dims)));
         std::cout << "--Problem created" << std::endl;
+        if (Partition) {
+          problem.partition(1.001);
+          problem.reorderToPartition();
+          problem.renumberPoints();
+          std::cout << "--Problem reordered" << std::endl;
+        }
         (problem.*algo)(num);
         std::cout << "--Problem finished." << std::endl;
       };
@@ -120,6 +126,8 @@ void generateTimesDifferentBlockDims(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3) {
                                                                  {8, 4, 4});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
                                                                  {4, 8, 4});
+  /* generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType, true>( */
+  /*     N1, N2, N3, {128, 1, 1}); */
 }
 
 template <unsigned MeshDim> void testReordering() {
