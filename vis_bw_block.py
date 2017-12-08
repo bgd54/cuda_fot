@@ -4,7 +4,6 @@ from cycler import cycler
 
 '''
 To load bandwidths:
-'''
 bw = np.zeros((2,4,16,2))
 names = ['0x32','2x8','4x4','0x128', '2x32', '4x16', '8x8', '0x288', '2x72', '4x36', '12x12', '0x512', '2x128', '4x64', '8x32', '16x16']
 
@@ -19,6 +18,7 @@ bw[0,:,:,:] = bw_1
 bw[1,:,:,:] = bw_2
 
 rf = np.array([float(line.strip()) for line in open('./reuse_factors')])
+'''
 
 
 def plot_block_versions(bw, names, offset=1):
@@ -107,4 +107,14 @@ def plot_all():
     plot_reuse_factors(rf,names)
     plot_block_versions_by_dim(bw, names, 1)
     plot_block_versions_by_dim(bw, names, 0)
+
+def plot_3D(bw,blocks, rf, cl, nc):
+    plt.plot(np.arange(9), 1e10/rf[0,:], 'yo')
+    plt.plot(np.arange(9), 1e10*nc[0,:], 'ks')
+    plt.plot(np.arange(18)/2-0.2,cl.T.flatten()*1e7, 'y*')
+    plt.bar(np.arange(9)-0.4, bw[0,:],0.4)
+    plt.bar(np.arange(9), bw[1,:],0.4,color='red')
+    plt.legend(['reuse','threadcol','cacheline','SOA','AOS'],loc='upper left')
+    plt.xticks(np.arange(9),map(str,blocks))
+
 
