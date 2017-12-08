@@ -40,6 +40,9 @@ generate_grid
 apply_reorder
 res_calc
 lulesh
+mini_aero
+getacc
+volna
 visualization/*.vtk
 visualization/testVTK
 test_files/*

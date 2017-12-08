@@ -207,6 +207,9 @@ public:
     MY_SIZE total_num_blocks = 0;
     MY_SIZE total_shared_size = 0;
     size_t total_num_cache_lines = 0;
+#ifdef USE_TIMER_MACRO
+    std::cout << "  Requested shared size:";
+#endif // USE_TIMER_MACRO
     for (MY_SIZE i = 0; i < memory.colours.size(); ++i) {
       const typename HierarchicalColourMemory<SOA>::MemoryOfOneColour
           &memory_of_one_colour = memory.colours[i];
@@ -234,7 +237,19 @@ public:
                     memory_of_one_colour.points_to_be_cached_offsets[j + 1],
                 point_weights[0].getDim(), point_weights[0].getTypeSize());
       }
+#ifdef USE_TIMER_MACRO
+      const MY_SIZE shared_memory_multiplier =
+          SharedMemoryMultiplier != 0
+              ? SharedMemoryMultiplier
+              : (point_weights[0].getTypeSize() * point_weights[0].getDim());
+      MY_SIZE cache_size =
+          (d_memory[i].shared_size + 32) * shared_memory_multiplier;
+      std::cout << " " << cache_size;
+#endif // USE_TIMER_MACRO
     }
+#ifdef USE_TIMER_MACRO
+    std::cout << std::endl;
+#endif // USE_TIMER_MACRO
     std::vector<const char *> point_data(mesh.numMappings());
     std::transform(point_weights.begin(), point_weights.end(),
                    point_data.begin(), [](data_t &a) {

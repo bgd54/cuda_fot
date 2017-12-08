@@ -22,7 +22,7 @@ constexpr unsigned POINT_DIM0 = 2, CELL_DIM0 = 2, POINT_DIM1 = 4, CELL_DIM1 = 1,
 struct StepSeq {
   template <bool SOA>
   static void call(const void **_point_data, void *_point_data_out,
-                   const void **_cell_data, const MY_SIZE **cell_to_node,
+                   void **_cell_data, const MY_SIZE **cell_to_node,
                    MY_SIZE ind, const unsigned *point_stride,
                    unsigned cell_stride) {
     const float *point_data0 = reinterpret_cast<const float *>(_point_data[0]);
@@ -71,7 +71,7 @@ template <bool SOA>
 __global__ void
 stepGPUGlobal(const void **__restrict__ _point_data,
               void *__restrict__ _point_data_out,
-              const void **__restrict__ _cell_data,
+              void **__restrict__ _cell_data,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride);
 
@@ -79,7 +79,7 @@ struct StepGPUGlobal {
   template <bool SOA>
   static void call(const void **__restrict__ point_data,
                    void *__restrict__ point_data_out,
-                   const void **__restrict__ cell_data,
+                   void **__restrict__ cell_data,
                    const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
                    MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride,
                    MY_SIZE num_blocks, MY_SIZE block_size) {
@@ -94,7 +94,7 @@ template <bool SOA>
 __global__ void
 stepGPUGlobal(const void **__restrict__ _point_data,
               void *__restrict__ _point_data_out,
-              const void **__restrict__ _cell_data,
+              void **__restrict__ _cell_data,
               const MY_SIZE **__restrict__ cell_to_node, MY_SIZE num_cells,
               MY_SIZE *__restrict__ point_stride, MY_SIZE cell_stride) {
   MY_SIZE ind = blockIdx.x * blockDim.x + threadIdx.x;
@@ -149,7 +149,7 @@ __global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const void **__restrict__ _cell_data,
+    void **__restrict__ _cell_data,
     const MY_SIZE **__restrict__ cell_to_node,
     const std::uint8_t *__restrict__ num_cell_colours,
     const std::uint8_t *__restrict__ cell_colours,
@@ -162,7 +162,7 @@ struct StepGPUHierarchical {
   call(const void **__restrict__ point_data, void *__restrict__ point_data_out,
        const MY_SIZE *__restrict__ points_to_be_cached,
        const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-       const void **__restrict__ cell_data,
+       void **__restrict__ cell_data,
        const MY_SIZE **__restrict__ cell_to_node,
        const std::uint8_t *__restrict__ num_cell_colours,
        const std::uint8_t *__restrict__ cell_colours,
@@ -182,7 +182,7 @@ __global__ void stepGPUHierarchical(
     const void **__restrict__ _point_data, void *__restrict__ _point_data_out,
     const MY_SIZE *__restrict__ points_to_be_cached,
     const MY_SIZE *__restrict__ points_to_be_cached_offsets,
-    const void **__restrict__ _cell_data,
+    void **__restrict__ _cell_data,
     const MY_SIZE **__restrict__ cell_to_node,
     const std::uint8_t *__restrict__ num_cell_colours,
     const std::uint8_t *__restrict__ cell_colours,

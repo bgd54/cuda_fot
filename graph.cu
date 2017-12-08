@@ -46,6 +46,44 @@ void generateTimesWithBlockDims(MY_SIZE N, MY_SIZE M,
 }
 
 template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
+          typename DataType = float, bool Partition = false>
+void generateTimesWithBlockDims3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3,
+                                  std::vector<MY_SIZE> block_dims) {
+  constexpr MY_SIZE num = 500;
+  MY_SIZE block_size =
+      StructuredProblem<8, PointDim, CellDim, SOA,
+                        DataType>::calculateBlockSize(block_dims);
+
+  std::cout << ":::: Generating problems with block size: " << block_dims[0]
+            << "x" << block_dims[1] << "x" << block_dims[2]
+            << " (= " << block_size << ")"
+            << "::::" << std::endl
+            << "     Point dimension: " << PointDim
+            << " Cell dimension: " << CellDim << " SOA: " << std::boolalpha
+            << SOA << "\n     Data type: "
+            << (std::is_same<float, DataType>::value ? "float" : "double")
+            << "\n     Partition: " << std::boolalpha << Partition << std::endl;
+  std::function<void(implementation_algorithm_t<SOA>)> run =
+      [&](implementation_algorithm_t<SOA> algo) {
+        Problem<SOA> problem(
+            std::move(StructuredProblem<8, PointDim, CellDim, SOA, DataType>(
+                {N1, N2, N3}, block_dims)));
+        std::cout << "--Problem created" << std::endl;
+        if (Partition) {
+          problem.partition(1.001);
+          problem.reorderToPartition();
+          problem.renumberPoints();
+          std::cout << "--Problem reordered" << std::endl;
+        }
+        (problem.*algo)(num);
+        std::cout << "--Problem finished." << std::endl;
+      };
+  run(&Problem<SOA>::template loopGPUHierarchical<
+      mine::StepGPUHierarchical<8, PointDim, CellDim, DataType>>);
+  std::cout << "Finished." << std::endl;
+}
+
+template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
   generateTimesWithBlockDims<PointDim, CellDim, SOA, DataType>(N, M, {0, 32});
@@ -65,6 +103,31 @@ void generateTimesDifferentBlockDims(MY_SIZE N, MY_SIZE M) {
   generateTimesWithBlockDims<PointDim, CellDim, SOA, DataType>(N, M, {4, 64});
   generateTimesWithBlockDims<PointDim, CellDim, SOA, DataType>(N, M, {8, 32});
   generateTimesWithBlockDims<PointDim, CellDim, SOA, DataType>(N, M, {16, 16});
+}
+
+template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
+          typename DataType = float>
+void generateTimesDifferentBlockDims(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3) {
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {128, 1, 1});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {64, 2, 1});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {32, 4, 1});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {16, 8, 1});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {8, 16, 2});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {32, 2, 2});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {16, 4, 2});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {8, 4, 4});
+  generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
+                                                                 {4, 8, 4});
+  /* generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType, true>( */
+  /*     N1, N2, N3, {128, 1, 1}); */
 }
 
 template <unsigned MeshDim> void testReordering() {
@@ -142,14 +205,37 @@ void generateTimesDifferentBlockDims() {
   generateTimesDifferentBlockDims<8, 8, false, double>(1153, 1153);
 }
 
+void generateTimesDifferentBlockDims3D() {
+  constexpr MY_SIZE N1 = 257, N2 = 129, N3 = 65;
+  // SOA
+  generateTimesDifferentBlockDims<1, 1, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<2, 1, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<4, 1, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<8, 1, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<1, 1, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<2, 2, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<4, 4, true, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<8, 8, true, double>(N1, N2, N3);
+  // AOS
+  generateTimesDifferentBlockDims<1, 1, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<2, 1, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<4, 1, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<8, 1, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<1, 1, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<2, 2, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<4, 4, false, double>(N1, N2, N3);
+  generateTimesDifferentBlockDims<8, 8, false, double>(N1, N2, N3);
+}
+
 int main(int argc, const char **argv) {
   /*generateTimesFromFile(argc, argv);*/
-  /*testImplementations();*/
+  /* testImplementations(); */
   /*testReordering();*/
   /*testPartitioning();*/
-  testMultipleMapping("./test_files/mmapping/", 1);
+  /* testMultipleMapping("./test_files/mmapping/", 1); */
   /*generateTimesDifferentBlockDims();*/
   /*measurePartitioning();*/
+  generateTimesDifferentBlockDims3D();
   return 0;
 }
 

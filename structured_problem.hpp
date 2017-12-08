@@ -12,12 +12,12 @@ public:
       MY_SIZE N, MY_SIZE M,
       std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
       bool use_coordinates = false)
-      : StructuredProblem({N, M}, block_dims, use_coordinates) {}
+      : StructuredProblem({N, M}, {block_dims.first, block_dims.second},
+                          use_coordinates) {}
 
-  StructuredProblem(
-      const std::vector<MY_SIZE> &grid_dim,
-      std::pair<MY_SIZE, MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
-      bool use_coordinates = false)
+  StructuredProblem(const std::vector<MY_SIZE> &grid_dim,
+                    std::vector<MY_SIZE> block_dims = {0, DEFAULT_BLOCK_SIZE},
+                    bool use_coordinates = false)
       : Base(Grid(grid_dim, MeshDim, block_dims, use_coordinates),
              {{PointDim, sizeof(DataType)}}, {{CellDim, sizeof(DataType)}},
              calculateBlockSize(block_dims)) {
@@ -41,19 +41,26 @@ public:
     }
   }
 
-  static MY_SIZE calculateBlockSize(std::pair<MY_SIZE, MY_SIZE> block_dims) {
+  static MY_SIZE calculateBlockSize(std::vector<MY_SIZE> block_dims) {
     if (MeshDim == 2) {
-      if (block_dims.first == 0) {
-        return block_dims.second;
-      } else if (block_dims == std::pair<MY_SIZE, MY_SIZE>{9, 8}) {
+      if (block_dims[0] == 0) {
+        return block_dims[1];
+      } else if (block_dims == std::vector<MY_SIZE>{9, 8}) {
         return 9 * 8 * 2 * 2;
       } else {
-        return block_dims.first * block_dims.second * 2;
+        return block_dims[0] * block_dims[1] * 2;
+      }
+    } else if (MeshDim == 8) {
+      if (block_dims[0] == 0) {
+        return block_dims[1];
+      } else {
+        assert(block_dims.size() == 3);
+        return block_dims[0] * block_dims[1] * block_dims[2];
       }
     } else {
-      // Block dims are not yet supported with meshes
-      assert(block_dims.first == 0);
-      return block_dims.second;
+      // Block dims are not yet supported with other meshes
+      assert(block_dims[0] == 0);
+      return block_dims[1];
     }
   }
 };
