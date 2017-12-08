@@ -798,8 +798,8 @@ template <unsigned MeshDim> void testImplementations() {
 }
 
 void testImplementations() {
-  /* testImplementations<2>(); */
-  /* testImplementations<4>(); */
+  testImplementations<2>();
+  testImplementations<4>();
   testImplementations<8>();
   std::cout << "========================================" << std::endl;
   std::cout << "# Finished testing the implementations #" << std::endl;

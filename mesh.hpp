@@ -24,6 +24,9 @@ class Mesh {
 public:
   // I assume 64 colour is enough
   using colourset_t = std::bitset<128>;
+  static_assert(colourset_t{}.size() <= 255,
+                "Implementation uses 8 bit integers for the number of colours, "
+                "thus the maximum number of colours is at most 255.");
 
 private:
   std::vector<MY_SIZE> num_points;

@@ -100,16 +100,22 @@ template <class UnsignedType> struct GraphCSR {
    *
    * data in cell_to_node must be of type MY_SIZE
    */
+  template <class Iterator>
+  static std::multimap<UnsignedType, MY_SIZE>
+  getPointToCell(Iterator begin, Iterator end, MY_SIZE mesh_dim) {
+    std::multimap<UnsignedType, MY_SIZE> point_to_cell;
+    for (MY_SIZE i = 0; begin != end; ++i, ++begin) {
+      point_to_cell.insert(std::make_pair(*begin, i / mesh_dim));
+    }
+    return point_to_cell;
+  }
+
   static std::multimap<UnsignedType, MY_SIZE>
   getPointToCell(const data_t &cell_to_node) {
     assert(cell_to_node.getTypeSize() == sizeof(MY_SIZE));
     const unsigned mesh_dim = cell_to_node.getDim();
-    std::multimap<UnsignedType, MY_SIZE> point_to_cell;
-    for (MY_SIZE i = 0; i < mesh_dim * cell_to_node.getSize(); ++i) {
-      point_to_cell.insert(
-          std::make_pair(cell_to_node.operator[]<MY_SIZE>(i), i / mesh_dim));
-    }
-    return point_to_cell;
+    return getPointToCell(cell_to_node.cbegin<MY_SIZE>(),
+                          cell_to_node.cend<MY_SIZE>(), mesh_dim);
   }
 
 private:
