@@ -103,23 +103,23 @@ template <unsigned PointDim = 1, unsigned CellDim = 1, bool SOA = false,
           typename DataType = float>
 void generateTimesDifferentBlockDims(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3) {
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {256, 1, 1});
+                                                                 {128, 1, 1});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {128, 2, 1});
+                                                                 {64, 2, 1});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {64, 4, 1});
+                                                                 {32, 4, 1});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {32, 8, 1});
+                                                                 {16, 8, 1});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {16, 16, 2});
+                                                                 {8, 16, 2});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {64, 2, 2});
+                                                                 {32, 2, 2});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {32, 4, 2});
+                                                                 {16, 4, 2});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {16, 4, 4});
+                                                                 {8, 4, 4});
   generateTimesWithBlockDims3D<PointDim, CellDim, SOA, DataType>(N1, N2, N3,
-                                                                 {8, 8, 4});
+                                                                 {4, 8, 4});
 }
 
 template <unsigned MeshDim> void testReordering() {
