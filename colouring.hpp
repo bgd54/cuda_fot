@@ -75,7 +75,7 @@ template <bool SOA = false> struct HierarchicalColourMemory {
       for (MY_SIZE i = 1; i < partition_vector.size(); ++i) {
         cell_weight_inv_permutation[i] = partition_to_cell[i].second;
         if (++tid == block_size) {
-          if (!partition_to_cell[i - 1].first != partition_to_cell[i].first) {
+          if (partition_to_cell[i - 1].first == partition_to_cell[i].first) {
             warning = true;
           }
           tid = 0;
