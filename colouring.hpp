@@ -15,6 +15,10 @@
 
 #include "problem.hpp"
 
+std::pair<std::vector<std::uint8_t>, std::uint8_t>
+colourCellsWithOrdering(const std::vector<MY_SIZE> &mapping,
+                        MY_SIZE mapping_dim);
+
 template <bool SOA = false> struct HierarchicalColourMemory {
   using colourset_t = Mesh::colourset_t;
   struct MemoryOfOneColour {
@@ -217,8 +221,7 @@ private:
                 (cell_ind + 1) * _mesh_dim);
       }
     }
-    colourCells(to - from, colour, c_cell_list, points_to_be_cached.size(),
-                mesh_dim);
+    colourCells(colour, c_cell_list, mesh_dim);
     const MY_SIZE colour_to = colour.cell_colours.size();
     sortCellsByColours(colour_from, colour_to, from, colour_ind,
                        cell_weight_inv_permutation, mesh);
@@ -231,37 +234,13 @@ private:
         colour.points_to_be_cached.size());
   }
 
-  void colourCells(MY_SIZE block_size, MemoryOfOneColour &block,
-                   const std::vector<MY_SIZE> &cell_list, MY_SIZE num_point,
-                   MY_SIZE mesh_dim) {
-    static std::vector<colourset_t> point_colours;
-    point_colours.resize(num_point);
-    memset(point_colours.data(), 0, sizeof(colourset_t) * point_colours.size());
-    std::uint8_t num_cell_colours = 0;
-    std::vector<MY_SIZE> set_sizes(64, 0);
-    colourset_t used_colours;
-    for (MY_SIZE i = 0; i < block_size; ++i) {
-      colourset_t occupied_colours;
-      for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
-        occupied_colours |= point_colours[cell_list[mesh_dim * i + offset]];
-      }
-      colourset_t available_colours = ~occupied_colours & used_colours;
-      if (available_colours.none()) {
-        ++num_cell_colours;
-        used_colours <<= 1;
-        used_colours.set(0);
-        available_colours = ~occupied_colours & used_colours;
-      }
-      std::uint8_t colour = Mesh::template getAvailableColour<false>(
-          available_colours, set_sizes);
-      block.cell_colours.push_back(colour);
-      ++set_sizes[colour];
-      colourset_t colourset(1ull << colour);
-      for (MY_SIZE offset = 0; offset < mesh_dim; ++offset) {
-        point_colours[cell_list[mesh_dim * i + offset]] |= colourset;
-      }
-    }
-    block.num_cell_colours.push_back(num_cell_colours);
+  void colourCells(MemoryOfOneColour &block,
+                   const std::vector<MY_SIZE> &cell_list, MY_SIZE mesh_dim) {
+    const auto colouring_plan = colourCellsWithOrdering(cell_list, mesh_dim);
+    block.cell_colours.insert(block.cell_colours.end(),
+                              colouring_plan.first.begin(),
+                              colouring_plan.first.end());
+    block.num_cell_colours.push_back(colouring_plan.second);
   }
 
   void sortCellsByColours(MY_SIZE colour_from, MY_SIZE colour_to, MY_SIZE from,
