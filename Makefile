@@ -11,16 +11,19 @@ VERBOSE     ?=  no
 SCOTCH_DIR  ?=  $(shell echo ${HOME})/software/scotch
 # METIS installation directory
 METIS_DIR   ?=  $(shell echo ${HOME})/software/metis
+# Catch include directory
+CATCH_DIR   ?=  $(shell echo ${HOME})/software/include
 
 
 INC := -I$(CUDA_HOME)/include -I.
 LIB := -L$(CUDA_HOME)/lib64 -lcudart
 
-MAIN_SRC = graph.cu generate_grid.cu apply_reorder.cu
-AUX_SRC  = colouring.cu data_t.cu partition.cu
-HDR      = $(wildcard *.hpp) $(wildcard kernels/*.hpp)
-TGT      = $(patsubst %.cu,%,$(MAIN_SRC))
-AUX_OBJ  = $(patsubst %.cu,%.o,$(AUX_SRC))
+MAIN_SRC  = graph.cu generate_grid.cu apply_reorder.cu
+AUX_SRC   = colouring.cu data_t.cu partition.cu
+HDR       = $(wildcard *.hpp) $(wildcard kernels/*.hpp)
+TGT       = $(patsubst %.cu,%,$(MAIN_SRC))
+AUX_OBJ   = $(patsubst %.cu,%.o,$(AUX_SRC))
+CATCH_SRC =
 
 NVCCFLAGS   := -arch=sm_60 --use_fast_math
 NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
@@ -45,6 +48,8 @@ SCOTCH_FLAGS += -L$(SCOTCH_DIR)/lib/
 METIS_FLAGS := -I$(METIS_DIR)/include
 METIS_FLAGS += -lmetis -L$(METIS_DIR)/lib/
 
+CATCH_FLAGS := -I$(CATCH_DIR)
+
 MESH_DIM ?= 2
 ifeq ($(VERBOSE), no)
 MACRO_VERBOSE =
@@ -53,6 +58,9 @@ MACRO_VERBOSE = -DVERBOSE_TEST -DUSE_TIMER_MACRO
 endif
 
 .SECONDARY: $(AUX_OBJ)
+
+# Always recompile when testing
+.PHONY: catch
 
 all: $(TGT)
 
@@ -64,6 +72,13 @@ all: $(TGT)
 %.o: %.cu Makefile $(HDR)
 	nvcc $< -c -o $@ $(INC) $(METIS_FLAGS) $(NVCCFLAGS) $(LIB)                 \
 	    $(OPTIMIZATION_FLAGS) $(SCOTCH_FLAGS) -DMY_SIZE="std::uint32_t"        \
+	    -DMESH_DIM_MACRO=$(MESH_DIM) $(MACRO_VERBOSE)
+
+catch:
+	cd test &&                                                                 \
+	nvcc catch_main.cu $(CATCH_SRC) -o catch                                   \
+	    -I .. $(INC) $(METIS_FLAGS) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS)  \
+	    $(SCOTCH_FLAGS)  $(CATCH_FLAGS) -DMY_SIZE="std::uint32_t"              \
 	    -DMESH_DIM_MACRO=$(MESH_DIM) $(MACRO_VERBOSE)
 
 clean:

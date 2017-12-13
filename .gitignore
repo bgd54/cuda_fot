@@ -35,7 +35,6 @@
 .ycm_extra_conf.py
 *.bak*
 graph
-test
 generate_grid
 apply_reorder
 res_calc
@@ -45,5 +44,6 @@ getacc
 volna
 visualization/*.vtk
 visualization/testVTK
+test/catch
 test_files/*
 !test_files/gen*.py
