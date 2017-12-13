@@ -23,7 +23,7 @@ AUX_SRC   = colouring.cu data_t.cu partition.cu
 HDR       = $(wildcard *.hpp) $(wildcard kernels/*.hpp)
 TGT       = $(patsubst %.cu,%,$(MAIN_SRC))
 AUX_OBJ   = $(patsubst %.cu,%.o,$(AUX_SRC))
-CATCH_SRC =
+CATCH_SRC = catch_priority_queue.cu
 
 NVCCFLAGS   := -arch=sm_60 --use_fast_math
 NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
