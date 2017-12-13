@@ -42,9 +42,10 @@ std::pair<MY_SIZE, Priority> PriorityQueue<Priority>::popMax() {
   assert(index_to_priority.size() == priority_to_index.size());
   auto max_reverse_it = priority_to_index.rbegin();
   auto max_it = (++max_reverse_it).base();
+  auto result = std::make_pair(max_it->second, max_it->first);
   index_to_priority.erase(max_it->second);
   priority_to_index.erase(max_it);
-  return std::make_pair(max_it->second, max_it->first);
+  return result;
 }
 
 template <class Priority>
