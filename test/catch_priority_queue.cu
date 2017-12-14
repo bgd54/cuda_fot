@@ -73,7 +73,7 @@ TEST_CASE("PriorityQueue: popMax", "[priority queue]") {
   }
 }
 
-TEST_CASE("PriorityQueue: priority sort", "[priority_queue]") {
+TEST_CASE("PriorityQueue: priority sort", "[priority queue]") {
   PriorityQueue<int> pq{};
   std::vector<int> v = {1, 9, 8, 0, 7, 2, 6, 4, 3, 11, 12, 13, 10, 5};
   for (unsigned i = 0; i < v.size(); ++i) {
@@ -128,4 +128,14 @@ TEST_CASE("PriorityQueue: modify", "[priority queue]") {
     CHECK(rr.first == 0);
     CHECK(rr.second == 4);
   }
+}
+
+TEST_CASE("PriorityQueue with another type", "[]") {
+  struct A {
+    int a;
+    bool operator< (A rhs) {
+      return a < rhs.a;
+    }
+  };
+  PriorityQueue<A> {};
 }

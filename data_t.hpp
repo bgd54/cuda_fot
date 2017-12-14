@@ -165,12 +165,12 @@ void reorderDataInverse(data_t &point_data,
   }
 }
 
-template <typename UnsignedType>
-void reorderDataInverseAOS(std::vector<MY_SIZE>::iterator point_data,
+template <typename DataType, typename UnsignedType>
+void reorderDataInverseAOS(typename std::vector<DataType>::iterator point_data,
                            const std::vector<UnsignedType> &permutation,
                            MY_SIZE dim) {
   MY_SIZE size = permutation.size();
-  std::vector<MY_SIZE> old_data(point_data, point_data + dim * size);
+  std::vector<DataType> old_data(point_data, point_data + dim * size);
   for (MY_SIZE i = 0; i < size; ++i) {
     for (MY_SIZE d = 0; d < dim; ++d) {
       MY_SIZE old_ind = index<false>(size, permutation[i], dim, d);
@@ -234,6 +234,16 @@ void reorderDataInverseSOA(data_t &point_data, MY_SIZE from, MY_SIZE to,
                   point_data.begin() + new_ind * type_size);
     }
   }
+}
+
+template <typename UnsignedType>
+std::vector<UnsignedType>
+invertPermutation(const std::vector<UnsignedType> &permutation) {
+  std::vector<UnsignedType> inverse_permutation(permutation.size());
+  for (unsigned i = 0; i < permutation.size(); ++i) {
+    inverse_permutation[permutation[i]] = i;
+  }
+  return inverse_permutation;
 }
 
 template <class Iterator>

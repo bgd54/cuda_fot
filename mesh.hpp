@@ -287,9 +287,15 @@ public:
   template <bool MinimiseColourSizes = true>
   static MY_SIZE getAvailableColour(colourset_t available_colours,
                                     const std::vector<MY_SIZE> &set_sizes) {
-    assert(set_sizes.size() > 0);
-    MY_SIZE colour = set_sizes.size();
-    for (MY_SIZE i = 0; i < set_sizes.size(); ++i) {
+    if (MinimiseColourSizes) {
+      assert(set_sizes.size() > 0);
+    }
+    // If we don't do minsearch, we break out of the loop at the first '1'
+    // anyway.
+    const unsigned num_colours =
+        MinimiseColourSizes ? set_sizes.size() : available_colours.size();
+    MY_SIZE colour = num_colours;
+    for (MY_SIZE i = 0; i < num_colours; ++i) {
       if (available_colours[i]) {
         if (MinimiseColourSizes) {
           if (colour >= set_sizes.size() || set_sizes[colour] > set_sizes[i]) {
@@ -300,8 +306,9 @@ public:
         }
       }
     }
-    assert(colour < set_sizes.size());
-    if (colour >= set_sizes.size()) {
+    // assert(MinimiseColourSizes && colour < num_colours && "Not enough
+    // colour");
+    if (!MinimiseColourSizes || colour >= num_colours) {
       std::cerr << "Warning: not enough colour." << std::endl;
     }
     return colour;

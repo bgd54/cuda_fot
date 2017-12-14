@@ -23,7 +23,7 @@ AUX_SRC   = colouring.cu data_t.cu partition.cu
 HDR       = $(wildcard *.hpp) $(wildcard kernels/*.hpp)
 TGT       = $(patsubst %.cu,%,$(MAIN_SRC))
 AUX_OBJ   = $(patsubst %.cu,%.o,$(AUX_SRC))
-CATCH_SRC = catch_priority_queue.cu
+CATCH_SRC = catch_priority_queue.cu catch_heuristical_partition.cu
 
 NVCCFLAGS   := -arch=sm_60 --use_fast_math
 NVCCFLAGS   += -std=c++11 -Xcompiler -Wall,-Wextra,-fopenmp
@@ -76,7 +76,7 @@ all: $(TGT)
 
 catch:
 	cd test &&                                                                 \
-	nvcc catch_main.cu $(CATCH_SRC) -o catch                                   \
+	nvcc catch_main.cu $(CATCH_SRC) $(patsubst %,../%,$(AUX_SRC)) -o catch     \
 	    -I .. $(INC) $(METIS_FLAGS) $(NVCCFLAGS) $(LIB) $(OPTIMIZATION_FLAGS)  \
 	    $(SCOTCH_FLAGS)  $(CATCH_FLAGS) -DMY_SIZE="std::uint32_t"              \
 	    -DMESH_DIM_MACRO=$(MESH_DIM) $(MACRO_VERBOSE)

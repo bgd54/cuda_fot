@@ -1,4 +1,5 @@
 #include "colouring.hpp"
+#include "partition.hpp"
 #include "reorder.hpp"
 #include <algorithm>
 #include <bitset>
@@ -6,30 +7,7 @@
 #include <map>
 #include <vector>
 
-using adj_list_t = std::vector<std::vector<MY_SIZE>>;
 using colourset_t = Mesh::colourset_t;
-
-static adj_list_t getCellToCell(const std::vector<MY_SIZE> &mapping,
-                                MY_SIZE mapping_dim) {
-  const std::multimap<MY_SIZE, MY_SIZE> point_to_cell =
-      GraphCSR<MY_SIZE>::getPointToCell(mapping.begin(), mapping.end(),
-                                        mapping_dim);
-  const MY_SIZE num_cells = mapping.size() / mapping_dim;
-  adj_list_t cell_to_cell(num_cells);
-  for (MY_SIZE i = 0; i < num_cells; ++i) {
-    for (MY_SIZE offset = 0; offset < mapping_dim; ++offset) {
-      const MY_SIZE point = mapping[mapping_dim * i + offset];
-      const auto cell_range = point_to_cell.equal_range(point);
-      for (auto it = cell_range.first; it != cell_range.second; ++it) {
-        const MY_SIZE other_cell = it->second;
-        if (other_cell != i) {
-          cell_to_cell[i].push_back(other_cell);
-        }
-      }
-    }
-  }
-  return cell_to_cell;
-}
 
 static std::vector<MY_SIZE> getCellOrder(adj_list_t &cell_to_cell) {
   std::vector<MY_SIZE> order;
@@ -89,7 +67,7 @@ static ColouringPlan colourCellToCell(const adj_list_t &cell_to_cell,
   colourset_t used_colours{};
   ColouringPlan colouring_plan{};
   colouring_plan.cell_colours.resize(num_cells);
-  std::vector<MY_SIZE> set_sizes {};
+  std::vector<MY_SIZE> set_sizes{};
   for (MY_SIZE i = num_cells - 1; i < num_cells; --i) {
     const MY_SIZE v = order[i];
     assert(cell_colours[v].none());
@@ -98,7 +76,7 @@ static ColouringPlan colourCellToCell(const adj_list_t &cell_to_cell,
     colourset_t available_colours = ~occupied_colours & used_colours;
     if (available_colours.none()) {
       used_colours.set(colouring_plan.num_cell_colours++);
-	  set_sizes.push_back(0);
+      set_sizes.push_back(0);
       assert(colouring_plan.num_cell_colours <= used_colours.size());
       available_colours = ~occupied_colours & used_colours;
       assert(available_colours.any());

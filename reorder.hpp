@@ -87,6 +87,12 @@ template <class UnsignedType> struct GraphCSR {
   GraphCSR(const GraphCSR &other) = delete;
   GraphCSR &operator=(const GraphCSR &rhs) = delete;
 
+  GraphCSR(GraphCSR &&other)
+      : num_points{other.num_points}, num_cells{other.num_cells} {
+    std::swap(point_indices, other.point_indices);
+    std::swap(cell_endpoints, other.cell_endpoints);
+  }
+
   const UnsignedType *pointIndices() const { return point_indices; }
   UnsignedType *pointIndices() { return point_indices; }
 
@@ -117,6 +123,8 @@ template <class UnsignedType> struct GraphCSR {
     return getPointToCell(cell_to_node.cbegin<MY_SIZE>(),
                           cell_to_node.cend<MY_SIZE>(), mesh_dim);
   }
+
+  void reorderInverse(const std::vector<MY_SIZE> &inverse_permutation);
 
 private:
   UnsignedType *point_indices;
@@ -165,6 +173,33 @@ public:
 public:
   const char *strategy_string = "g";
 };
+
+template <class UnsignedType>
+void GraphCSR<UnsignedType>::reorderInverse(
+    const std::vector<MY_SIZE> &inverse_permutation) {
+  assert(inverse_permutation.size() == num_points);
+  UnsignedType *new_point_indices = new UnsignedType[num_points + 1];
+  std::vector<UnsignedType> new_cell_endpoints(cell_endpoints.size());
+  new_point_indices[0] = 0;
+  new_point_indices[num_points] = 0;
+  for (MY_SIZE i = 0; i < num_points; ++i) {
+    const MY_SIZE old_point = inverse_permutation[i];
+    const MY_SIZE num_endpoints =
+        point_indices[old_point + 1] - point_indices[old_point];
+    new_point_indices[i + 1] = new_point_indices[i] + num_endpoints;
+    std::copy_n(cell_endpoints.begin() + point_indices[old_point],
+                num_endpoints,
+                new_cell_endpoints.begin() + new_point_indices[i]);
+  }
+  assert(cell_endpoints.size() == new_point_indices[num_points]);
+  assert(new_cell_endpoints.size() == new_point_indices[num_points]);
+  std::vector<MY_SIZE> permutation = invertPermutation(inverse_permutation);
+  std::for_each(new_cell_endpoints.begin(), new_cell_endpoints.end(),
+                [&permutation](UnsignedType &a) { a = permutation[a]; });
+  std::swap(new_point_indices, point_indices);
+  delete[] new_point_indices;
+  std::swap(new_cell_endpoints, cell_endpoints);
+}
 
 #endif /* end of include guard: REORDER_HPP_IGDYRZTN */
 
