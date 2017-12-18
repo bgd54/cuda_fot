@@ -4,6 +4,7 @@
 #include "mesh.hpp"
 #include <cmath>
 #include <metis.h>
+#include <tuple>
 #include <vector>
 
 struct MetisError {
@@ -29,6 +30,30 @@ partitionMetisEnh(const Mesh &graph, MY_SIZE block_size, real_t tolerance,
 
 adj_list_t getCellToCell(const std::vector<MY_SIZE> &mapping,
                          MY_SIZE mapping_dim);
+
+/**
+ * \return the minimum, maximum and average block sizes, respectively
+ */
+template <typename UnsignedType>
+std::tuple<MY_SIZE, MY_SIZE, double>
+getPartitionStatistics(const std::vector<UnsignedType> &partition) {
+  assert(!partition.empty());
+  std::map<MY_SIZE, MY_SIZE> block_sizes;
+  for (UnsignedType i : partition) {
+    ++block_sizes[i];
+  }
+  auto minmax = std::minmax_element(
+      block_sizes.begin(), block_sizes.end(),
+      [](std::pair<const MY_SIZE, MY_SIZE> a,
+         std::pair<const MY_SIZE, MY_SIZE> b) { return a.second < b.second; });
+  double average =
+      std::accumulate(block_sizes.begin(), block_sizes.end(), 0,
+                      [](MY_SIZE a, std::pair<const MY_SIZE, MY_SIZE> b) {
+                        return a + b.second;
+                      });
+  average /= block_sizes.size();
+  return std::make_tuple(minmax.first->second, minmax.second->second, average);
+}
 
 #endif /* end of include guard: PARTITION_HPP_QTFZLMGZ */
 

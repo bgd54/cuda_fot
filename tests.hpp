@@ -312,7 +312,7 @@ void testPartitioning(MY_SIZE num, MY_SIZE N, MY_SIZE M) {
       }
     }
     // Create partitioning
-    problem.partition(1.01);
+    problem.partitionOurs(1.01, 16);
     problem.reorderToPartition();
     problem.renumberPoints();
 

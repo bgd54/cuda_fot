@@ -45,9 +45,9 @@ std::vector<MY_SIZE> partitionOurs(const Mesh &mesh, MY_SIZE block_size,
   Mesh cell_to_cell = mesh.getCellToCellGraph();
   GraphCSR<idx_t> csr(cell_to_cell.numPoints(0), cell_to_cell.numCells(),
                       cell_to_cell.cell_to_node[0]);
-  assert(mesh.numCells() < std::numeric_limits<idx_t>::max());
-  assert(mesh.numPoints(0) < std::numeric_limits<idx_t>::max());
-  assert(mesh.cell_to_node[0].getDim() == 2);
+  assert(cell_to_cell.numCells() < std::numeric_limits<idx_t>::max());
+  assert(cell_to_cell.numPoints(0) < std::numeric_limits<idx_t>::max());
+  assert(cell_to_cell.cell_to_node[0].getDim() == 2);
 
   idx_t nvtxs = cell_to_cell.numPoints(0), ncon = 1;
   idx_t nparts = std::ceil(static_cast<float>(cell_to_cell.numPoints(0)) /
@@ -115,6 +115,7 @@ void HeuristicalPartition::partitionWithin(MY_SIZE from, MY_SIZE to,
 
 void HeuristicalPartition::growBlock(MY_SIZE starting_point, MY_SIZE to,
                                      MY_SIZE size, MY_SIZE block_id) {
+  priority_t::used_colours.reset();
   PriorityQueue<priority_t> queue = initPriorityQueue(starting_point, to);
 #ifndef NDEBUG
   std::map<MY_SIZE, MY_SIZE> assigned_colours;
@@ -122,6 +123,7 @@ void HeuristicalPartition::growBlock(MY_SIZE starting_point, MY_SIZE to,
   for (MY_SIZE i = 0; i < size; ++i) {
     auto max_pair = queue.popMax();
     MY_SIZE cur = max_pair.first;
+    assert(result[cur] == UNDEFINED);
     const priority_t &cur_priority = max_pair.second;
     result[cur] = block_id;
 

@@ -483,6 +483,22 @@ public:
               partition_vector.begin());
   }
 
+  void partitionOurs(float tolerance, MY_SIZE num_blocks_in_coarse,
+                     idx_t options[METIS_NOPTIONS] = NULL) {
+    if (options == NULL) {
+      idx_t _options[METIS_NOPTIONS];
+      METIS_SetDefaultOptions(_options);
+      _options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;
+      partition_vector =
+          ::partitionOurs(mesh, block_size, block_size * num_blocks_in_coarse,
+                          tolerance, _options);
+    } else {
+      partition_vector =
+          ::partitionOurs(mesh, block_size, block_size * num_blocks_in_coarse,
+                          tolerance, options);
+    }
+  }
+
   void reorderToPartition() {
     std::vector<MY_SIZE> inverse_permutation =
         mesh.reorderToPartition(partition_vector);

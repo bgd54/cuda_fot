@@ -70,10 +70,15 @@ void generateTimesWithBlockDims3D(MY_SIZE N1, MY_SIZE N2, MY_SIZE N3,
                 {N1, N2, N3}, block_dims)));
         std::cout << "--Problem created" << std::endl;
         if (Partition) {
-          problem.partition(1.001);
+          problem.partitionOurs(1.001, 16);
           problem.reorderToPartition();
           problem.renumberPoints();
           std::cout << "--Problem reordered" << std::endl;
+          auto statistics = getPartitionStatistics(problem.partition_vector);
+          std::cout << "  Minimum block size: " << std::get<0>(statistics)
+                    << "\n  Maximum block size: " << std::get<1>(statistics)
+                    << "\n  Average block size: " << std::get<2>(statistics)
+                    << std::endl;
         }
         (problem.*algo)(num);
         std::cout << "--Problem finished." << std::endl;
