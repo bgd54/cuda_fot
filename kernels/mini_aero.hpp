@@ -277,80 +277,48 @@ __global__ void stepGPUHierarchical(
     our_colour = cell_colours[thread_ind];
   }
 
-  // Cache in the other (only read) data
-  if (!SOA) {
-    const double2 *cell_other_data_double2 =
-        reinterpret_cast<const double2 *>(cell_other_data);
-    for (MY_SIZE i = tid; i < POINT_DIM1 * num_cached_points / 2;
-         i += blockDim.x) {
-      MY_SIZE point_ind = i * 2 / POINT_DIM1;
-      MY_SIZE d = (i * 2) % POINT_DIM1;
-      MY_SIZE g_ind = index<SOA>(
-          point_stride[1], points_to_be_cached[cache_points_offset + point_ind],
-          POINT_DIM1, d);
-      MY_SIZE c_ind0 =
-          index<true>(shared_num_cached_points, point_ind, POINT_DIM1, d + 0);
-      MY_SIZE c_ind1 =
-          index<true>(shared_num_cached_points, point_ind, POINT_DIM1, d + 1);
-      double2 tmp = cell_other_data_double2[g_ind / 2];
-      point_cache[c_ind0] = tmp.x;
-      point_cache[c_ind1] = tmp.y;
-    }
-  } else {
-    for (MY_SIZE i = tid; i < num_cached_points; i += blockDim.x) {
-      MY_SIZE g_point_to_be_cached =
-          points_to_be_cached[cache_points_offset + i];
-      for (MY_SIZE d = 0; d < POINT_DIM1; ++d) {
-        MY_SIZE c_ind, g_ind;
-        g_ind =
-            index<SOA>(point_stride[1], g_point_to_be_cached, POINT_DIM1, d);
-        c_ind = index<true>(shared_num_cached_points, i, POINT_DIM1, d);
-
-        point_cache[c_ind] = cell_other_data[g_ind];
-      }
-    }
-  }
-
   // Computation
-  /* {{{1 */
   double increment[POINT_DIM0];
+  double *cell_flux_out_left_cur, *cell_flux_out_right_cur;
   if (tid < block_size) {
-    /* unsigned used_point_dim1 = !SOA ? POINT_DIM1 : 1; */
-    const unsigned used_point_dim1 = 1;
-    /* MY_SIZE _point_stride1 = SOA ? point_stride[1] : 1; */
-    const MY_SIZE _point_stride1 = shared_num_cached_points;
+    unsigned used_point_dim1 = !SOA ? POINT_DIM1 : 1;
+    MY_SIZE _point_stride1 = SOA ? point_stride[1] : 1;
     const double *cell_values_left =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 0] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *0] +
         0 * _point_stride1;
     const double *cell_values_right =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 1] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *1] +
         0 * _point_stride1;
     const double *cell_coordinates_left =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 0] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *0] +
         5 * _point_stride1;
     const double *cell_coordinates_right =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 1] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *1] +
         5 * _point_stride1;
     const double *cell_gradients_left =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 0] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *0] +
         8 * _point_stride1;
     const double *cell_gradients_right =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 1] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *1] +
         8 * _point_stride1;
     const double *cell_limiters_left =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 0] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *0] +
         23 * _point_stride1;
     const double *cell_limiters_right =
-        point_cache +
-        used_point_dim1 * cell_to_node[0][thread_ind + num_cells * 1] +
+        cell_other_data +
+        used_point_dim1 * cell_to_node[1][thread_ind + num_cells *1] +
         23 * _point_stride1;
+    cell_flux_out_left_cur =
+        point_cache + cell_to_node[0][thread_ind];
+    cell_flux_out_right_cur =
+        point_cache + cell_to_node[0][thread_ind + num_cells];
     const double *face_data_cur = face_data + thread_ind;
     user_func_gpu(increment, cell_values_left, cell_values_right,
                   cell_coordinates_left, cell_coordinates_right,
@@ -360,7 +328,6 @@ __global__ void stepGPUHierarchical(
                   face_data_cur + 6 * cell_stride,
                   face_data_cur + 9 * cell_stride, _point_stride1, cell_stride);
   }
-  /* 1}}} */
 
   __syncthreads();
 
@@ -376,10 +343,6 @@ __global__ void stepGPUHierarchical(
   for (std::uint8_t cur_colour = 0; cur_colour < num_cell_colours[bid];
        ++cur_colour) {
     if (our_colour == cur_colour) {
-      double *cell_flux_out_left_cur, *cell_flux_out_right_cur;
-      cell_flux_out_left_cur = point_cache + cell_to_node[0][thread_ind];
-      cell_flux_out_right_cur =
-          point_cache + cell_to_node[0][thread_ind + num_cells];
       for (unsigned i = 0; i < POINT_DIM0; ++i) {
         cell_flux_out_left_cur[i * shared_num_cached_points] -= increment[i];
         cell_flux_out_right_cur[i * shared_num_cached_points] += increment[i];
@@ -388,7 +351,7 @@ __global__ void stepGPUHierarchical(
     __syncthreads();
   }
 
-  // Cache out the result
+  // Cache out
   if (!SOA) {
     for (MY_SIZE i = tid; i < num_cached_points * POINT_DIM0; i += blockDim.x) {
       MY_SIZE point_ind = i / POINT_DIM0;
@@ -427,4 +390,4 @@ __global__ void stepGPUHierarchical(
 }
 
 #endif /* end of include guard: MINI_AERO_HPP_SZYG7UXQ */
-/* vim:set et sts=2 sw=2 ts=2 fdm=marker: */
+/* vim:set et sw=2 ts=2: */
