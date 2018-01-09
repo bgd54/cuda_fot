@@ -160,7 +160,7 @@ void HeuristicalPartition::growBlock(MY_SIZE starting_point, MY_SIZE to,
         continue;
       }
       priority_t &old_priority = old_priority_.second;
-      old_priority.added = i;
+      old_priority.added = i + 1;
       ++old_priority.reuse;
       old_priority.occupied_colours |= assigned_colourset;
       queue.modify(neighbour, old_priority);
