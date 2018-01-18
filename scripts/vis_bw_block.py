@@ -108,13 +108,16 @@ def plot_all():
     plot_block_versions_by_dim(bw, names, 1)
     plot_block_versions_by_dim(bw, names, 0)
 
-def plot_3D(bw,blocks, rf, cl, nc):
-    plt.plot(np.arange(9), 1e10/rf[0,:], 'yo')
-    plt.plot(np.arange(9), 1e10*nc[0,:], 'ks')
-    plt.plot(np.arange(18)/2-0.2,cl.T.flatten()*1e7, 'y*')
-    plt.bar(np.arange(9)-0.4, bw[0,:],0.4)
-    plt.bar(np.arange(9), bw[1,:],0.4,color='red')
+def plot_3D(bw, blocks, rf, cl, nc):
+    N = len(blocks)
+    mx = np.max(bw)
+    plt.plot(np.arange(N), 1e10/rf[0,:], 'yo')
+    plt.plot(np.arange(N), 1e10*nc[0,:], 'ks')
+    plt.plot(np.arange(2 * N)/2-0.2,cl.T.flatten()*1e7, 'y*')
+    plt.bar(np.arange(N)-0.4, bw[0,:],0.4)
+    plt.bar(np.arange(N), bw[1,:],0.4,color='red')
     plt.legend(['reuse','threadcol','cacheline','SOA','AOS'],loc='upper left')
-    plt.xticks(np.arange(9),map(str,blocks))
+    plt.xticks(np.arange(N),map(str,blocks))
+    plt.ylim([0, 1.4 * mx])
 
 
