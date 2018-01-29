@@ -389,6 +389,54 @@ int mainReorder(int argc, char *argv[]) {
   return 0;
 }
 
+constexpr MY_SIZE BLOCK_MEASUREMENT_BLOCK_SIZE = 128;
+const std::array<std::string, 9> BLOCK_DIMS = {"128x1x1", "64x2x1", "32x4x1",
+                                               "16x8x1",  "8x16x2", "32x2x2",
+                                               "16x4x2",  "8x4x4",  "4x8x4"};
+
+template <bool SOA>
+void measureBlock(const std::string &input_dir, MY_SIZE num,
+                  const std::string &block_dims_suffix) {
+  std::cout << "Block dims: " << block_dims_suffix << std::endl;
+  Problem<SOA> problem =
+      initProblem<SOA>(input_dir, BLOCK_MEASUREMENT_BLOCK_SIZE);
+  readData(input_dir, problem);
+  std::ifstream f_part(input_dir + "/partition_" + block_dims_suffix);
+  problem.readPartition(f_part);
+  problem.reorderToPartition();
+  problem.renumberPoints();
+
+  problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
+}
+
+template <bool SOA>
+void measureBlock(const std::string &input_dir, MY_SIZE num) {
+  for (const std::string &block_dims_suffix : BLOCK_DIMS) {
+    measureBlock<SOA>(input_dir, num, block_dims_suffix);
+  }
+}
+
+void measureBlock(const std::string &input_dir, MY_SIZE num) {
+  std::cout << "SOA\n";
+  measureBlock<true>(input_dir, num);
+  std::cout << "AOS\n";
+  measureBlock<false>(input_dir, num);
+}
+
+void printUsageMeasureBlock(const char *program_name) {
+  std::cerr << "Usage: " << program_name << " <input_dir> <iteration_number>"
+            << std::endl;
+}
+
+int mainMeasureBlock(int argc, char *argv[]) {
+  if (argc < 3) {
+    printUsageMeasureBlock(argv[0]);
+    return 1;
+  }
+  measureBlock(argv[1], std::atol(argv[2]));
+  return 0;
+}
+
 int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
 
 // vim:set et sw=2 ts=2 fdm=marker:
