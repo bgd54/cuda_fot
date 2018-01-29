@@ -251,6 +251,8 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     if (input_dir_metis != "") {
       std::ifstream f_part(input_dir_metis + "/mesh_part");
       problem.readPartition(f_part);
+      problem.reorderToPartition();
+      problem.renumberPoints();
     } else {
       problem.reorder();
       problem.partition(1.001);
@@ -263,6 +265,8 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     if (input_dir_metis != "") {
       std::ifstream f_part(input_dir_metis + "/mesh_part");
       problem.readPartition(f_part);
+      problem.reorderToPartition();
+      problem.renumberPoints();
     } else {
       problem.reorder();
       problem.partition(1.001);
