@@ -1,28 +1,28 @@
 #include <algorithm>
 #include <functional>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <vector>
 
 #include "colouring.hpp"
 #include "helper_cuda.h"
 #include "kernels/getacc_scatter.hpp"
 
-template <bool SOA> Problem<SOA> initProblem(const std::string &input_dir,
+template <bool SOA>
+Problem<SOA> initProblem(const std::string &input_dir,
                          MY_SIZE block_size = DEFAULT_BLOCK_SIZE) {
   std::ifstream mesh_INC(input_dir + "/mapping.dat");
-  return Problem<SOA>(
-      std::vector<std::istream *>{&mesh_INC},
-      std::vector<MY_SIZE>{getacc::MAPPING_DIM},
-      std::vector<std::pair<MY_SIZE, unsigned>>{
-          {getacc::INC_DIM, sizeof(double)}},
-      std::vector<std::pair<MY_SIZE, unsigned>>{
-	  {getacc::READ_DIM, sizeof(double)},
-	  {getacc::RHO_DIM, sizeof(double)},
-	  {getacc::READ_DIM, sizeof(double)},
-	  {getacc::READ_DIM, sizeof(double)},
-	  {getacc::READ_DIM, sizeof(double)}},
-      block_size);
+  return Problem<SOA>(std::vector<std::istream *>{&mesh_INC},
+                      std::vector<MY_SIZE>{getacc::MAPPING_DIM},
+                      std::vector<std::pair<MY_SIZE, unsigned>>{
+                          {getacc::INC_DIM, sizeof(double)}},
+                      std::vector<std::pair<MY_SIZE, unsigned>>{
+                          {getacc::READ_DIM, sizeof(double)},
+                          {getacc::RHO_DIM, sizeof(double)},
+                          {getacc::READ_DIM, sizeof(double)},
+                          {getacc::READ_DIM, sizeof(double)},
+                          {getacc::READ_DIM, sizeof(double)}},
+                      block_size);
 }
 
 template <bool SOA>
@@ -56,6 +56,56 @@ void writeData(const std::string &output_file, const Problem<SOA> &problem) {
   }
 }
 
+template <bool SOA>
+void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
+                  bool partition) {
+  const std::string fnames_id[] = {"point_data_in.dat"};
+  const std::string fnames_d[] = {"cnmass.dat", "rho.dat", "cnwt.dat",
+                                  "cnfx.dat", "cnfy.dat"};
+  const MY_SIZE num_cells = problem.mesh.numCells();
+  for (unsigned k = 0; k < problem.mesh.numMappings(); ++k) {
+    const MY_SIZE num_points = problem.mesh.numPoints(k);
+    const MY_SIZE dim = problem.point_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_id[k]);
+    for (MY_SIZE i = 0; i < num_points; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<SOA>(num_points, i, dim, j);
+        os << (j ? " " : "")
+           << problem.point_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  const MY_SIZE dim = problem.mesh.cell_to_node[0].getDim();
+  std::ofstream os(output_dir + "/mapping.dat");
+  os << problem.mesh.numPoints(0) << " " << problem.mesh.numCells()
+     << std::endl;
+  for (MY_SIZE i = 0; i < num_cells; ++i) {
+    for (MY_SIZE j = 0; j < dim; ++j) {
+      const MY_SIZE ind = index<false>(num_cells, i, dim, j);
+      os << (j ? " " : "")
+         << problem.mesh.cell_to_node[0].template operator[]<MY_SIZE>(ind);
+    }
+    os << std::endl;
+  }
+  for (unsigned k = 0; k < problem.cell_weights.size(); ++k) {
+    const MY_SIZE dim = problem.cell_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_d[k]);
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<true>(num_cells, i, dim, j);
+        os << (j ? " " : "")
+           << problem.cell_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  if (partition) {
+    std::ofstream os(output_dir + "/mesh_part");
+    problem.writePartition(os);
+  }
+}
+
 template <bool SOA = false>
 using implementation_algorithm_t = void (Problem<SOA>::*)(MY_SIZE);
 
@@ -72,8 +122,7 @@ void testKernel(const std::string &input_dir, MY_SIZE num,
   const MY_SIZE num_points = problem.mesh.numPoints(0);
   for (MY_SIZE i = 0; i < num_points; ++i) {
     for (unsigned d = 0; d < getacc::INC_DIM; ++d) {
-      const MY_SIZE ind_problem =
-          index<SOA>(num_points, i, getacc::INC_DIM, d);
+      const MY_SIZE ind_problem = index<SOA>(num_points, i, getacc::INC_DIM, d);
       const double data1 =
           problem.point_weights[0].template operator[]<double>(ind_problem);
       const double data2 = [&data_ref]() {
@@ -88,7 +137,7 @@ void testKernel(const std::string &input_dir, MY_SIZE num,
       }
     }
   }
-  writeData(input_dir + "/out_" + (SOA ? "SOA" : "AOS"),problem);
+  writeData(input_dir + "/out_" + (SOA ? "SOA" : "AOS"), problem);
   std::cout << "Maxdiff: " << max_diff << std::endl;
   std::cout << "Test considered " << (max_diff < 1e-5 ? "PASSED" : "FAILED")
             << std::endl;
@@ -282,8 +331,6 @@ void printUsageMeasure(const char *program_name) {
             << " <iteration_number> <block_size>" << std::endl;
 }
 
-
-
 int mainMeasure(int argc, char *argv[]) {
   if (argc != 4) {
     printUsageMeasure(argv[0]);
@@ -295,4 +342,35 @@ int mainMeasure(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
+void reorder(const std::string &input_dir, const std::string output_dir,
+             bool partition, MY_SIZE block_size) {
+  Problem<false> problem = initProblem<false>(input_dir, block_size);
+  readData(input_dir, problem);
+
+  problem.reorder<true>();
+  if (partition) {
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+  }
+
+  writeAllData(problem, output_dir, partition);
+}
+
+void printUsageReorder(const char *program_name) {
+  std::cerr << "Usage: " << program_name
+            << " <input_dir> <output_dir_GPS> <output_dir_part>"
+            << " <block_size>" << std::endl;
+}
+
+int mainReorder(int argc, char *argv[]) {
+  if (argc < 5) {
+    printUsageReorder(argv[0]);
+    return 1;
+  }
+  reorder(argv[1], argv[2], false, std::atol(argv[4]));
+  reorder(argv[1], argv[3], true, std::atol(argv[4]));
+  return 0;
+}
+
+int main(int argc, char *argv[]) { return mainReorder(argc, argv); }

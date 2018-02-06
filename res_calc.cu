@@ -46,6 +46,58 @@ void writeData(const std::string &output_file, const Problem<SOA> &problem) {
 }
 
 template <bool SOA>
+void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
+                  bool partition) {
+  const std::string fnames_id[] = {"data_res", "data_x", "data_q", "data_adt"};
+  const MY_SIZE num_cells = problem.mesh.numCells();
+  for (unsigned k = 0; k < problem.mesh.numMappings(); ++k) {
+    const MY_SIZE num_points = problem.mesh.numPoints(k);
+    const MY_SIZE dim = problem.point_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_id[k]);
+    for (MY_SIZE i = 0; i < num_points; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<SOA>(num_points, i, dim, j);
+        os << (j ? " " : "")
+           << problem.point_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  {
+    const MY_SIZE dim = problem.mesh.cell_to_node[0].getDim();
+    std::ofstream os(output_dir + "/mesh_res");
+    os << problem.mesh.numPoints(0) << " " << problem.mesh.numCells()
+       << std::endl;
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<false>(num_cells, i, dim, j);
+        os << (j ? " " : "")
+           << problem.mesh.cell_to_node[0].template operator[]<MY_SIZE>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  {
+    const MY_SIZE dim = problem.mesh.cell_to_node[1].getDim();
+    std::ofstream os(output_dir + "/mesh_x");
+    os << problem.mesh.numPoints(1) << " " << problem.mesh.numCells()
+       << std::endl;
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<false>(num_cells, i, dim, j);
+        os << (j ? " " : "")
+           << problem.mesh.cell_to_node[1].template operator[]<MY_SIZE>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  if (partition) {
+    std::ofstream os(output_dir + "/mesh_part");
+    problem.writePartition(os);
+  }
+}
+
+template <bool SOA>
 void runProblem(const std::string &input_dir, MY_SIZE num,
                 const std::string &output_dir) {
   Problem<SOA> problem = initProblem<SOA>(input_dir + "/");
@@ -215,7 +267,8 @@ int mainTest(int argc, char *argv[]) {
 
 #include "visualization/graph_write_VTK.hpp"
 
-void visualise (const std::string &input_dir, const std::string &fname, bool partition, MY_SIZE block_size) {
+void visualise(const std::string &input_dir, const std::string &fname,
+               bool partition, MY_SIZE block_size) {
   Problem<false> problem = initProblem<false>(input_dir + "/", block_size);
   readData(input_dir + "/", problem);
   constexpr MY_SIZE MESH_DIM = 2;
@@ -227,17 +280,17 @@ void visualise (const std::string &input_dir, const std::string &fname, bool par
     problem.renumberPoints();
   }
 
-  const HierarchicalColourMemory<false> memory(problem, problem.partition_vector);
+  const HierarchicalColourMemory<false> memory(problem,
+                                               problem.partition_vector);
   data_t cell_list(data_t::create<MY_SIZE>(problem.mesh.numCells(), MESH_DIM));
   std::vector<std::vector<std::uint16_t>> data(3);
 
   MY_SIZE blk_col_ind = 0, blk_ind = 0;
   MY_SIZE cell_ind = 0;
-  data_t point_coordinates (data_t::create<float>(problem.mesh.numPoints(1),3));
+  data_t point_coordinates(data_t::create<float>(problem.mesh.numPoints(1), 3));
   for (const auto &m : memory.colours) {
     data[VTK_IND_THR_COL].insert(data[VTK_IND_THR_COL].end(),
-                                 m.cell_colours.begin(),
-                                 m.cell_colours.end());
+                                 m.cell_colours.begin(), m.cell_colours.end());
     data[VTK_IND_BLK_COL].insert(data[VTK_IND_BLK_COL].end(),
                                  m.cell_colours.size(), blk_col_ind++);
     MY_SIZE local_block_id = 0;
@@ -264,17 +317,20 @@ void visualise (const std::string &input_dir, const std::string &fname, bool par
     ++blk_ind;
   }
   for (MY_SIZE i = 0; i < problem.mesh.numPoints(1); ++i) {
-    point_coordinates.operator[]<float>(3 * i + 0) = problem.point_weights[1].operator[]<double>(MESH_DIM * i + 0);
-    point_coordinates.operator[]<float>(3 * i + 1) = problem.point_weights[1].operator[]<double>(MESH_DIM * i + 1);
+    point_coordinates.operator[]<float>(3 * i + 0) =
+        problem.point_weights[1].operator[]<double>(MESH_DIM *i + 0);
+    point_coordinates.operator[]<float>(3 * i + 1) =
+        problem.point_weights[1].operator[]<double>(MESH_DIM *i + 1);
     point_coordinates.operator[]<float>(3 * i + 2) = 0;
   }
-  writeMeshToVTKAscii(input_dir + "/" + fname, cell_list, point_coordinates,data);
+  writeMeshToVTKAscii(input_dir + "/" + fname, cell_list, point_coordinates,
+                      data);
 }
 
-int mainVisualise (int argc, char *argv[]) {
+int mainVisualise(int argc, char *argv[]) {
   if (argc < 3) {
-    std::cerr << "Usage: " << argv[0]
-              << " <input_dir> <block_size>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <input_dir> <block_size>"
+              << std::endl;
     return 1;
   }
   visualise(argv[1], "res_calc.vtk", false, std::atol(argv[2]));
@@ -282,5 +338,35 @@ int mainVisualise (int argc, char *argv[]) {
   return 0;
 }
 
+void reorder(const std::string &input_dir, const std::string output_dir,
+             bool partition, MY_SIZE block_size) {
+  Problem<false> problem = initProblem<false>(input_dir + "/", block_size);
+  readData(input_dir + "/", problem);
 
-int main(int argc, char *argv[]) { return mainVisualise(argc, argv); }
+  problem.reorder();
+  if (partition) {
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+  }
+
+  writeAllData(problem, output_dir, partition);
+}
+
+void printUsageReorder(const char *program_name) {
+  std::cerr << "Usage: " << program_name
+            << " <input_dir> <output_dir_GPS> <output_dir_part>"
+            << " <block_size>" << std::endl;
+}
+
+int mainReorder(int argc, char *argv[]) {
+  if (argc < 5) {
+    printUsageReorder(argv[0]);
+    return 1;
+  }
+  reorder(argv[1], argv[2], false, std::atol(argv[4]));
+  reorder(argv[1], argv[3], true, std::atol(argv[4]));
+  return 0;
+}
+
+int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }

@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <functional>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <vector>
 
 #include "colouring.hpp"
@@ -13,17 +13,16 @@ Problem<SOA> initProblem(const std::string &input_dir,
                          MY_SIZE block_size = DEFAULT_BLOCK_SIZE) {
   std::ifstream mesh_EC(input_dir + "/edgeToCells");
   std::ifstream mesh_EC2(input_dir + "/edgeToCells");
-  Problem<SOA> problem(
-      std::vector<std::istream *>{&mesh_EC,&mesh_EC2},
-      std::vector<MY_SIZE>{volna::MESH_DIM, volna::MESH_DIM},
-      std::vector<std::pair<MY_SIZE, unsigned>>{
-          {volna::INC_DIM, sizeof(float)},
-          {1, sizeof(float)}},
-      std::vector<std::pair<MY_SIZE, unsigned>>{
-          {volna::FLUX_DIM, sizeof(float)},
-          {volna::CELL_DIM, sizeof(float)},
-          {volna::CELL_DIM, sizeof(float)},
-          {1, sizeof(int)}}, block_size);
+  Problem<SOA> problem(std::vector<std::istream *>{&mesh_EC, &mesh_EC2},
+                       std::vector<MY_SIZE>{volna::MESH_DIM, volna::MESH_DIM},
+                       std::vector<std::pair<MY_SIZE, unsigned>>{
+                           {volna::INC_DIM, sizeof(float)}, {1, sizeof(float)}},
+                       std::vector<std::pair<MY_SIZE, unsigned>>{
+                           {volna::FLUX_DIM, sizeof(float)},
+                           {volna::CELL_DIM, sizeof(float)},
+                           {volna::CELL_DIM, sizeof(float)},
+                           {1, sizeof(int)}},
+                       block_size);
   return problem;
 }
 template <bool SOA>
@@ -57,6 +56,56 @@ void writeData(const std::string &output_file, const Problem<SOA> &problem) {
   }
 }
 
+template <bool SOA>
+void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
+                  bool partition) {
+  const std::string fnames_id[] = {"data_out", "data_vol"};
+  const std::string fnames_d[] = {"data_flux", "data_bathy",
+                                  "data_norms", "data_isBoundary"};
+  const MY_SIZE num_cells = problem.mesh.numCells();
+  for (unsigned k = 0; k < problem.mesh.numMappings(); ++k) {
+    const MY_SIZE num_points = problem.mesh.numPoints(k);
+    const MY_SIZE dim = problem.point_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_id[k]);
+    for (MY_SIZE i = 0; i < num_points; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<SOA>(num_points, i, dim, j);
+        os << (j ? " " : "")
+           << problem.point_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  const MY_SIZE dim = problem.mesh.cell_to_node[0].getDim();
+  std::ofstream os(output_dir + "/edgeToCells");
+  os << problem.mesh.numPoints(0) << " " << problem.mesh.numCells()
+     << std::endl;
+  for (MY_SIZE i = 0; i < num_cells; ++i) {
+    for (MY_SIZE j = 0; j < dim; ++j) {
+      const MY_SIZE ind = index<false>(num_cells, i, dim, j);
+      os << (j ? " " : "")
+         << problem.mesh.cell_to_node[0].template operator[]<MY_SIZE>(ind);
+    }
+    os << std::endl;
+  }
+  for (unsigned k = 0; k < problem.cell_weights.size(); ++k) {
+    const MY_SIZE dim = problem.cell_weights[k].getDim();
+    std::ofstream os(output_dir + "/" + fnames_d[k]);
+    for (MY_SIZE i = 0; i < num_cells; ++i) {
+      for (MY_SIZE j = 0; j < dim; ++j) {
+        const MY_SIZE ind = index<true>(num_cells, i, dim, j);
+        os << (j ? " " : "")
+           << problem.cell_weights[k].template operator[]<double>(ind);
+      }
+      os << std::endl;
+    }
+  }
+  if (partition) {
+    std::ofstream os(output_dir + "/mesh_part");
+    problem.writePartition(os);
+  }
+}
+
 template <bool SOA = false>
 using implementation_algorithm_t = void (Problem<SOA>::*)(MY_SIZE);
 
@@ -73,8 +122,7 @@ void testKernel(const std::string &input_dir, MY_SIZE num,
   const MY_SIZE num_points = problem.mesh.numPoints(0);
   for (MY_SIZE i = 0; i < num_points; ++i) {
     for (unsigned d = 0; d < volna::INC_DIM; ++d) {
-      const MY_SIZE ind_problem =
-          index<SOA>(num_points, i, volna::INC_DIM, d);
+      const MY_SIZE ind_problem = index<SOA>(num_points, i, volna::INC_DIM, d);
       const float data1 =
           problem.point_weights[0].template operator[]<float>(ind_problem);
       const float data2 = [&data_ref]() {
@@ -89,7 +137,7 @@ void testKernel(const std::string &input_dir, MY_SIZE num,
       }
     }
   }
-  writeData(input_dir + "/out_" + (SOA ? "SOA" : "AOS"),problem);
+  writeData(input_dir + "/out_" + (SOA ? "SOA" : "AOS"), problem);
   std::cout << "Maxdiff: " << max_diff << std::endl;
   std::cout << "Test considered " << (max_diff < 1e-5 ? "PASSED" : "FAILED")
             << std::endl;
@@ -206,8 +254,8 @@ void testReordering(const std::string &input_dir, MY_SIZE num) {
 }
 
 void printUsageTest(const char *program_name) {
-  std::cerr << "Usage: " << program_name
-            << " <input_dir> <iteration_number>" << std::endl;
+  std::cerr << "Usage: " << program_name << " <input_dir> <iteration_number>"
+            << std::endl;
 }
 
 int mainTest(int argc, char *argv[]) {
@@ -288,6 +336,37 @@ int mainMeasure(int argc, char *argv[]) {
   if (argc == 4) {
     measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
   }
+  return 0;
+}
+
+void reorder(const std::string &input_dir, const std::string output_dir,
+             bool partition, MY_SIZE block_size) {
+  Problem<false> problem = initProblem<false>(input_dir, block_size);
+  readData(input_dir, problem);
+
+  problem.reorder<true>();
+  if (partition) {
+    problem.partition(1.001);
+    problem.reorderToPartition();
+    problem.renumberPoints();
+  }
+
+  writeAllData(problem, output_dir, partition);
+}
+
+void printUsageReorder(const char *program_name) {
+  std::cerr << "Usage: " << program_name
+            << " <input_dir> <output_dir_GPS> <output_dir_part>"
+            << " <block_size>" << std::endl;
+}
+
+int mainReorder(int argc, char *argv[]) {
+  if (argc < 5) {
+    printUsageReorder(argv[0]);
+    return 1;
+  }
+  reorder(argv[1], argv[2], false, std::atol(argv[4]));
+  reorder(argv[1], argv[3], true, std::atol(argv[4]));
   return 0;
 }
 
