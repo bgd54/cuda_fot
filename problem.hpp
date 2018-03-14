@@ -570,7 +570,7 @@ public:
                   index<SOA>(point_weights[mapping_ind].getSize(), i,
                              point_weights[mapping_ind].getDim(), j));
       }
-      if (!is) {
+      if (!is && !is.eof()) {
         throw InvalidInputFile{"point data input", mapping_ind, i};
       }
     }
