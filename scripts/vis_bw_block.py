@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from cycler import cycler
+import mpl_toolkits.axisartist as AA
+from mpl_toolkits.axes_grid1 import host_subplot
 
 '''
 To load bandwidths:
@@ -111,13 +113,43 @@ def plot_all():
 def plot_3D(bw, blocks, rf, cl, nc):
     N = len(blocks)
     mx = np.max(bw)
-    plt.plot(np.arange(N), 1e10/rf[0,:], 'yo')
-    plt.plot(np.arange(N), 1e10*nc[0,:], 'ks')
-    plt.plot(np.arange(2 * N)/2-0.2,cl.T.flatten()*1e7, 'y*')
-    plt.bar(np.arange(N)-0.4, bw[0,:],0.4)
-    plt.bar(np.arange(N), bw[1,:],0.4,color='red')
-    plt.legend(['reuse','threadcol','cacheline','SOA','AOS'],loc='upper left')
-    plt.xticks(np.arange(N),map(str,blocks))
-    plt.ylim([0, 1.4 * mx])
+    plt.figure(figsize = (5.5, 3.5))
+    host = host_subplot(111, axes_class = AA.Axes)
+    plt.subplots_adjust(right = 0.83)
+    par1 = host.twinx()
+    par2 = host.twinx()
+    offset = 35
+    new_fixed_axis = par2.get_grid_helper().new_fixed_axis
+    par2.axis['right'] = new_fixed_axis(loc = 'right',
+                                        axes = par2,
+                                        offset = (offset, 0))
+    par2.axis['right'].toggle(all = True)
+    par1.axis['right'].toggle(all = True)
 
+    host.set_ylabel('Bandwidth (GB/s)')
+    host.set_xlabel('Block dimensions')
+    # host.bar(np.arange(N)-0.2, bw[0,:]/1e9,0.4, hatch = '//', fill = False)
+    host.bar(np.arange(N)-0.2, bw[0,:]/1e9,0.4, color = (0.65, 0.65, 0.65))
+    # host.bar(np.arange(N)+0.2, bw[1,:]/1e9,0.4, fill = False, hatch = '\\\\')
+    host.bar(np.arange(N)+0.2, bw[1,:]/1e9,0.4, color = (0.45, 0.45, 0.45))
 
+    par1.set_ylabel('Thread colour')
+    par1.plot(np.arange(N), nc[0,:], 'ks')
+    par1.set_ylim([0, 1.4 * np.max(nc)])
+
+    par2.set_ylabel('Reuse factor')
+    par2.plot(np.arange(N), 1/rf[0,:], 'kv', markersize = 7)
+    par2.set_ylim([0, 1.3 * np.max(1/rf)])
+
+    # plt.plot(np.arange(2 * N)/2-0.2,cl.T.flatten()*1e7, 'y*')
+    # plt.legend(['reuse','threadcol','cacheline','SOA','AOS'],loc='upper left')
+    host.set_xticks(np.arange(N))
+    host.set_xticklabels(map(str,blocks), rotation = 90, ha = 'right')
+    host.set_ylim([0, 1.50 * mx/1e9])
+
+    host.legend(['SOA', 'AOS', 'Thread colour', 'Reuse factor'],
+                loc = 'upper left')
+
+    plt.draw()
+    plt.show()
+    plt.tight_layout()
