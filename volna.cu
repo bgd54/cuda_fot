@@ -71,7 +71,8 @@ void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
       for (MY_SIZE j = 0; j < dim; ++j) {
         const MY_SIZE ind = index<SOA>(num_points, i, dim, j);
         os << (j ? " " : "")
-           << problem.point_weights[k].template operator[]<double>(ind);
+           << std::setprecision(15)
+           << problem.point_weights[k].template operator[]<float>(ind);
       }
       os << std::endl;
     }
@@ -94,8 +95,15 @@ void writeAllData(const Problem<SOA> &problem, const std::string &output_dir,
     for (MY_SIZE i = 0; i < num_cells; ++i) {
       for (MY_SIZE j = 0; j < dim; ++j) {
         const MY_SIZE ind = index<true>(num_cells, i, dim, j);
-        os << (j ? " " : "")
-           << problem.cell_weights[k].template operator[]<double>(ind);
+        if (k == 3) {
+          os << (j ? " " : "")
+             << std::setprecision(15)
+             << problem.cell_weights[k].template operator[]<int>(ind);
+        } else {
+          os << (j ? " " : "")
+             << std::setprecision(15)
+             << problem.cell_weights[k].template operator[]<float>(ind);
+        }
       }
       os << std::endl;
     }
@@ -153,17 +161,17 @@ void runProblem(const std::string &input_dir, MY_SIZE num,
   problem.template loopCPUCellCentred<volna::StepSeq>(num);
   writeData(fname_base + "seq", problem);
 
-  /* readData(input_dir + "/", problem); */
-  /* problem.template loopCPUCellCentredOMP<volna::StepOMP>(num); */
-  /* writeData(fname_base + "omp", problem); */
+  readData(input_dir + "/", problem);
+  problem.template loopCPUCellCentredOMP<volna::StepOMP>(num);
+  writeData(fname_base + "omp", problem);
 
-  /* readData(input_dir + "/", problem); */
-  /* problem.template loopGPUCellCentred<volna::StepGPUGlobal>(num); */
-  /* writeData(fname_base + "glob", problem); */
+  readData(input_dir + "/", problem);
+  problem.template loopGPUCellCentred<volna::StepGPUGlobal>(num);
+  writeData(fname_base + "glob", problem);
 
-  /* readData(input_dir + "/", problem); */
-  /* problem.template loopGPUHierarchical<volna::StepGPUHierarchical>(num); */
-  /* writeData(fname_base + "hier", problem); */
+  readData(input_dir + "/", problem);
+  problem.template loopGPUHierarchical<volna::StepGPUHierarchical>(num);
+  writeData(fname_base + "hier", problem);
 }
 
 template <bool SOA> void testKernel(const std::string &input_dir, MY_SIZE num) {
@@ -196,7 +204,7 @@ template <bool SOA> void testKernel(const std::string &input_dir, MY_SIZE num) {
 
 void testKernel(const std::string &input_dir, MY_SIZE num) {
   testKernel<false>(input_dir, num);
-  /* testKernel<true>(input_dir, num); */
+  testKernel<true>(input_dir, num);
 }
 
 template <bool SOA>
@@ -213,7 +221,7 @@ void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
   Problem<SOA> problem2 = initProblem<SOA>(input_dir);
   readData(input_dir, problem2);
 
-  problem1.reorder();
+  problem1.template reorder<true>();
   if (partition) {
     problem1.partition(1.001);
     problem1.reorderToPartition();
@@ -236,8 +244,12 @@ void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
           problem2.point_weights[0].template operator[]<float>(ind2);
       const double diff = std::abs(data1 - data2) /
                           (std::min(std::abs(data1), std::abs(data2)) + 1e-6);
-      if (max_diff < diff) {
+      if (max_diff < diff && std::abs(data1 - data2) > 1e5) {
         max_diff = diff;
+      }
+      if (std::isnan(data1)) {
+        std::cout << "Error: NaN found: i: " << i << " d: " << d << std::endl;
+        break;
       }
     }
   }
@@ -270,7 +282,9 @@ int mainTest(int argc, char *argv[]) {
 
 template <bool SOA>
 void measurement(const std::string &input_dir, MY_SIZE num,
-                 MY_SIZE block_size) {
+                 MY_SIZE block_size,
+                 const std::string &input_dir_gps = "",
+                 const std::string &input_dir_metis = "") {
   {
     std::cout << "Running non reordered" << std::endl;
     Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
@@ -283,58 +297,88 @@ void measurement(const std::string &input_dir, MY_SIZE num,
   }
 
   {
+    const std::string &used_input_dir =
+        input_dir_gps == "" ? input_dir : input_dir_gps;
     std::cout << "Running GPS reordered" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
-    readData(input_dir + "/", problem);
+    Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size);
+    readData(used_input_dir + "/", problem);
     TIMER_START(timer_gps);
-    problem.reorder();
+    if (input_dir_gps == "") {
+      problem.reorder();
+    }
     TIMER_PRINT(timer_gps, "reordering");
     problem.template loopGPUHierarchical<volna::StepGPUHierarchical>(num);
-    readData(input_dir + "/", problem);
-    problem.reorder();
+    readData(used_input_dir + "/", problem);
+    if (input_dir_gps == "") {
+      problem.reorder();
+    }
     problem.template loopGPUCellCentred<volna::StepGPUGlobal>(num);
   }
 
   {
+    const std::string &used_input_dir =
+        input_dir_metis == "" ? input_dir : input_dir_metis;
     std::cout << "Running partitioned" << std::endl;
-    Problem<SOA> problem = initProblem<SOA>(input_dir + "/", block_size);
-    readData(input_dir + "/", problem);
+    Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size);
+    readData(used_input_dir + "/", problem);
     TIMER_START(timer_metis);
-    problem.reorder();
-    problem.partition(1.001);
-    problem.reorderToPartition();
-    problem.renumberPoints();
+    if (input_dir_metis != "") {
+      std::ifstream f_part(input_dir_metis + "/mesh_part");
+      problem.readPartition(f_part);
+      problem.reorderToPartition();
+      problem.renumberPoints();
+    } else {
+      problem.reorder();
+      problem.partition(1.001);
+      problem.reorderToPartition();
+      problem.renumberPoints();
+    }
     TIMER_PRINT(timer_metis, "partitioning");
     problem.template loopGPUHierarchical<volna::StepGPUHierarchical>(num);
-    readData(input_dir + "/", problem);
-    problem.reorder();
-    problem.partition(1.001);
-    problem.reorderToPartition();
-    problem.renumberPoints();
+    readData(used_input_dir + "/", problem);
+    if (input_dir_metis != "") {
+      std::ifstream f_part(input_dir_metis + "/mesh_part");
+      problem.readPartition(f_part);
+      problem.reorderToPartition();
+      problem.renumberPoints();
+    } else {
+      problem.reorder();
+      problem.partition(1.001);
+      problem.reorderToPartition();
+      problem.renumberPoints();
+    }
     problem.template loopGPUCellCentred<volna::StepGPUGlobal>(num);
   }
 }
 
-void measurement(const std::string &input_dir, MY_SIZE num,
-                 MY_SIZE block_size) {
+void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
+                 const std::string &input_dir_gps = "",
+                 const std::string &input_dir_metis = "") {
   std::cout << "AOS" << std::endl;
-  measurement<false>(input_dir, num, block_size);
+  measurement<false>(input_dir, num, block_size, input_dir_gps,
+                     input_dir_metis);
   std::cout << "SOA" << std::endl;
-  measurement<true>(input_dir, num, block_size);
+  measurement<true>(input_dir, num, block_size, input_dir_gps, input_dir_metis);
 }
 
 void printUsageMeasure(const char *program_name) {
   std::cerr << "Usage: " << program_name
             << " <input_dir> <iteration_number> <block_size>" << std::endl;
+  std::cerr << "   or: " << program_name
+            << " <input_dir> <gps_input_dir> <metis_input_dir>"
+            << " <iteration_number> <block_size>" << std::endl;
 }
 
 int mainMeasure(int argc, char *argv[]) {
-  if (argc != 4) {
+  if (argc != 4 && argc != 6) {
     printUsageMeasure(argv[0]);
     return 1;
   }
   if (argc == 4) {
     measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
+  } else {
+    measurement(argv[1], std::atol(argv[4]), std::atol(argv[5]), argv[2],
+                argv[3]);
   }
   return 0;
 }
@@ -370,4 +414,4 @@ int mainReorder(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
+int main(int argc, char *argv[]) { return mainReorder(argc, argv); }

@@ -71,7 +71,7 @@ template <class UnsignedType> struct GraphCSR {
             cell_endpoints.push_back(other_point);
           }
         } else {
-          assert(!found_current_point);
+          /* assert(!found_current_point); */
           found_current_point = true;
         }
       }
