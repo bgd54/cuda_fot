@@ -277,20 +277,20 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
   /*                                        sizeof(double) * 28>(num); */
   /* } */
 
-  /* { */
-  /*   const std::string &used_input_dir = */
-  /*       input_dir_gps == "" ? input_dir : input_dir_gps; */
-  /*   std::cout << "Running GPS reordered" << std::endl; */
-  /*   Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size); */
-  /*   readData(used_input_dir + "/", problem); */
-  /*   TIMER_START(timer_gps); */
-  /*   if (input_dir_gps == "") { */
-  /*     problem.template reorder<true>(); */
-  /*   } */
-  /*   TIMER_PRINT(timer_gps, "reordering"); */
-  /*   problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical, */
-  /*                                        sizeof(double) * 28>(num); */
-  /* } */
+  {
+    const std::string &used_input_dir =
+        input_dir_gps == "" ? input_dir : input_dir_gps;
+    std::cout << "Running GPS reordered" << std::endl;
+    Problem<SOA> problem = initProblem<SOA>(used_input_dir + "/", block_size);
+    readData(used_input_dir + "/", problem);
+    TIMER_START(timer_gps);
+    if (input_dir_gps == "") {
+      problem.template reorder<true>();
+    }
+    TIMER_PRINT(timer_gps, "reordering");
+    problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical,
+                                         sizeof(double) * 28>(num);
+  }
 
   {
     const std::string &used_input_dir =
@@ -381,6 +381,7 @@ constexpr MY_SIZE BLOCK_MEASUREMENT_BLOCK_SIZE = 128;
 const std::array<std::string, 9> BLOCK_DIMS = {"1x1x128", "1x2x64", "1x4x32",
                                                "1x8x16",  "2x16x8", "2x2x32",
                                                "2x4x16",  "4x4x8",  "4x8x4"};
+/* const std::array<std::string, 1> BLOCK_DIMS = {"1x1x128"}; */
 
 template <bool SOA>
 void measureBlock(const std::string &input_dir, MY_SIZE num,
@@ -425,4 +426,4 @@ int mainMeasureBlock(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
+int main(int argc, char *argv[]) { return mainMeasureBlock(argc, argv); }
