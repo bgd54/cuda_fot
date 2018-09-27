@@ -1,0 +1,1 @@
+nvprof -m achieved_occupancy,warp_execution_efficiency,dram_read_transactions,dram_write_transactions,stall_sync,stall_memory_dependency "$@"
