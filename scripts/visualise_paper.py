@@ -48,12 +48,15 @@ orig_bw_airfoil = data_sizes['res_calc_big'] / 3.82 * 2000
 orig_bw_volna = data_sizes['volna'] / 0.56 * 300
 orig_bw_bookleaf = data_sizes['bookleaf'] / 0.15 * 40
 orig_bw_lulesh = 9.66601e10
-orig_bw_mini_aero = 8.34999e+10
-orig_bw_mini_aero2 = 6.64361e+10
+# orig_bw_mini_aero = 8.34999e+10
+orig_bw_mini_aero_atomic = 9.58461e+10
+# orig_bw_mini_aero2 = 6.64361e+10
+orig_bw_mini_aero_array = 6.94593e+10
 
+# Volta stats
 orig_bw_lulesh_volta = 1.48009e+11
-orig_bw_mini_aero_atomic = 1.04613e+11
-orig_bw_mini_aero_array = 1.40627e+11
+orig_bw_mini_aero_atomic_volta = 1.04613e+11
+orig_bw_mini_aero_array_volta = 1.40627e+11
 orig_bw_airfoil_volta = data_sizes['res_calc_big'] / 2.517 * 2000
 
 # def autolabel (rects):
@@ -97,7 +100,7 @@ def bw_vs_bs (fname, data_size):
     plt.plot(np.arange(len(bss)), bw_hier[:,1,2,0], '--')
     plt.title('SOA')
     plt.ylabel('B/s')
-    plt.ylim([0.3*bw_max, 1.1*bw_max])
+    plt.ylim([0.0*bw_max, 1.1*bw_max])
     plt.grid(True)
     plt.xticks(np.arange(len(bss)),bss_)
     plt.xlabel('Block size')
