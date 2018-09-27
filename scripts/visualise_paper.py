@@ -66,9 +66,11 @@ orig_bw_airfoil_volta = data_sizes['res_calc_big'] / 2.517 * 2000
 
 
 def get_bw (fname, data_size):
-    bw = np.array([float(line.strip()) for line in open(fname)])
-    bw.shape = (len(bss),2,3,5)
-    bw = data_size / bw * 1000 * 500
+    times = np.array([float(line.strip().split(':')[1].strip().split()[0])
+                      for line in open(fname)
+                      if '  time:      ' in line])
+    times.shape = (len(bss),2,3,5)
+    bw = data_size / times * 1000 * 500
     bw_hier = bw[:,:,:,0:3]
     bw_glob = bw[:,:,:,3:5]
     return (bw_hier, bw_glob)
