@@ -45,7 +45,7 @@ data_sizes = {
 }
 
 orig_bw_airfoil = data_sizes['res_calc_big'] / 3.82 * 2000
-orig_bw_volna = data_sizes['volna'] / 0.56 * 300
+orig_bw_volna = data_sizes['volna'] / 0.56 * 600
 orig_bw_bookleaf = data_sizes['bookleaf'] / 0.15 * 40
 orig_bw_lulesh = 9.66601e10
 # orig_bw_mini_aero = 8.34999e+10
