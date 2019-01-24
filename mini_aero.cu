@@ -426,4 +426,4 @@ int mainMeasureBlock(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasureBlock(argc, argv); }
+int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
