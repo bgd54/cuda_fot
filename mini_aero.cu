@@ -274,7 +274,7 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
   /*   reorderApplyPermutation(input_dir, problem); */
   /*   std::cout << "Data read." << std::endl; */
   /*   problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical, */
-  /*                                        sizeof(double) * 28>(num); */
+  /*                                        sizeof(double) * 5>(num); */
   /* } */
 
   {
@@ -289,7 +289,7 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     }
     TIMER_PRINT(timer_gps, "reordering");
     problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical,
-                                         sizeof(double) * 28>(num);
+                                         sizeof(double) * 5>(num);
   }
 
   {
@@ -310,7 +310,7 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     }
     TIMER_PRINT(timer_metis, "partitioning");
     problem.template loopGPUHierarchical<mini_aero::StepGPUHierarchical,
-                                         sizeof(double) * 28>(num);
+                                         sizeof(double) * 5>(num);
   }
 }
 
@@ -338,8 +338,10 @@ int mainMeasure(int argc, char *argv[]) {
     return 1;
   }
   if (argc == 4) {
+    std::cout << "No reordered data, we are going to reorder it." << std::endl;
     measurement(argv[1], std::atol(argv[2]), std::atol(argv[3]));
   } else {
+    std::cout << "Trying with already reordered data." << std::endl;
     measurement(argv[1], std::atol(argv[4]), std::atol(argv[5]), argv[2],
                 argv[3]);
   }
@@ -426,4 +428,4 @@ int mainMeasureBlock(int argc, char *argv[]) {
   return 0;
 }
 
-int main(int argc, char *argv[]) { return mainMeasureBlock(argc, argv); }
+int main(int argc, char *argv[]) { return mainMeasure(argc, argv); }
