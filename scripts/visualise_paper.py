@@ -229,3 +229,43 @@ def speedup (fname, data_size, orig_bw):
         plt.legend(['original','AOS','SOA'])
     plt.tight_layout()
     plt.show()
+
+def colouring_time(fname):
+    times = np.array([int(l.strip().split(': ')[2].split()[0].strip())
+                      for l in open(fname) if 'colouring time' in l])
+    if MINI_AERO:
+        times.shape = (-1, 2)
+    else:
+        times.shape = (-1, 3)
+    print('Shape:', times.shape)
+    plt.figure()
+    plt.plot(times)
+    plt.legend(['GPS', 'METIS'] if MINI_AERO else ['NR', 'GPS', 'METIS'])
+    plt.ylabel('ms')
+    plt.xlabel('Block size')
+    plt.xticks(np.arange(len(bss)) * 2, bss)
+    plt.grid(True)
+    plt.tight_layout()
+
+def reordering_time(fname):
+    times = np.array([int(l.strip().split(': ')[1].split()[0].strip())
+                      for l in open(fname) if 'reordering time' in l])
+    plt.figure()
+    plt.plot(times)
+    plt.ylabel('ms')
+    plt.xlabel('Block size')
+    plt.xticks(np.arange(len(bss)) * 2, bss)
+    plt.grid(True)
+    plt.tight_layout()
+    print('Mean:', np.mean(times),'variance:', np.var(times))
+
+def partitioning_time(fname):
+    times = np.array([int(l.strip().split(': ')[1].split()[0].strip())
+                      for l in open(fname) if 'partitioning time' in l])
+    plt.figure()
+    plt.plot(times)
+    plt.ylabel('ms')
+    plt.xlabel('Block size')
+    plt.xticks(np.arange(len(bss)) * 2, bss)
+    plt.grid(True)
+    plt.tight_layout()
