@@ -67,10 +67,12 @@ orig_bw_mini_aero_atomic_volta = 1.04613e+11
 orig_bw_mini_aero_array_volta = 1.40627e+11
 orig_bw_airfoil_volta = data_sizes['res_calc_big'] / 2.517 * 2000
 
-# def autolabel (rects):
-#     for ii,rect in enumerate(rects):
-#         height = rect.get_height()
-#         plt.text(rect.get_x() + rect.get_width() / 2, 1.05 * height, str(height))
+def autolabel (rects):
+    for ii,rect in enumerate(rects):
+        height = rect.get_height()
+        label = '{:.3}'.format(height)
+        plt.text(rect.get_x() + rect.get_width() / 2, 1.05 * height, label,
+                 horizontalalignment = 'center')
 
 
 def get_bw (fname, data_size):
@@ -186,9 +188,11 @@ def speedup (fname, data_size, orig_bw):
             bw_glob[glob_bs[0,1], 0, 1, 0], bw_glob[glob_bs[1,1], 1, 1, 0],
             bw_glob[glob_bs[0,2], 0, 2, 0], bw_glob[glob_bs[1,2], 1, 2, 0],
             ]
+    print('Bandwidths:', data)
 
     data = np.array(data)
     data /= orig_bw
+    print('Speedup:', data)
     xticks = [
             'Hier\nGPS\nAOS', 'Hier\nGPS\nSOA',
             'Hier\npart.\nAOS','Hier\npart.\nSOA',
@@ -229,6 +233,21 @@ def speedup (fname, data_size, orig_bw):
         plt.legend(['original','AOS','SOA'])
     plt.tight_layout()
     plt.show()
+
+def speedup_all(speedups, labels):
+    plt.figure(figsize = (5, 2.5))
+    assert len(speedups) == len(labels)
+    xx = np.arange(len(speedups))
+    rects = plt.bar(xx, speedups, 0.8, color = (0.45, 0.45, 0.45))
+    autolabel(rects)
+    plt.plot([-0.4, xx[-1] + 0.4], [1, 1], 'k', label = 'original')
+    plt.ylim([0, max(speedups) * 1.3])
+    plt.xticks(xx, labels)
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+# speedups = [1.18205797, 1.23305105, 1.85744712, 1.74589741, 1.74899871]
+# labels = ['Airfoil\npart.\n448\nAOS', 'Volna\npart.\n512\nAOS', 'Bookleaf\npart.\n128\nAOS', 'LULESH\nNR\n320\nSOA', 'miniAero\nGPS\n128\nSOA']
 
 def colouring_time(fname):
     times = np.array([int(l.strip().split(': ')[2].split()[0].strip())
