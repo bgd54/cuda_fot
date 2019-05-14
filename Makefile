@@ -7,6 +7,8 @@ DEBUG       ?=  no
 # If 'yes', the resulting program will print verbose test and measurement
 # results
 VERBOSE     ?=  no
+# If 'yes', the resulting program will output the permutations to a file
+PRINT_PERMUTATIONS ?= no
 # Scotch installation directory
 SCOTCH_DIR  ?=  $(shell echo ${HOME})/software/scotch
 # METIS installation directory
@@ -55,6 +57,10 @@ ifeq ($(VERBOSE), no)
 MACRO_VERBOSE =
 else
 MACRO_VERBOSE = -DVERBOSE_TEST -DUSE_TIMER_MACRO
+endif
+
+ifeq ($(PRINT_PERMUTATIONS), yes)
+MACRO_VERBOSE += -DWRITE_PERMUTATIONS
 endif
 
 .SECONDARY: $(AUX_OBJ)

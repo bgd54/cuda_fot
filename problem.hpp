@@ -444,7 +444,7 @@ public:
     std::vector<MY_SIZE> inverse_permutation = mesh.reorder(point_permutation);
 #ifdef WRITE_PERMUTATIONS
     writePermutation("point_permutation_0_1", point_permutation);
-    writePermutation("cell_inv_permutation_all_1", inv_permutation);
+    writePermutation("cell_inv_permutation_all_1", inverse_permutation);
 #endif
     reorderData<SOA>(point_weights[0], point_permutation);
     for (unsigned mapping_ind = 1; mapping_ind < mesh.numMappings();
@@ -453,13 +453,16 @@ public:
         reorderData<SOA>(point_weights[mapping_ind],
                          mesh.renumberPoints(point_permutation, mapping_ind));
       } else {
+        std::vector<MY_SIZE> other_point_permutation =
+            mesh.getPointRenumberingPermutation(mapping_ind);
 #ifdef WRITE_PERMUTATIONS
-        static_assert(false);
+        writePermutation("point_permutation_" + std::to_string(mapping_ind) +
+                             "_1",
+                         other_point_permutation);
 #endif
-        reorderData<SOA>(
-            point_weights[mapping_ind],
-            mesh.renumberPoints(
-                mesh.getPointRenumberingPermutation(mapping_ind), mapping_ind));
+        reorderData<SOA>(point_weights[mapping_ind],
+                         mesh.renumberPoints(std::move(other_point_permutation),
+                                             mapping_ind));
       }
     }
     for (data_t &cw : cell_weights) {
