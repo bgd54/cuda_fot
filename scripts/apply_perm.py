@@ -18,6 +18,43 @@ def load_matrix(fname, dtype):
     return np.array([[dtype(a) for a in line.split()]
                      for line in open(fname)])
 
+def get_cell_permutation(cell_inv_permutations, cell_permutations):
+  apply_permutation(np.arange(len(cell_inv_permutations)), cell_permutations,
+      cell_inv_permutations)
+
+def apply_permutation_to_dataset(dataset, point_permutations):
+  # used on datasets on the 'to set's of the reordered mesh
+  tmparr = np.zeros_like(dataset)
+  tmpres = np.zeros_like(dataset)
+  apply_permutation(dataset, tmparr, point_permutations[0])
+  apply_permutation(tmparr, tmpres, point_permutations[1])
+  dataset[:] = tmpres
+
+def apply_inv_permutation_to_mesh(mesh, point_permutations, cell_inv_permutations):
+  # used on meshes from the reordered set
+  new_mesh = np.zeros_like(mesh)
+  new_mesh2 = np.zeros_like(mesh)
+  apply_inverse_permutation(mesh[()], new_mesh, cell_inv_permutations[0])
+  apply_inverse_permutation(new_mesh, new_mesh2, cell_inv_permutations[1])
+  renumber(new_mesh2, new_mesh, point_permutations[0])
+  renumber(new_mesh, mesh, point_permutations[1])
+  #  mesh[:] = new_mesh2
+
+def apply_permutation_to_mesh(mesh, point_permutations_from, point_permutations):
+  # used on meshes between 2 set which is a 'to set' of the original mesh
+  new_mesh = np.zeros_like(mesh)
+  new_mesh2 = np.zeros_like(mesh)
+  apply_permutation(mesh[()], new_mesh, point_permutations_from[0])
+  apply_permutation(new_mesh, new_mesh2, point_permutations_from[1])
+  renumber(new_mesh2, new_mesh, point_permutations[0])
+  renumber(new_mesh, mesh, point_permutations[1])
+
+def apply_renumber_to_mesh(mesh, point_permutations):
+  # used when from set is not renumbered but to set has permutations
+  new_mesh = np.zeros_like(mesh)
+  renumber(mesh[()], new_mesh, point_permutations[0])
+  renumber(new_mesh, mesh, point_permutations[1])
+
 def test_data_x(point_permutations):
     print('Test data_x: ', end = '')
     # Load data_x
