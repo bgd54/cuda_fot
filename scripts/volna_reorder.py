@@ -18,7 +18,7 @@ def main(filename, permdir):
       'cellsToCells', 'cellsToEdges', 'cellsToNodes', 'edgesToCells'}
   
   with h5py.File(outfile, 'r+') as freordered:
-    mi = 1 # we partitioned along edgesToCells only
+    mi = 0 # we partitioned along edgesToCells only
     point_permutations = [
         perm.load_permutation(
           os.path.join(permdir, 'point_permutation_{}_{}'.format(mi, i)))
@@ -53,10 +53,13 @@ def main(filename, permdir):
     perm.apply_permutation_to_dataset(freordered[mesh], point_permutations)
 
     # reorder cellsToEdges: cells->edges
-    mesh = 'cellsToCells'
+    mesh = 'cellsToEdges'
     print('Apply permutations on {}'.format(mesh))
-    cell_permutations = cell_inv_permutations[:]
-    perm.get_cell_permutation(cell_inv_permutations, cell_permutations)
+    cell_permutations1 = np.arange(len(cell_inv_permutations[0]))
+    cell_permutations2 = np.arange(len(cell_inv_permutations[0]))
+    perm.get_cell_permutation(cell_inv_permutations[0], cell_permutations1)
+    perm.get_cell_permutation(cell_inv_permutations[1], cell_permutations2)
+    cell_permutations = [cell_permutations1, cell_permutations2]
     perm.apply_permutation_to_dataset(freordered[mesh], point_permutations)
     perm.apply_renumber_to_mesh(freordered[mesh], cell_permutations) # TODO check
 
@@ -64,7 +67,7 @@ def main(filename, permdir):
     datasets = ['edgeCenters', 'edgeLength', 'edgeNormals']
     for dset in datasets:
       print('Apply permutations on {}'.format(dset))
-      perm.apply_renumber_to_dataset(freordered[dset], cell_permutations) # TODO check
+      perm.apply_permutation_to_dataset(freordered[dset], cell_permutations) # TODO check
 
 
 if __name__ == '__main__':
