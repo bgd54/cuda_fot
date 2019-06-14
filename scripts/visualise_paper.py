@@ -193,15 +193,15 @@ def speedup (fname, data_size, orig_bw):
     data = np.array(data)
     data /= orig_bw
     print('Speedup:', data)
-    xticks = [
+    if MINI_AERO:
+        xticks = [
             'Hier\nGPS\nAOS', 'Hier\nGPS\nSOA',
             'Hier\npart.\nAOS','Hier\npart.\nSOA',
             ]
-    if not MINI_AERO:
+    else:
         xticks = [
             'Hier\nNR\nAOS', 'Hier\nNR\nSOA', 'Hier\nGPS\nAOS', 'Hier\nGPS\nSOA',
             'Hier\npart.\nAOS','Hier\npart.\nSOA',
-            ] + xticks + [
             'Glob\nNR\nAOS','Glob\nNR\nSOA', 'Glob\nGPS\nAOS','Glob\nGPS\nSOA',
             'Glob\npart.\nAOS','Glob\npart.\nSOA'
             ]
