@@ -54,7 +54,8 @@ data_sizes = {
 
 orig_bw_airfoil = data_sizes['res_calc_big'] / 3.82 * 2000
 orig_bw_volna = data_sizes['volna'] / 0.56 * 600
-orig_bw_bookleaf = data_sizes['bookleaf'] / 0.002946
+# 1.27 is the speedup of c++ SOA Hier NR 128 vs Fortran(OP2) Soa Hier NR 128
+orig_bw_bookleaf = data_sizes['bookleaf'] / 0.002946 * 1.27
 orig_bw_lulesh = 9.66601e10
 # orig_bw_mini_aero = 8.34999e+10
 orig_bw_mini_aero_atomic = 9.58461e+10
