@@ -148,7 +148,7 @@ void testReordering(const std::string &input_dir, MY_SIZE num, bool partition) {
   Problem<SOA> problem2 = initProblem<SOA>(input_dir);
   readData(input_dir, problem2);
 
-  problem1.reorder();
+  problem1.template reorder<true>();
   if (partition) {
     problem1.partition(1.001);
     problem1.reorderToPartition();
@@ -230,13 +230,13 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
     readData(used_input_dir + "/", problem);
     TIMER_START(timer_gps);
     if (input_dir_gps == "") {
-      problem.reorder();
+      problem.template reorder<true>();
     }
     TIMER_PRINT(timer_gps, "reordering");
     problem.template loopGPUHierarchical<lulesh::StepGPUHierarchical>(num);
     readData(used_input_dir + "/", problem);
     if (input_dir_gps == "") {
-      problem.reorder();
+      problem.template reorder<true>();
     }
     problem.template loopGPUCellCentred<lulesh::StepGPUGlobal>(num);
   }
@@ -254,7 +254,7 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
       problem.reorderToPartition();
       problem.renumberPoints();
     } else {
-      problem.reorder();
+      problem.template reorder<true>();
       problem.partition(1.001);
       problem.reorderToPartition();
       problem.renumberPoints();
@@ -268,7 +268,7 @@ void measurement(const std::string &input_dir, MY_SIZE num, MY_SIZE block_size,
       problem.reorderToPartition();
       problem.renumberPoints();
     } else {
-      problem.reorder();
+      problem.template reorder<true>();
       problem.partition(1.001);
       problem.reorderToPartition();
       problem.renumberPoints();
@@ -363,7 +363,7 @@ void reorder(const std::string &input_dir, const std::string output_dir,
   Problem<false> problem = initProblem<false>(input_dir, block_size);
   readData(input_dir, problem);
 
-  problem.reorder();
+  problem.template reorder<true>();
   if (partition) {
     problem.partition(1.001);
     problem.reorderToPartition();
