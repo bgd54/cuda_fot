@@ -14,6 +14,9 @@ def renumber(in_dset, out_dset, permutation):
     assert in_dset.shape == out_dset.shape
     out_dset[:] = permutation[in_dset.flatten()].reshape(out_dset.shape)
 
+def invert_permutation(permutation):
+    return np.argsort(permutation)
+
 def load_matrix(fname, dtype):
     return np.array([[dtype(a) for a in line.split()]
                      for line in open(fname)])
